@@ -1,0 +1,37 @@
+name: Parser bug
+about: Report an SLX structure that slx-diff handles incorrectly
+title: "[parser] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not upload confidential or proprietary models. A reduced/anonymized fixture is ideal.
+  - type: input
+    id: version
+    attributes:
+      label: slx-diff version
+      placeholder: 0.4.0
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: MATLAB/Simulink release that produced the model
+      placeholder: R2026a
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected semantic result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result / traceback
+    validations:
+      required: true
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Minimal anonymized XML or reproduction steps

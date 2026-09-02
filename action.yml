@@ -1,0 +1,132 @@
+name: slx-diff review
+description: Post a semantic review of changed Simulink .slx models to a pull request.
+author: slx-diff contributors
+
+branding:
+  icon: git-pull-request
+  color: blue
+
+inputs:
+  base:
+    description: Base Git commit/ref. Defaults to the pull request base SHA.
+    required: false
+    default: ""
+  head:
+    description: Head Git commit/ref. Defaults to the pull request head SHA or github.sha.
+    required: false
+    default: ""
+  comment:
+    description: Create or update one pull-request review comment.
+    required: false
+    default: "true"
+  include-layout:
+    description: Include block position/color/orientation changes.
+    required: false
+    default: "false"
+  fail-on-change:
+    description: Fail the action when semantic model changes are detected.
+    required: false
+    default: "false"
+
+outputs:
+  changed:
+    description: Whether semantic changes were detected.
+    value: ${{ steps.review.outputs.changed }}
+  change-count:
+    description: Total number of semantic changes.
+    value: ${{ steps.review.outputs.change-count }}
+  model-count:
+    description: Number of changed .slx models inspected.
+    value: ${{ steps.review.outputs.model-count }}
+  review-priority:
+    description: Highest static review priority across changed models (high, medium, low, or none).
+    value: ${{ steps.review.outputs.review-priority }}
+  high-review-count:
+    description: Number of high-priority review hotspots.
+    value: ${{ steps.review.outputs.high-review-count }}
+  report-path:
+    description: Path to the generated Markdown report.
+    value: ${{ steps.review.outputs.report-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check out repository history
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.13"
+
+    - name: Resolve Git refs
+      id: refs
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_HEAD: ${{ inputs.head }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        EVENT_BEFORE: ${{ github.event.before }}
+        EVENT_SHA: ${{ github.sha }}
+      run: |
+        base="$INPUT_BASE"
+        head="$INPUT_HEAD"
+        if [ -z "$base" ]; then base="$PR_BASE"; fi
+        if [ -z "$base" ]; then base="$EVENT_BEFORE"; fi
+        if [ -z "$head" ]; then head="$PR_HEAD"; fi
+        if [ -z "$head" ]; then head="$EVENT_SHA"; fi
+        if [ -z "$base" ] || [ -z "$head" ]; then
+          echo "Unable to infer base/head refs. Pass 'base' and 'head' explicitly." >&2
+          exit 2
+        fi
+        printf 'base=%s\n' "$base" >> "$GITHUB_OUTPUT"
+        printf 'head=%s\n' "$head" >> "$GITHUB_OUTPUT"
+
+    - name: Generate semantic review
+      id: review
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.action_path }}/src
+        BASE_REF: ${{ steps.refs.outputs.base }}
+        HEAD_REF: ${{ steps.refs.outputs.head }}
+        INCLUDE_LAYOUT: ${{ inputs.include-layout }}
+      run: |
+        args=(--base "$BASE_REF" --head "$HEAD_REF" --repo "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/slx-diff-review.md")
+        if [ "$INCLUDE_LAYOUT" = "true" ]; then args+=(--include-layout); fi
+        python "$GITHUB_ACTION_PATH/scripts/github_action.py" "${args[@]}"
+
+    - name: Create or update PR comment
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      uses: actions/github-script@v8
+      continue-on-error: true
+      env:
+        REPORT_PATH: ${{ steps.review.outputs.report-path }}
+      with:
+        script: |
+          const fs = require('fs');
+          const marker = '<!-- slx-diff-review -->';
+          const report = fs.readFileSync(process.env.REPORT_PATH, 'utf8');
+          const body = `${marker}\n${report}`;
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner, repo, issue_number, per_page: 100
+          });
+          const previous = comments.find(c =>
+            c.user?.type === 'Bot' && c.body?.includes(marker)
+          );
+          if (previous) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
+
+    - name: Enforce semantic-change gate
+      if: ${{ inputs.fail-on-change == 'true' && steps.review.outputs.changed == 'true' }}
+      shell: bash
+      run: |
+        echo "slx-diff detected ${{ steps.review.outputs.change-count }} semantic change(s)." >&2
+        exit 1
