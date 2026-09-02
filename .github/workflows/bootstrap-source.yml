@@ -1,0 +1,44 @@
+name: Bootstrap source tree
+
+on:
+  push:
+    paths:
+      - 'bootstrap/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    if: ${{ hashFiles('bootstrap/READY') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Reconstruct source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat bootstrap/source.b64.part-* > /tmp/slx-studio.b64
+          base64 --decode /tmp/slx-studio.b64 > /tmp/slx-studio.zip
+          mkdir -p /tmp/slx-studio-src
+          unzip -q /tmp/slx-studio.zip -d /tmp/slx-studio-src
+          src="$(find /tmp/slx-studio-src -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          test -n "$src"
+          rsync -a --delete --exclude='.git/' --exclude='bootstrap/' "$src/" ./
+          rm -rf bootstrap
+
+      - name: Commit expanded source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "feat: publish SLX Studio v1.0.0 Beta 2"
+          git push
