@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slx-studio"
+version = "1.0.0b2"
+description = "Lightweight MATLAB/Simulink engineering IDE for editing and running .m scripts and .slx models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "SLX Studio contributors" }]
+keywords = ["simulink", "matlab", "slx", "git", "diff", "ai-agents", "model-based-design"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Win32 (MS Windows)",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+desktop = ["pywebview>=5"]
+
+[project.scripts]
+slx-diff = "slxdiff.cli:main"
+slx-studio = "slxdiff.desktop:main"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.setuptools.package-data]
+slxdiff = ["studio.html", "workbench.html"]

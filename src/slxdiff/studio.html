@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLX Studio</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#f4f6f8; --panel:#ffffff; --panel2:#f8fafb; --text:#14202b; --muted:#687681;
+    --line:#d5dde3; --wire:#647782; --accent:#176b87; --accent2:#0b4f66;
+    --added:#167a4a; --added-bg:#e9f7ef; --removed:#b63b3b; --removed-bg:#fceeee;
+    --changed:#9a6500; --changed-bg:#fff6d9; --shadow:0 10px 30px rgba(20,32,43,.08);
+    --grid:rgba(88,108,120,.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#12171b; --panel:#1a2126; --panel2:#151b1f; --text:#e8edf0; --muted:#98a6af;
+      --line:#334047; --wire:#8ca0aa; --accent:#63b4cf; --accent2:#a6dcec;
+      --added:#65c58f; --added-bg:#173526; --removed:#ef8383; --removed-bg:#3c2020;
+      --changed:#e1b755; --changed-bg:#3a3017; --shadow:0 10px 30px rgba(0,0,0,.28);
+      --grid:rgba(184,201,210,.08);
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  button, input, select { font:inherit; }
+  button, select, input { color:var(--text); }
+  .app { min-height:100vh; display:grid; grid-template-rows:auto 1fr auto; }
+  .topbar { min-height:58px; background:var(--panel); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; padding:9px 14px; position:sticky; top:0; z-index:20; }
+  .brand { display:flex; align-items:center; gap:10px; min-width:180px; }
+  .logo { width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:white; display:grid; place-items:center; font-weight:800; letter-spacing:-1px; }
+  .brand strong { display:block; line-height:1.05; }
+  .brand small { color:var(--muted); font-size:11px; }
+  .toolbar { display:flex; align-items:center; gap:7px; flex:1; flex-wrap:wrap; }
+  .btn, .select, .search { min-height:36px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); }
+  .btn { padding:0 11px; cursor:pointer; font-weight:600; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.active { background:var(--accent); color:white; border-color:var(--accent); }
+  .select { padding:0 28px 0 10px; max-width:260px; }
+  .search { padding:0 10px; min-width:180px; flex:0 1 250px; }
+  .workspace { display:grid; grid-template-columns:230px minmax(360px,1fr) 320px; min-height:0; }
+  .sidebar, .inspector { background:var(--panel); min-width:0; overflow:auto; }
+  .sidebar { border-right:1px solid var(--line); }
+  .inspector { border-left:1px solid var(--line); }
+  .pane-title { padding:13px 14px 9px; color:var(--muted); text-transform:uppercase; letter-spacing:.09em; font-size:11px; font-weight:800; }
+  .tree { padding:0 8px 14px; }
+  .tree-item { width:100%; border:0; background:transparent; color:var(--text); text-align:left; display:flex; gap:8px; align-items:center; padding:8px 9px; border-radius:7px; cursor:pointer; }
+  .tree-item:hover, .tree-item.active { background:var(--panel2); }
+  .tree-item.active { box-shadow:inset 3px 0 var(--accent); }
+  .tree-item .kind { font-size:10px; color:var(--muted); margin-left:auto; }
+  .tree-item .dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none; }
+  .tree-item[data-status="added"] .dot { background:var(--added); }
+  .tree-item[data-status="removed"] .dot { background:var(--removed); }
+  .tree-item[data-status="changed"] .dot { background:var(--changed); }
+  .canvas-wrap { min-width:0; min-height:620px; position:relative; overflow:hidden; background-color:var(--panel2); background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px); background-size:22px 22px; }
+  #canvas { width:100%; height:100%; min-height:620px; display:block; touch-action:none; user-select:none; }
+  .wire { fill:none; stroke:var(--wire); stroke-width:2.2; vector-effect:non-scaling-stroke; opacity:.78; }
+  .wire.added { stroke:var(--added); stroke-width:3; }
+  .wire.removed { stroke:var(--removed); stroke-width:3; stroke-dasharray:8 5; opacity:.7; }
+  .block rect.body { fill:var(--panel); stroke:#687983; stroke-width:1.7; vector-effect:non-scaling-stroke; rx:5; }
+  .block text { fill:var(--text); pointer-events:none; }
+  .block .type { fill:var(--muted); font-size:10px; }
+  .block .name { font-weight:700; font-size:12px; }
+  .block.added rect.body { stroke:var(--added); fill:var(--added-bg); stroke-width:2.5; }
+  .block.removed rect.body { stroke:var(--removed); fill:var(--removed-bg); stroke-width:2.5; stroke-dasharray:7 4; opacity:.84; }
+  .block.changed rect.body { stroke:var(--changed); fill:var(--changed-bg); stroke-width:2.5; }
+  .block.selected rect.body { stroke:var(--accent); stroke-width:3.4; filter:drop-shadow(0 5px 6px rgba(0,0,0,.16)); }
+  .port { fill:var(--panel2); stroke:var(--wire); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+  .block.workbench-editable { cursor:grab; }
+  .block.block-dragging { cursor:grabbing; opacity:.9; }
+  .port.in, .port.out { pointer-events:all; }
+  .block.workbench-editable .port.out { cursor:crosshair; stroke:var(--accent); stroke-width:2; }
+  .port.connect-target { fill:var(--accent); stroke:var(--accent); r:6; }
+  .wire-preview { fill:none; stroke:var(--accent); stroke-width:2.4; stroke-dasharray:6 4; vector-effect:non-scaling-stroke; pointer-events:none; }
+  .floating { position:absolute; right:12px; bottom:12px; display:flex; gap:6px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:5px; box-shadow:var(--shadow); }
+  .floating button { width:38px; height:34px; border:0; border-radius:7px; background:transparent; color:var(--text); cursor:pointer; font-weight:800; }
+  .floating button:hover { background:var(--panel2); }
+  .legend { position:absolute; left:12px; bottom:12px; display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--muted); background:color-mix(in srgb,var(--panel) 92%,transparent); border:1px solid var(--line); border-radius:9px; padding:7px 9px; }
+  .legend span { display:flex; align-items:center; gap:5px; }
+  .legend i { width:9px; height:9px; border-radius:3px; border:2px solid currentColor; display:inline-block; }
+  .legend .add { color:var(--added); } .legend .del { color:var(--removed); } .legend .chg { color:var(--changed); }
+  .empty { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); text-align:center; padding:40px; pointer-events:none; }
+  .hidden { display:none !important; }
+  .inspector-content { padding:0 14px 20px; }
+  .headline { padding:1px 0 12px; border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .headline h2 { margin:0 0 4px; font-size:18px; overflow-wrap:anywhere; }
+  .headline p { margin:0; color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 7px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; border:1px solid var(--line); margin-top:8px; }
+  .badge.added { color:var(--added); background:var(--added-bg); border-color:var(--added); }
+  .badge.removed { color:var(--removed); background:var(--removed-bg); border-color:var(--removed); }
+  .badge.changed { color:var(--changed); background:var(--changed-bg); border-color:var(--changed); }
+  .kv { display:grid; grid-template-columns:95px minmax(0,1fr); gap:0; border-top:1px solid var(--line); font-size:12px; }
+  .kv > div { padding:8px 5px; border-bottom:1px solid var(--line); min-width:0; overflow-wrap:anywhere; }
+  .kv .k { color:var(--muted); font-weight:700; }
+  .param-change { display:block; margin-top:3px; font-size:10px; color:var(--changed); }
+  .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; padding:0 10px 12px; }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px; text-align:center; }
+  .stat strong { display:block; font-size:16px; }
+  .stat small { color:var(--muted); font-size:10px; }
+  .statusbar { height:28px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 10px; background:var(--panel); border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+  .statusbar strong { color:var(--text); }
+  .patch-count { display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 6px; margin-left:5px; border-radius:999px; background:var(--accent); color:white; font-size:10px; }
+  .edit-row { display:grid; grid-template-columns:88px minmax(0,1fr); gap:7px; align-items:start; padding:7px 0; border-bottom:1px solid var(--line); }
+  .edit-row label { color:var(--muted); font-weight:700; font-size:11px; padding-top:8px; overflow-wrap:anywhere; }
+  .edit-control { min-width:0; }
+  .param-input { width:100%; min-height:34px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; }
+  .param-input:focus { outline:2px solid color-mix(in srgb,var(--accent) 35%,transparent); border-color:var(--accent); }
+  .param-input.staged { border-color:var(--changed); background:var(--changed-bg); }
+  .edit-actions { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; }
+  .mini-btn { min-height:29px; padding:0 8px; border:1px solid var(--line); border-radius:6px; background:var(--panel2); color:var(--text); cursor:pointer; font-size:10px; font-weight:700; }
+  .mini-btn:hover { border-color:var(--accent); }
+  .edit-note { margin-top:3px; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+  .patch-panel { border-top:1px solid var(--line); margin-top:13px; padding-top:12px; }
+  .patch-panel h3 { margin:0 0 8px; font-size:12px; }
+  .patch-item { padding:8px; margin-bottom:6px; border:1px solid var(--line); border-radius:7px; background:var(--panel2); font-size:10px; overflow-wrap:anywhere; }
+  .patch-item strong { display:block; font-size:11px; margin-bottom:3px; }
+  .bridge-pill { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:0 9px; border:1px solid var(--line); border-radius:999px; font-size:10px; color:var(--muted); background:var(--panel2); }
+  .bridge-pill::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--muted); }
+  .bridge-pill.ready::before { background:var(--added); }
+  .bridge-pill.missing::before { background:var(--changed); }
+  .run-group { display:flex; align-items:center; gap:5px; }
+  .stop-input { width:70px; min-height:36px; padding:0 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); color:var(--text); }
+  .toast { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:15; max-width:min(560px,calc(100% - 30px)); padding:9px 12px; border:1px solid var(--line); border-radius:9px; background:var(--panel); box-shadow:var(--shadow); font-size:11px; }
+  .toast.error { border-color:var(--removed); color:var(--removed); }
+
+  .lang-select { min-width:104px; max-width:112px; }
+  .review-panel { padding:0 8px 12px; }
+  .review-heading { display:flex; align-items:center; justify-content:space-between; gap:7px; padding:3px 4px 7px; color:var(--muted); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+  .review-card { width:100%; border:1px solid var(--line); border-radius:8px; background:var(--panel2); color:var(--text); padding:8px; margin-bottom:6px; text-align:left; cursor:pointer; }
+  .review-card:hover { border-color:var(--accent); }
+  .review-card.active { border-color:var(--accent); box-shadow:inset 3px 0 var(--accent); }
+  .review-card-top { display:flex; gap:7px; align-items:center; }
+  .review-card strong { min-width:0; overflow-wrap:anywhere; font-size:11px; }
+  .review-meta { color:var(--muted); font-size:9px; margin-top:4px; }
+  .priority-pill { display:inline-flex; align-items:center; justify-content:center; min-width:42px; padding:2px 6px; border-radius:999px; font-size:9px; font-weight:900; text-transform:uppercase; border:1px solid currentColor; }
+  .priority-high { color:var(--removed); }
+  .priority-medium { color:var(--changed); }
+  .priority-low { color:var(--added); }
+  .review-callout { margin:0 0 12px; padding:10px; border:1px solid var(--line); border-left-width:4px; border-radius:8px; background:var(--panel2); }
+  .review-callout.priority-high { border-left-color:var(--removed); }
+  .review-callout.priority-medium { border-left-color:var(--changed); }
+  .review-callout.priority-low { border-left-color:var(--added); }
+  .review-callout h3 { margin:0 0 4px; color:var(--text); font-size:12px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .review-callout p { margin:4px 0 0; color:var(--muted); font-size:10px; }
+  .reason-list { margin:7px 0 0; padding-left:18px; color:var(--text); font-size:10px; }
+  .reason-list li { margin:3px 0; }
+  .block.impact rect.body { stroke:var(--accent); stroke-width:3.2; }
+  .block.impact-dim { opacity:.25; }
+  .wire.impact { stroke:var(--accent); stroke-width:3.4; opacity:1; }
+  .wire.impact-dim { opacity:.16; }
+  .review-score { font-size:9px; font-weight:900; text-anchor:end; }
+  .review-score.high { fill:var(--removed); }
+  .review-score.medium { fill:var(--changed); }
+  .review-score.low { fill:var(--added); }
+  .review-disclaimer { margin:8px 4px 0; color:var(--muted); font-size:9px; line-height:1.35; }
+  .ai-form { display:grid; gap:9px; }
+  .ai-field { display:grid; gap:4px; }
+  .ai-field label { color:var(--muted); font-size:10px; font-weight:800; }
+  .ai-field input, .ai-field select, .ai-field textarea { width:100%; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--text); padding:8px; font:inherit; font-size:11px; }
+  .ai-field textarea { min-height:112px; resize:vertical; line-height:1.4; }
+  .ai-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .ai-note { padding:8px; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--muted); font-size:9px; line-height:1.45; }
+  .ai-result { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+  .ai-result pre { margin:6px 0; padding:8px; max-height:220px; overflow:auto; white-space:pre-wrap; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--text); font-size:10px; line-height:1.45; }
+  .ai-trace { display:grid; gap:5px; margin-top:8px; }
+  .ai-trace-item { border-left:3px solid var(--accent); padding:5px 7px; background:var(--panel2); font-size:9px; overflow-wrap:anywhere; }
+  .ai-check { display:flex; align-items:flex-start; gap:7px; color:var(--text); font-size:10px; }
+  .ai-check input { margin-top:2px; }
+  @media (max-width: 980px) {
+    .workspace { grid-template-columns:180px minmax(320px,1fr); }
+    .inspector { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); max-height:300px; }
+  }
+  @media (max-width: 680px) {
+    .brand { min-width:auto; } .brand small { display:none; }
+    .workspace { display:block; }
+    .sidebar { border-right:0; border-bottom:1px solid var(--line); max-height:180px; }
+    .canvas-wrap, #canvas { min-height:500px; }
+    .inspector { max-height:none; }
+    .select, .search { max-width:100%; min-width:120px; }
+    .legend { right:12px; bottom:58px; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="studio">
+  <header class="topbar">
+    <div class="brand"><div class="logo">S</div><div><strong>SLX Studio</strong><small id="modelSubtitle">Visual model explorer</small></div></div>
+    <div class="toolbar">
+      <div id="modeButtons"></div>
+      <select class="select" id="systemSelect" aria-label="Subsystem"></select>
+      <input class="search" id="searchBox" type="search" placeholder="Find block…" aria-label="Find block">
+      <button class="btn hidden" id="addBlockButton" type="button">+ Block</button>
+      <button class="btn hidden" id="reviewButton" type="button">Review Lens</button>
+      <button class="btn" id="fitButton" type="button">Fit</button>
+      <button class="btn" id="exportButton" type="button">Export SVG</button>
+      <button class="btn hidden" id="agentContextButton" type="button">Agent Context</button>
+      <button class="btn hidden" id="aiButton" type="button">Connect AI</button>
+      <button class="btn" id="patchButton" type="button">Patch <span class="patch-count" id="patchCount">0</span></button>
+      <button class="btn" id="downloadPatchButton" type="button">Download Patch</button>
+      <span class="bridge-pill" id="bridgePill">Standalone editor</span>
+      <button class="btn hidden" id="applyButton" type="button">Apply in MATLAB</button>
+      <span class="run-group hidden" id="runGroup"><input class="stop-input" id="stopTime" inputmode="decimal" value="10" aria-label="Simulation stop time"><button class="btn" id="simulateButton" type="button">Run Simulation</button></span>
+      <select class="select lang-select" id="languageSelect" aria-label="Language"><option value="en">English</option><option value="zh">中文</option></select>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="pane-title" id="modelExplorerTitle">Model Explorer</div>
+      <div id="summary" class="summary hidden"></div>
+      <div id="reviewPanel" class="review-panel hidden"></div>
+      <div class="tree" id="tree"></div>
+    </aside>
+
+    <section class="canvas-wrap" id="canvasWrap" aria-label="Model diagram">
+      <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+      <svg id="canvas" viewBox="0 0 1000 700" role="img" aria-label="Simulink model visualization">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--wire)"></path></marker>
+          <marker id="arrow-added" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--added)"></path></marker>
+          <marker id="arrow-removed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--removed)"></path></marker>
+        </defs>
+        <g id="viewport"><g id="wires"></g><path id="connectPreview" class="wire-preview hidden" d=""></path><g id="blocks"></g></g>
+      </svg>
+      <div class="empty hidden" id="empty">No blocks in this subsystem.</div>
+      <div class="legend" id="legend"><span class="add"><i></i><b id="legendAdded">Added</b></span><span class="chg"><i></i><b id="legendChanged">Changed</b></span><span class="del"><i></i><b id="legendRemoved">Removed</b></span></div>
+      <div class="floating"><button id="zoomOut" type="button" aria-label="Zoom out">−</button><button id="zoomIn" type="button" aria-label="Zoom in">+</button><button id="resetView" type="button" aria-label="Reset view">⌂</button></div>
+    </section>
+
+    <aside class="inspector">
+      <div class="pane-title" id="inspectorTitle">Inspector</div>
+      <div class="inspector-content" id="inspector"><p style="color:var(--muted);font-size:12px">Select a block to inspect its parameters.</p></div>
+    </aside>
+  </main>
+
+  <footer class="statusbar"><span id="statusLeft"><strong>Ready</strong></span><span id="statusRight">Standalone editor · patch export ready</span></footer>
+</div>
+<script id="slx-data" type="application/json">__SLX_STUDIO_PAYLOAD__</script>
+<script>
+(() => {
+  const payload = JSON.parse(document.getElementById('slx-data').textContent);
+  const $ = (id) => document.getElementById(id);
+  const svg = $('canvas'), viewport = $('viewport'), blockLayer = $('blocks'), wireLayer = $('wires'), connectPreview = $('connectPreview');
+  const tree = $('tree'), inspector = $('inspector'), systemSelect = $('systemSelect'), searchBox = $('searchBox');
+  const legend = $('legend'), empty = $('empty'), summary = $('summary'), reviewPanel = $('reviewPanel');
+  const editor = payload.editor || {patch_schema_version:'0.1',model_name:'',source_sha256:'',bridge:{enabled:false}};
+  const review = payload.review || null;
+  const reviewByPath = new Map(((review && review.items) || []).map(item => [item.block_path, item]));
+  const staged = new Map();
+  let mode = payload.mode === 'diff' ? 'diff' : 'model';
+  let selectedId = null;
+  let transform = {x: 30, y: 30, scale: 1};
+  let dragging = false, dragStart = null;
+  let blockDragging = null, connecting = null;
+  let bridgeAvailable = false, bridgeState = editor.bridge && editor.bridge.enabled ? 'checking' : 'standalone', bridgeOutput = '';
+  let reviewLens = payload.mode === 'diff';
+  let inspectorMode = 'overview';
+  let lastSimulation = null;
+  let lastAgentResult = null, agentPreview = null;
+  const providerPresets = Array.isArray(editor.providers) ? editor.providers : [];
+  const blockCatalog = editor.block_catalog || {};
+  const workbenchMode = Boolean(editor.bridge && editor.bridge.workbench);
+  const workspacePath = editor.bridge && editor.bridge.workspace_path ? editor.bridge.workspace_path : '';
+  const defaultProvider = providerPresets.find(item => item.id === 'openai') || providerPresets[0] || {id:'custom',kind:'openai_compatible_chat',default_base_url:'',default_model:'',models:[]};
+  const agentSettings = {provider_id:defaultProvider.id||'custom',kind:defaultProvider.kind||'openai_compatible_chat',base_url:defaultProvider.default_base_url||'',model:defaultProvider.default_model||'',api_key:'',prompt:'',auto_build:false};
+
+  const I18N = {
+    en: {
+      modeDiff:'Diff', modeAfter:'After', modeBefore:'Before', reviewLens:'Review Lens', fit:'Fit', exportSvg:'Export SVG',
+      agentContext:'Agent Context', patch:'Patch', downloadPatch:'Download Patch', standaloneEditor:'Standalone editor',
+      addBlock:'+ Block', addBlockTitle:'Block palette', blockType:'Block type', blockName:'Name', createBlock:'Create block', blockSearch:'Search blocks…', dragHint:'Drag blocks to move them. Drag an output port onto an input port to connect.', saveModel:'Save Model', rename:'Rename', deleteBlock:'Delete block', connectTo:'Connect to…', connectionsTitle:'Connections', removeConnection:'Remove', selectTarget:'Target block', sourcePort:'Source port', destinationPort:'Destination port', createConnection:'Create connection', matlabRequiredEdit:'Structural SLX editing requires MATLAB.', confirmDelete:'Delete block {name}?', renamePrompt:'New block name', modelSavedReload:'Model saved · reloading editor', savePendingFirst:'Save or reset staged parameter edits before changing model structure.',
+      applyMatlab:'Apply in MATLAB', runSimulation:'Run Simulation', modelExplorer:'Model Explorer', inspector:'Inspector',
+      empty:'No blocks in this subsystem.', added:'Added', changed:'Changed', removed:'Removed', findBlock:'Find block…',
+      subsystem:'Subsystem', language:'Language', stopTimeAria:'Simulation stop time', ready:'Ready', blocks:'blocks', connections:'connections',
+      changes:'changes', modified:'modified', plusBlocks:'± blocks', noMatch:'No matching blocks.', noBlocks:'No blocks.',
+      selectBlock:'Select a block to inspect or edit its parameters.', noParams:'No exposed parameters.', readOnly:'This view is read-only. Edit the current/after model instead.',
+      type:'Type', system:'System', updateStaged:'Update staged', stage:'Stage', reset:'Reset', gitWas:'Git diff: was {value}', was:'was {value}',
+      patchBase:'Patch base: {before} → {after}', stagedPatch:'Staged patch', stagedPatchDesc:'Portable, conflict-detecting edits. The source SLX is never modified by the browser.',
+      noStaged:'No staged parameter changes.', checkingMatlab:'Checking MATLAB…', bridgeReady:'MATLAB bridge ready', matlabNotFound:'MATLAB not found · export only',
+      bridgeUnavailable:'Bridge unavailable', liveNoMatlab:'Live Studio · MATLAB not found', bridgeOutput:'MATLAB bridge · output {output}',
+      matlabUnavailable:'MATLAB bridge is not available. Download the patch instead.', running:'Running…', applying:'Applying…',
+      simCompleteToast:'Simulation complete · stop {stop} · {elapsed} s wall time', savedEdited:'Saved edited model: {output}', invalidBridge:'Invalid bridge response',
+      simComplete:'Simulation complete', simSummary:'MATLAB returned a SimulationOutput summary.', success:'success', stopTime:'Stop time', wallTime:'Wall time', outputs:'Outputs',
+      noOutputs:'No logged variables reported', simNote:'Simulation execution stays in MATLAB; SLX Studio keeps review, Git context, and edit intent in the browser.',
+      reviewTitle:'Review Intelligence', reviewHotspots:'Review hotspots', reviewPriority:'Review priority', impactRadius:'Impact radius', downstream:'downstream',
+      affectedOutports:'Affected outports', directConsumers:'Direct consumers', whyReview:'Why review this first', noHotspots:'No review hotspots found.',
+      staticDisclaimer:'Static signal-flow heuristic only. It does not compile the model and is not a safety, stability, or simulation verdict.',
+      high:'High', medium:'Medium', low:'Low', score:'Score', hotspotMeta:'{downstream} downstream · {outports} outport(s)',
+      reviewOverview:'Prioritizes changed areas by structure, parameter class, rewiring, and downstream signal-flow reach — without loading MATLAB.',
+      agentDownloaded:'Agent context downloaded.', reviewOn:'Review Lens on', reviewOff:'Review Lens off',
+      connectAI:'Connect AI', aiTitle:'AI Model Agent', aiIntro:'Bring your own API. The agent can inspect the model, stage edits, or design a validated blueprint.',
+      provider:'Provider', endpoint:'Base URL', modelName:'Model', apiKey:'API key', apiKeyPlaceholder:'Not stored by SLX Studio', engineeringTask:'Engineering task',
+      providerPreset:'Provider preset', apiKeyEnv:'You can leave this blank when {env} is set in the SLX Studio process.', providerCustomModel:'You can type any model ID enabled for your account.',
+      promptPlaceholder:'Example: design a closed-loop first-order plant controller and expose the output for review.', autoBuild:'Automatically build validated blueprints in MATLAB',
+      runAgent:'Run agent', runningAgent:'Agent running…', aiSecurity:'The API key stays in this browser tab and is sent only to the loopback SLX Studio backend for the selected provider request. It is not written to project files.',
+      aiNeedsLive:'AI connection is available only in live Studio/API mode, not standalone HTML.', aiAnswer:'Agent answer', toolTrace:'Tool trace', blueprintReady:'Validated blueprint',
+      blueprintMeta:'{blocks} blocks · {connections} connections', previewBlueprint:'Preview blueprint', buildBlueprint:'Build in MATLAB', blueprintBuilt:'Built model: {output}',
+      aiPreview:'AI Preview', backModel:'Back to model', noAgentText:'Agent completed without a text response.', autoBuildUnavailable:'Automatic build requires the MATLAB bridge.',
+      reason_block_added:'Block added', reason_block_removed:'Block removed', reason_connection_changed:'Connections changed',
+      reason_block_type_changed:'Block type changed', reason_block_renamed:'Block renamed', reason_sample_time_changed:'Sample time changed',
+      reason_data_type_changed:'Data type changed', reason_limit_changed:'Limit or threshold changed', reason_initial_condition_changed:'Initial condition changed',
+      reason_gain_changed:'Gain-related parameter changed', reason_parameter_changed:'Parameter changed', reason_numeric_scale_jump:'Large numeric scale change',
+      reason_numeric_sign_flip:'Numeric sign changed', reason_downstream_reach:'Downstream propagation', reason_reaches_outport:'Reaches model outport'
+    },
+    zh: {
+      modeDiff:'差异', modeAfter:'修改后', modeBefore:'修改前', reviewLens:'审查透镜', fit:'适配画布', exportSvg:'导出 SVG',
+      agentContext:'AI 上下文', patch:'补丁', downloadPatch:'下载补丁', standaloneEditor:'独立编辑器',
+      addBlock:'+ 模块', addBlockTitle:'模块面板', blockType:'模块类型', blockName:'名称', createBlock:'创建模块', blockSearch:'搜索模块…', dragHint:'拖动模块可移动；从输出端口拖到输入端口可创建连接。', saveModel:'保存模型', rename:'重命名', deleteBlock:'删除模块', connectTo:'连接到…', connectionsTitle:'连接', removeConnection:'删除', selectTarget:'目标模块', sourcePort:'源端口', destinationPort:'目标端口', createConnection:'创建连接', matlabRequiredEdit:'SLX 结构编辑需要 MATLAB。', confirmDelete:'删除模块 {name}？', renamePrompt:'新的模块名称', modelSavedReload:'模型已保存 · 正在重新载入编辑器', savePendingFirst:'请先保存或清除已暂存的参数修改，再进行模型结构编辑。',
+      applyMatlab:'在 MATLAB 中应用', runSimulation:'运行仿真', modelExplorer:'模型浏览器', inspector:'检查器',
+      empty:'当前子系统没有模块。', added:'新增', changed:'修改', removed:'删除', findBlock:'查找模块…',
+      subsystem:'子系统', language:'语言', stopTimeAria:'仿真停止时间', ready:'就绪', blocks:'模块', connections:'连接',
+      changes:'处变化', modified:'已修改', plusBlocks:'± 模块', noMatch:'没有匹配的模块。', noBlocks:'没有模块。',
+      selectBlock:'选择一个模块以检查或编辑其参数。', noParams:'没有可显示的参数。', readOnly:'当前视图为只读。请编辑当前/修改后的模型。',
+      type:'类型', system:'系统', updateStaged:'更新暂存', stage:'暂存', reset:'重置', gitWas:'Git 差异：原值 {value}', was:'原值 {value}',
+      patchBase:'补丁基线：{before} → {after}', stagedPatch:'已暂存补丁', stagedPatchDesc:'可移植、可检测冲突的编辑意图。浏览器不会直接修改源 SLX。',
+      noStaged:'暂无暂存的参数修改。', checkingMatlab:'正在检测 MATLAB…', bridgeReady:'MATLAB 桥接已就绪', matlabNotFound:'未找到 MATLAB · 仅导出',
+      bridgeUnavailable:'桥接不可用', liveNoMatlab:'实时 Studio · 未找到 MATLAB', bridgeOutput:'MATLAB 桥接 · 输出 {output}',
+      matlabUnavailable:'MATLAB 桥接不可用，请改为下载补丁。', running:'运行中…', applying:'应用中…',
+      simCompleteToast:'仿真完成 · 停止时间 {stop} · 耗时 {elapsed} s', savedEdited:'已保存编辑后的模型：{output}', invalidBridge:'桥接返回无效响应',
+      simComplete:'仿真完成', simSummary:'MATLAB 已返回 SimulationOutput 摘要。', success:'成功', stopTime:'停止时间', wallTime:'运行耗时', outputs:'输出变量',
+      noOutputs:'未报告已记录变量', simNote:'仿真仍由 MATLAB 执行；SLX Studio 专注于浏览器里的审查、Git 上下文与编辑意图。',
+      reviewTitle:'审查智能', reviewHotspots:'优先审查点', reviewPriority:'审查优先级', impactRadius:'影响半径', downstream:'下游模块',
+      affectedOutports:'受影响输出端口', directConsumers:'直接下游', whyReview:'为什么优先检查', noHotspots:'没有发现需要优先审查的位置。',
+      staticDisclaimer:'仅为静态信号流启发式分析；不会编译模型，也不代表安全性、稳定性或仿真结论。',
+      high:'高', medium:'中', low:'低', score:'评分', hotspotMeta:'下游 {downstream} · 输出端口 {outports}',
+      reviewOverview:'依据结构变化、参数类别、重连以及下游信号传播范围对改动排序，无需启动 MATLAB。',
+      agentDownloaded:'AI 上下文已下载。', reviewOn:'审查透镜已开启', reviewOff:'审查透镜已关闭',
+      connectAI:'连接 AI', aiTitle:'AI 模型智能体', aiIntro:'接入你自己的 API。智能体可以读取模型、暂存修改，或设计经过校验的模型蓝图。',
+      provider:'服务商', endpoint:'API 地址', modelName:'模型', apiKey:'API 密钥', apiKeyPlaceholder:'SLX Studio 不会持久化保存', engineeringTask:'工程任务',
+      providerPreset:'服务商预设', apiKeyEnv:'如果启动 SLX Studio 的进程已经设置 {env}，这里可以留空。', providerCustomModel:'也可以直接输入账号已开通的任意模型 ID。',
+      promptPlaceholder:'例如：设计一个一阶对象闭环控制模型，并把输出暴露出来用于审查。', autoBuild:'通过校验后自动在 MATLAB 中搭建模型',
+      runAgent:'运行智能体', runningAgent:'智能体运行中…', aiSecurity:'API 密钥只保留在当前浏览器标签页内，并仅发送给本机回环地址上的 SLX Studio 后端以调用你选择的服务商；不会写入项目文件。',
+      aiNeedsLive:'AI 接口只在实时 Studio/API 模式可用，独立 HTML 不会连接外部服务。', aiAnswer:'智能体回答', toolTrace:'工具调用轨迹', blueprintReady:'已校验模型蓝图',
+      blueprintMeta:'{blocks} 个模块 · {connections} 条连接', previewBlueprint:'预览蓝图', buildBlueprint:'在 MATLAB 中搭建', blueprintBuilt:'模型已生成：{output}',
+      aiPreview:'AI 预览', backModel:'返回原模型', noAgentText:'智能体已完成，但没有返回文字说明。', autoBuildUnavailable:'自动搭建需要 MATLAB 桥接。',
+      reason_block_added:'新增模块', reason_block_removed:'删除模块', reason_connection_changed:'连接关系改变',
+      reason_block_type_changed:'模块类型改变', reason_block_renamed:'模块重命名', reason_sample_time_changed:'采样时间改变',
+      reason_data_type_changed:'数据类型改变', reason_limit_changed:'限幅或阈值改变', reason_initial_condition_changed:'初始条件改变',
+      reason_gain_changed:'增益类参数改变', reason_parameter_changed:'参数改变', reason_numeric_scale_jump:'数值尺度发生较大变化',
+      reason_numeric_sign_flip:'数值符号改变', reason_downstream_reach:'存在下游传播', reason_reaches_outport:'影响可传播至模型输出端口'
+    }
+  };
+
+  function initialLanguage() {
+    try {
+      const stored = localStorage.getItem('slx-studio-language');
+      if (stored === 'zh' || stored === 'en') return stored;
+    } catch (_) {}
+    return String(navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  }
+  let lang = initialLanguage();
+  function t(key, vars={}) {
+    let text = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+    return String(text).replace(/\{(\w+)\}/g, (_, name) => vars[name] == null ? '' : String(vars[name]));
+  }
+  function priorityLabel(priority) { return t(priority || 'low'); }
+  function reasonLabel(reason) {
+    const label = t(`reason_${reason.code}`);
+    return reason.detail ? `${label} · ${reason.detail}` : label;
+  }
+
+  function sourceModel() {
+    if (agentPreview) return agentPreview;
+    if (payload.mode === 'model') return payload.model;
+    if (mode === 'before') return payload.old;
+    return payload.new;
+  }
+  function allSystems() {
+    const model = sourceModel();
+    return model.systems && model.systems.length ? model.systems : [{id:'',label:'Root',block_count:model.blocks.length}];
+  }
+  function currentSystemId() { return systemSelect.value || (allSystems()[0] && allSystems()[0].id) || ''; }
+  function pathSeparatorIndexes(path) { const text=String(path||''); const out=[]; for(let i=0;i<text.length;i++){if(text[i]==='/'){if(i+1<text.length&&text[i+1]==='/'){i++;continue}out.push(i)}} return out; }
+  function shortName(path) { const text=String(path||''); const indexes=pathSeparatorIndexes(text); const raw=indexes.length?text.slice(indexes[indexes.length-1]+1):text; return raw.replaceAll('//','/') || path || 'Block'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function statusForKey(systemId, sid, viewMode) {
+    if (agentPreview || payload.mode !== 'diff' || viewMode !== 'diff') return 'unchanged';
+    const newer = payload.new.blocks.find(b => b.system_id === systemId && b.sid === sid);
+    if (newer && newer.status !== 'unchanged') return newer.status;
+    const older = payload.old.blocks.find(b => b.system_id === systemId && b.sid === sid);
+    if (older && older.status !== 'unchanged') return older.status;
+    return 'unchanged';
+  }
+  function diffBlocks(systemId) {
+    const newer = payload.new.blocks.filter(b => b.system_id === systemId);
+    const older = payload.old.blocks.filter(b => b.system_id === systemId);
+    const byKey = new Map(newer.map(b => [`${b.system_id}:${b.sid}`, {...b}]));
+    for (const b of older) {
+      const key = `${b.system_id}:${b.sid}`;
+      if (!byKey.has(key) && b.status === 'removed') byKey.set(key, {...b});
+    }
+    for (const b of byKey.values()) b.status = statusForKey(b.system_id, b.sid, 'diff');
+    return [...byKey.values()];
+  }
+  function blocksForSystem(systemId) {
+    if (agentPreview) return sourceModel().blocks.filter(b => b.system_id === systemId).map(b => ({...b,status:'unchanged'}));
+    if (payload.mode === 'diff' && mode === 'diff') return diffBlocks(systemId);
+    return sourceModel().blocks.filter(b => b.system_id === systemId).map(b => ({...b, status: mode === 'diff' ? b.status : 'unchanged'}));
+  }
+  function linesForSystem(systemId) {
+    if (agentPreview) return sourceModel().lines.filter(l => l.system_id === systemId).map(l => ({...l,status:'unchanged'}));
+    if (payload.mode !== 'diff' || mode !== 'diff') return sourceModel().lines.filter(l => l.system_id === systemId).map(l => ({...l,status:'unchanged'}));
+    const newer = payload.new.lines.filter(l => l.system_id === systemId).map(l => ({...l}));
+    const newIds = new Set(newer.map(l => l.id));
+    const removed = payload.old.lines.filter(l => l.system_id === systemId && l.status === 'removed' && !newIds.has(l.id));
+    return [...newer, ...removed];
+  }
+  function parsePosition(block) {
+    const raw = block.parameters && block.parameters.Position;
+    if (!raw) return null;
+    const nums = String(raw).match(/-?\d+(?:\.\d+)?/g);
+    if (!nums || nums.length < 4) return null;
+    const n = nums.slice(0,4).map(Number);
+    if (n.some(v => !Number.isFinite(v))) return null;
+    return {x:n[0], y:n[1], w:Math.max(54,n[2]-n[0]), h:Math.max(34,n[3]-n[1])};
+  }
+  function endpoint(raw) {
+    const m = String(raw).match(/^(.*):(in|out)(\d+)$/);
+    return m ? {path:m[1], kind:m[2], port:Number(m[3])} : {path:String(raw),kind:'',port:1};
+  }
+  function autoLayout(blocks, lines) {
+    const positions = new Map();
+    let hasAnyPosition = false;
+    for (const b of blocks) {
+      const p = parsePosition(b);
+      if (p) { positions.set(b.path,p); hasAnyPosition = true; }
+    }
+    if (hasAnyPosition && positions.size >= Math.max(1, Math.ceil(blocks.length * .65))) {
+      let fallback = 0;
+      for (const b of blocks) if (!positions.has(b.path)) { positions.set(b.path,{x:80+(fallback%4)*190,y:80+Math.floor(fallback/4)*110,w:110,h:56}); fallback++; }
+      return positions;
+    }
+    const indegree = new Map(blocks.map(b => [b.path,0]));
+    const outgoing = new Map(blocks.map(b => [b.path,[]]));
+    for (const l of lines) {
+      const s=endpoint(l.src).path,d=endpoint(l.dst).path;
+      if (indegree.has(d) && outgoing.has(s)) { indegree.set(d,(indegree.get(d)||0)+1); outgoing.get(s).push(d); }
+    }
+    const queue=[...blocks.filter(b => (indegree.get(b.path)||0)===0).map(b=>b.path)];
+    const rank=new Map(queue.map(p=>[p,0]));
+    while(queue.length){const p=queue.shift(),r=rank.get(p)||0;for(const d of outgoing.get(p)||[]){rank.set(d,Math.max(rank.get(d)||0,r+1));indegree.set(d,(indegree.get(d)||1)-1);if(indegree.get(d)===0)queue.push(d)}}
+    let maxRank=Math.max(0,...rank.values());
+    for(const b of blocks) if(!rank.has(b.path)) rank.set(b.path,++maxRank);
+    const rows=new Map();
+    for(const b of blocks){const r=rank.get(b.path)||0;const row=rows.get(r)||0;rows.set(r,row+1);positions.set(b.path,{x:80+r*220,y:80+row*115,w:120,h:58});}
+    return positions;
+  }
+
+  function make(tag, attrs={}) { const n=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const [k,v] of Object.entries(attrs)) n.setAttribute(k,v); return n; }
+  function updateTransform(){ viewport.setAttribute('transform',`translate(${transform.x} ${transform.y}) scale(${transform.scale})`); }
+  function fitView() {
+    const bbox = viewport.getBBox();
+    const rect = svg.getBoundingClientRect();
+    if (!bbox.width || !bbox.height || !rect.width || !rect.height) { transform={x:20,y:20,scale:1}; updateTransform(); return; }
+    const scale = Math.min(1.5, Math.max(.15, Math.min((rect.width-80)/bbox.width,(rect.height-80)/bbox.height)));
+    transform.scale=scale; transform.x=(rect.width-bbox.width*scale)/2-bbox.x*scale; transform.y=(rect.height-bbox.height*scale)/2-bbox.y*scale; updateTransform();
+  }
+  function zoomAt(factor, cx, cy) {
+    const next=Math.min(3.5,Math.max(.15,transform.scale*factor));
+    const ratio=next/transform.scale; transform.x=cx-(cx-transform.x)*ratio; transform.y=cy-(cy-transform.y)*ratio; transform.scale=next; updateTransform();
+  }
+  function buildPortCounts(blocks, lines) {
+    const counts=new Map(blocks.map(b=>[b.path,{in:1,out:1}]));
+    for(const line of lines){
+      const se=endpoint(line.src),de=endpoint(line.dst);
+      if(counts.has(se.path))counts.get(se.path).out=Math.max(counts.get(se.path).out,Number(se.port)||1);
+      if(counts.has(de.path))counts.get(de.path).in=Math.max(counts.get(de.path).in,Number(de.port)||1);
+    }
+    return counts;
+  }
+  function portPoint(pos, ep) {
+    const path=ep.path||''; const kind=ep.kind==='in'?'in':'out';
+    const port=Math.max(1,Number(ep.port)||1); const known=(window.__portCounts&&window.__portCounts.get(path))||null;
+    const total=Math.max(port,known?Number(known[kind])||1:port);
+    const y=pos.y+(pos.h*port/(total+1));
+    return kind==='in'?{x:pos.x,y}:{x:pos.x+pos.w,y};
+  }
+  function clientToModel(clientX, clientY) {
+    const point=svg.createSVGPoint(); point.x=clientX; point.y=clientY;
+    const matrix=svg.getScreenCTM(); if(!matrix)return {x:0,y:0};
+    const local=point.matrixTransform(matrix.inverse());
+    return {x:(local.x-transform.x)/transform.scale,y:(local.y-transform.y)/transform.scale};
+  }
+  function structuralEditable(block) {
+    return Boolean(workbenchMode && bridgeAvailable && payload.mode!=='diff' && !agentPreview && block && block.status!=='removed');
+  }
+  function beginBlockMove(event, block, pos, group) {
+    if(event.button!==0 || !structuralEditable(block) || event.target.closest('.port'))return;
+    const actual=parsePosition(block); if(!actual)return;
+    event.preventDefault();event.stopPropagation();
+    const point=clientToModel(event.clientX,event.clientY);
+    blockDragging={block,group,origin:actual,start:point,moved:false};group.classList.add('block-dragging');
+    try{group.setPointerCapture(event.pointerId)}catch(_){}
+  }
+  function updateLiveWires(movedPath, movedPos) {
+    const positions=window.__positions||new Map();
+    for(const wire of wireLayer.querySelectorAll('.wire')){
+      const srcPath=wire.dataset.src||'',dstPath=wire.dataset.dst||'';
+      const sp=srcPath===movedPath?movedPos:positions.get(srcPath),dp=dstPath===movedPath?movedPos:positions.get(dstPath);if(!sp||!dp)continue;
+      const a=portPoint(sp,{kind:'out',path:srcPath,port:Number(wire.dataset.srcPort)||1}),b=portPoint(dp,{kind:'in',path:dstPath,port:Number(wire.dataset.dstPort)||1}),dx=Math.max(45,Math.abs(b.x-a.x)*.45);
+      wire.setAttribute('d',`M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${b.x-dx} ${b.y}, ${b.x} ${b.y}`);
+    }
+  }
+  function updateBlockMove(event) {
+    if(!blockDragging)return;
+    const point=clientToModel(event.clientX,event.clientY),dx=point.x-blockDragging.start.x,dy=point.y-blockDragging.start.y;
+    if(Math.abs(dx)+Math.abs(dy)>2)blockDragging.moved=true;
+    const x=Math.round(blockDragging.origin.x+dx),y=Math.round(blockDragging.origin.y+dy),moved={x,y,w:blockDragging.origin.w,h:blockDragging.origin.h};
+    blockDragging.group.setAttribute('transform',`translate(${x} ${y})`);updateLiveWires(blockDragging.block.path,moved);
+  }
+  async function finishBlockMove(event) {
+    if(!blockDragging)return;
+    const state=blockDragging;blockDragging=null;state.group.classList.remove('block-dragging');
+    try{state.group.releasePointerCapture(event.pointerId)}catch(_){}
+    if(!state.moved){state.group.setAttribute('transform',`translate(${state.origin.x} ${state.origin.y})`);updateLiveWires(state.block.path,state.origin);return;}
+    const point=clientToModel(event.clientX,event.clientY),dx=point.x-state.start.x,dy=point.y-state.start.y;
+    const before=[Math.round(state.origin.x),Math.round(state.origin.y),Math.round(state.origin.x+state.origin.w),Math.round(state.origin.y+state.origin.h)];
+    const left=Math.round(state.origin.x+dx),top=Math.round(state.origin.y+dy),after=[left,top,left+Math.round(state.origin.w),top+Math.round(state.origin.h)];
+    try{await workspaceModelEdit({op:'move_block',block_path:state.block.path,sid:String(state.block.sid||''),before_position:before,position:after})}
+    catch(err){state.group.setAttribute('transform',`translate(${state.origin.x} ${state.origin.y})`);updateLiveWires(state.block.path,state.origin);toast(err.message||String(err),true)}
+  }
+  function startConnection(event, block, pos, srcPort=1) {
+    if(event.button!==0||!structuralEditable(block))return;
+    event.preventDefault();event.stopPropagation();
+    const start=portPoint(pos,{kind:'out',path:block.path,port:srcPort});connecting={block,srcPort,start,capture:event.target,pointerId:event.pointerId};try{event.target.setPointerCapture(event.pointerId)}catch(_){}connectPreview.classList.remove('hidden');connectPreview.setAttribute('d',`M ${start.x} ${start.y} L ${start.x} ${start.y}`);
+  }
+  function updateConnection(event) {
+    if(!connecting)return;
+    const p=clientToModel(event.clientX,event.clientY),a=connecting.start,dx=Math.max(38,Math.abs(p.x-a.x)*.42);
+    connectPreview.setAttribute('d',`M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${p.x-dx} ${p.y}, ${p.x} ${p.y}`);
+    for(const port of blockLayer.querySelectorAll('.port.in'))port.classList.remove('connect-target');
+    const target=document.elementFromPoint(event.clientX,event.clientY);const port=target&&target.closest?target.closest('.port.in'):null;
+    if(port&&port.dataset.path!==connecting.block.path)port.classList.add('connect-target');
+  }
+  async function finishConnection(event) {
+    if(!connecting)return;
+    const state=connecting;connecting=null;try{state.capture.releasePointerCapture(state.pointerId)}catch(_){}connectPreview.classList.add('hidden');connectPreview.setAttribute('d','');
+    for(const port of blockLayer.querySelectorAll('.port.in'))port.classList.remove('connect-target');
+    const target=document.elementFromPoint(event.clientX,event.clientY),port=target&&target.closest?target.closest('.port.in'):null;
+    if(!port||port.dataset.path===state.block.path)return;
+    try{await workspaceModelEdit({op:'add_line',system_path:parentPath(state.block.path),src_path:state.block.path,src_port:Number(state.srcPort)||1,dst_path:port.dataset.path,dst_port:Number(port.dataset.port)||1})}
+    catch(err){toast(err.message||String(err),true)}
+  }
+  function reviewForBlock(block) { return block ? reviewByPath.get(block.path) || null : null; }
+  function currentSelectedBlock() { return (window.__blocks || []).find(b => b.id === selectedId) || null; }
+  function impactPathsFor(block) {
+    const item = reviewForBlock(block);
+    if (!reviewLens || mode !== 'diff' || !item) return new Set();
+    return new Set([item.block_path, ...(item.downstream_blocks || [])]);
+  }
+  function applySelectionAndImpact() {
+    const block = currentSelectedBlock();
+    const impact = impactPathsFor(block);
+    const active = impact.size > 0;
+    for (const g of blockLayer.querySelectorAll('.block')) {
+      const path = g.dataset.path || '';
+      g.classList.toggle('selected',g.dataset.id===selectedId);
+      g.classList.toggle('impact',active && impact.has(path));
+      g.classList.toggle('impact-dim',active && !impact.has(path));
+    }
+    for (const wire of wireLayer.querySelectorAll('.wire')) {
+      const touched = active && impact.has(wire.dataset.src || '') && impact.has(wire.dataset.dst || '');
+      wire.classList.toggle('impact',touched);
+      wire.classList.toggle('impact-dim',active && !touched);
+    }
+  }
+
+  function canEdit(block) {
+    if (agentPreview) return false;
+    if (!block || block.status === 'removed') return false;
+    if (payload.mode === 'diff' && mode === 'before') return false;
+    return Boolean(editor.source_sha256);
+  }
+  function editKey(blockPath, parameter) { return `${blockPath}\u0000${parameter}`; }
+  function stagedValue(block, parameter, fallback) { const item=staged.get(editKey(block.path,parameter)); return item ? item.after : fallback; }
+  function makePatch() {
+    return {schema_version:editor.patch_schema_version||'0.1',model_name:editor.model_name||sourceModel().name,source_sha256:editor.source_sha256||'',operations:[...staged.values()]};
+  }
+  function updatePatchUI() {
+    $('patchCount').textContent=String(staged.size);
+    $('downloadPatchButton').disabled=staged.size===0;
+    $('applyButton').disabled=!bridgeAvailable || staged.size===0;
+    $('simulateButton').disabled=!bridgeAvailable;
+    $('patchButton').classList.toggle('active',staged.size>0);
+    if(workbenchMode){$('addBlockButton').disabled=!bridgeAvailable}
+  }
+  function stageParameter(block, parameter, before, after) {
+    const key=editKey(block.path,parameter); const value=String(after);
+    if (value===String(before)) staged.delete(key);
+    else staged.set(key,{op:'set_param',block_path:block.path,parameter,before:String(before),after:value,sid:String(block.sid||''),system_id:String(block.system_id||'')});
+    updatePatchUI(); showInspector(block);
+  }
+  function downloadJson(data, filename) {
+    const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
+  function downloadPatch() { if(staged.size) downloadJson(makePatch(),(editor.model_name||'model')+'.slxpatch.json'); }
+  function downloadAgentContext() {
+    if (!payload.agent_context) return;
+    const name = (payload.agent_context.models && payload.agent_context.models.after && payload.agent_context.models.after.name) || 'model';
+    downloadJson(payload.agent_context, `${name}.agent-context.json`); toast(t('agentDownloaded'));
+  }
+  function showPatchQueue() {
+    inspectorMode='patch'; selectedId=null; applySelectionAndImpact(); renderTree(window.__blocks||[]);
+    let html=`<div class="headline"><h2>${t('stagedPatch')}</h2><p>${t('stagedPatchDesc')}</p></div>`;
+    if(!staged.size){html+=`<p style="color:var(--muted);font-size:12px">${t('noStaged')}</p>`;inspector.innerHTML=html;return;}
+    html+='<div class="patch-panel">';
+    for(const item of staged.values()) html+=`<div class="patch-item"><strong>${esc(item.block_path)} · ${esc(item.parameter)}</strong>${esc(item.before)} → ${esc(item.after)}</div>`;
+    html+='</div>'; inspector.innerHTML=html;
+  }
+  function toast(message,isError=false) {
+    const box=$('toast');box.textContent=message;box.classList.toggle('error',isError);box.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>box.classList.add('hidden'),5000);
+  }
+  function simulationSeriesChart(item) {
+    const xs=Array.isArray(item.time)?item.time.map(Number):[],ys=Array.isArray(item.data)?item.data.map(Number):[];
+    if(!xs.length||xs.length!==ys.length)return '';
+    let xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+    if(!Number.isFinite(xmin)||!Number.isFinite(xmax)||!Number.isFinite(ymin)||!Number.isFinite(ymax))return '';
+    if(xmax===xmin)xmax=xmin+1;if(ymax===ymin){ymin-=.5;ymax+=.5}
+    const w=320,h=138,pad=22,px=x=>pad+(x-xmin)/(xmax-xmin)*(w-pad*2),py=y=>h-pad-(y-ymin)/(ymax-ymin)*(h-pad*2);
+    const points=xs.map((x,i)=>`${px(x).toFixed(1)},${py(ys[i]).toFixed(1)}`).join(' ');
+    return `<div style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--panel)"><div style="font-size:11px;font-weight:750;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis">${esc(item.name||'signal')}</div><svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block" role="img" aria-label="${esc(item.name||'signal')}"><line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="var(--border)"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}" stroke="var(--border)"/><polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${points}"/><text x="${pad}" y="${h-5}" fill="var(--muted)" font-size="9">${xmin.toPrecision(3)}s</text><text x="${w-pad}" y="${h-5}" text-anchor="end" fill="var(--muted)" font-size="9">${xmax.toPrecision(3)}s</text><text x="${pad+2}" y="${pad-6}" fill="var(--muted)" font-size="9">${ymax.toPrecision(3)}</text></svg></div>`;
+  }
+  function showSimulationResult(simulation) {
+    inspectorMode='simulation'; lastSimulation=simulation;
+    const vars=Array.isArray(simulation.output_variables)?simulation.output_variables:[]; const elapsed=Number(simulation.elapsed_seconds||0);
+    const series=Array.isArray(simulation.series)?simulation.series:(simulation.series&&typeof simulation.series==='object'?[simulation.series]:[]);
+    let html=`<div class="headline"><h2>${t('simComplete')}</h2><p>${t('simSummary')}</p><span class="badge added">${t('success')}</span></div>`;
+    html+=`<div class="kv"><div class="k">${t('stopTime')}</div><div>${esc(simulation.stop_time||'')}</div><div class="k">${t('wallTime')}</div><div>${esc(elapsed.toFixed(3))} s</div><div class="k">${t('outputs')}</div><div>${vars.length?vars.map(esc).join(', '):t('noOutputs')}</div></div>`;
+    if(series.length)html+=series.slice(0,6).map(simulationSeriesChart).join('');
+    html+=`<div class="edit-note" style="margin-top:10px">${t('simNote')}</div>`; inspector.innerHTML=html;
+  }
+  async function bridgeRequest(path, body) {
+    const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-SLX-Studio-Token':editor.bridge.token},body:JSON.stringify(body)});
+    const data=await response.json().catch(()=>({ok:false,error:t('invalidBridge')}));
+    if(!response.ok||!data.ok) throw new Error(data.error||data.message||`Bridge request failed (${response.status})`);
+    return data;
+  }
+
+  function parentPath(path) { const text=String(path||''); const indexes=pathSeparatorIndexes(text); return indexes.length?text.slice(0,indexes[indexes.length-1]):''; }
+  function currentSystemPath() {
+    const blocks=blocksForSystem(currentSystemId()); if(!blocks.length)return '';
+    const parents=[...new Set(blocks.map(b=>parentPath(b.path)))]; return parents.length===1?parents[0]:'';
+  }
+  function defaultBlockName(type) {
+    const spec=blockCatalog[type]||{}; const base=String(spec.block_type||type||'Block').replace(/[^A-Za-z0-9_]/g,'')||'Block';
+    const existing=new Set((sourceModel().blocks||[]).map(b=>String(b.name||''))); let n=1,name=base;
+    while(existing.has(name)){name=base+n;n++} return name;
+  }
+  async function workspaceModelEdit(operation) {
+    if(!workbenchMode||!workspacePath){toast(t('matlabRequiredEdit'),true);return null}
+    if(!bridgeAvailable){toast(t('matlabRequiredEdit'),true);return null}
+    if(staged.size){toast(t('savePendingFirst'),true);return null}
+    const edit={schema_version:'0.1',model_name:editor.model_name||sourceModel().name,source_sha256:editor.source_sha256||'',operations:[operation]};
+    const result=await bridgeRequest('/api/v1/workspace/model-edit',{path:workspacePath,edit});
+    try{parent.postMessage({type:'slx-model-saved',path:workspacePath},location.origin)}catch(_){}
+    toast(t('modelSavedReload')); setTimeout(()=>location.reload(),280); return result;
+  }
+  function showAddBlockPanel() {
+    inspectorMode='structure';selectedId=null;applySelectionAndImpact();renderTree(window.__blocks||[]);
+    const keys=Object.keys(blockCatalog);if(!keys.length){inspector.innerHTML=`<p>${t('matlabRequiredEdit')}</p>`;return}
+    inspector.innerHTML=`<div class="headline"><h2>${t('addBlockTitle')}</h2><p>${esc(currentSystemPath()||'Root')}</p></div><div class="ai-form"><div class="ai-note">${t('dragHint')}</div><div class="ai-field"><label>${t('blockType')}</label><input id="blockCatalogSearch" type="search" placeholder="${t('blockSearch')}"><select id="newBlockType" size="9" style="min-height:190px"></select></div><div class="ai-field"><label>${t('blockName')}</label><input id="newBlockName"></div><div class="ai-actions"><button class="btn" id="createBlockButton" type="button" ${bridgeAvailable?'':'disabled'}>${t('createBlock')}</button></div></div>`;
+    const type=$('newBlockType'),name=$('newBlockName'),search=$('blockCatalogSearch');
+    function fill(){const q=search.value.trim().toLowerCase(),previous=type.value;type.innerHTML='';for(const key of keys){const spec=blockCatalog[key]||{},hay=`${key} ${spec.description||''} ${spec.block_type||''}`.toLowerCase();if(q&&!hay.includes(q))continue;const option=document.createElement('option');option.value=key;option.textContent=`${spec.description||key} · ${spec.block_type||key}`;type.appendChild(option)}const keep=[...type.options].some(o=>o.value===previous);if(keep)type.value=previous;else if(type.options.length){type.value=type.options[0].value;name.value=defaultBlockName(type.value)}if(type.value&&!name.value)name.value=defaultBlockName(type.value)}
+    search.addEventListener('input',fill);type.addEventListener('change',()=>{name.value=defaultBlockName(type.value)});fill();search.focus();
+    async function create(){if(!type.value)return;const visible=blocksForSystem(currentSystemId());const pos=autoLayout(visible,linesForSystem(currentSystemId()));let maxX=80,maxY=80;for(const p of pos.values()){maxX=Math.max(maxX,p.x+p.w);maxY=Math.max(maxY,p.y)};const operation={op:'add_block',block_type:type.value,name:name.value.trim(),parent:currentSystemPath(),position:[maxX+80,maxY,maxX+150,maxY+45],parameters:{}};try{await workspaceModelEdit(operation)}catch(err){toast(err.message||String(err),true)}}
+    $('createBlockButton').addEventListener('click',create);type.addEventListener('dblclick',create);
+  }
+  function showConnectPanel(block) {
+    const candidates=(window.__blocks||[]).filter(b=>b.path!==block.path&&b.status!=='removed');
+    const options=candidates.map(b=>`<option value="${esc(b.path)}">${esc(b.path)} · ${esc(b.block_type)}</option>`).join('');
+    inspectorMode='structure';inspector.innerHTML=`<div class="headline"><h2>${t('connectTo')}</h2><p>${esc(block.path)}</p></div>${candidates.length?`<div class="ai-form"><div class="ai-field"><label>${t('selectTarget')}</label><select id="connectTarget">${options}</select></div><div class="ai-field"><label>${t('sourcePort')}</label><input id="connectSrcPort" type="number" min="1" max="64" value="1"></div><div class="ai-field"><label>${t('destinationPort')}</label><input id="connectDstPort" type="number" min="1" max="64" value="1"></div><div class="ai-actions"><button class="btn" id="createConnectionButton" type="button">${t('createConnection')}</button></div></div>`:`<p style="color:var(--muted)">${t('noBlocks')}</p>`}`;
+    const button=$('createConnectionButton');if(button)button.addEventListener('click',async()=>{const dst=$('connectTarget').value;const operation={op:'add_line',system_path:parentPath(block.path),src_path:block.path,src_port:Number($('connectSrcPort').value)||1,dst_path:dst,dst_port:Number($('connectDstPort').value)||1};try{await workspaceModelEdit(operation)}catch(err){toast(err.message||String(err),true)}})
+  }
+  function structuralActionsHtml(block) {
+    if(!workbenchMode||payload.mode==='diff'||agentPreview||block.status==='removed')return '';
+    const lines=linesForSystem(block.system_id).filter(line=>endpoint(line.src).path===block.path||endpoint(line.dst).path===block.path);
+    let html=`<div class="edit-note" style="margin-top:12px"><strong>${t('connectionsTitle')}</strong><div class="edit-actions" style="margin-top:7px"><button class="mini-btn" id="renameBlockButton" type="button" ${bridgeAvailable?'':'disabled'}>${t('rename')}</button><button class="mini-btn" id="connectBlockButton" type="button" ${bridgeAvailable?'':'disabled'}>${t('connectTo')}</button><button class="mini-btn" id="deleteBlockButton" type="button" ${bridgeAvailable?'':'disabled'}>${t('deleteBlock')}</button></div></div>`;
+    if(lines.length){html+='<div class="patch-panel">';for(const line of lines){const se=endpoint(line.src),de=endpoint(line.dst);html+=`<div class="patch-item"><strong>${esc(se.path)}:${se.port} → ${esc(de.path)}:${de.port}</strong><div style="margin-top:4px"><button class="mini-btn remove-connection" type="button" data-src="${esc(se.path)}" data-sp="${se.port}" data-dst="${esc(de.path)}" data-dp="${de.port}">${t('removeConnection')}</button></div></div>`}html+='</div>'}
+    return html;
+  }
+  function wireStructuralActions(block) {
+    if(!workbenchMode)return;
+    const rename=$('renameBlockButton');if(rename)rename.addEventListener('click',async()=>{const value=prompt(t('renamePrompt'),block.name);if(!value||value===block.name)return;try{await workspaceModelEdit({op:'rename_block',block_path:block.path,sid:String(block.sid||''),new_name:value.trim()})}catch(err){toast(err.message||String(err),true)}});
+    const del=$('deleteBlockButton');if(del)del.addEventListener('click',async()=>{if(!confirm(t('confirmDelete',{name:block.name})))return;try{await workspaceModelEdit({op:'delete_block',block_path:block.path,sid:String(block.sid||'')})}catch(err){toast(err.message||String(err),true)}});
+    const conn=$('connectBlockButton');if(conn)conn.addEventListener('click',()=>showConnectPanel(block));
+    for(const button of inspector.querySelectorAll('.remove-connection'))button.addEventListener('click',async()=>{try{await workspaceModelEdit({op:'delete_line',system_path:parentPath(block.path),src_path:button.dataset.src,src_port:Number(button.dataset.sp)||1,dst_path:button.dataset.dst,dst_port:Number(button.dataset.dp)||1})}catch(err){toast(err.message||String(err),true)}})
+  }
+
+  function agentResultHtml() {
+    if(!lastAgentResult) return '';
+    let html='<div class="ai-result">';
+    html+=`<div class="ai-field"><label>${t('aiAnswer')}</label><pre>${esc(lastAgentResult.text||t('noAgentText'))}</pre></div>`;
+    if(lastAgentResult.blueprint){const bp=lastAgentResult.blueprint;html+=`<div class="review-callout priority-low"><h3><span>${t('blueprintReady')}</span><span class="priority-pill priority-low">VALID</span></h3><p>${esc(bp.model_name||'model')} · ${t('blueprintMeta',{blocks:(bp.blocks||[]).length,connections:(bp.connections||[]).length})}</p><div class="ai-actions" style="margin-top:8px"><button class="mini-btn" id="previewBlueprintButton" type="button">${t('previewBlueprint')}</button><button class="mini-btn" id="buildBlueprintButton" type="button" ${bridgeAvailable?'':'disabled'}>${t('buildBlueprint')}</button></div></div>`;}
+    if(lastAgentResult.build_result&&lastAgentResult.build_result.output_model) html+=`<div class="ai-note">${esc(t('blueprintBuilt',{output:lastAgentResult.build_result.output_model}))}</div>`;
+    const trace=Array.isArray(lastAgentResult.trace)?lastAgentResult.trace:[];
+    if(trace.length){html+=`<div class="ai-field" style="margin-top:9px"><label>${t('toolTrace')}</label><div class="ai-trace">`;for(const item of trace) html+=`<div class="ai-trace-item"><strong>${esc(item.tool||'tool')}</strong> · ${item.ok?'✓':'⚠'}</div>`;html+='</div></div>';}
+    return html+'</div>';
+  }
+  function currentProviderPreset() {
+    return providerPresets.find(item => item.id === agentSettings.provider_id) || providerPresets.find(item => item.id === 'custom') || null;
+  }
+  function providerLabel(item) {
+    if(!item) return 'Custom';
+    return lang === 'zh' ? (item.label_zh || item.label || item.id) : (item.label || item.id);
+  }
+  function providerNote(item) {
+    if(!item) return '';
+    const note = lang === 'zh' ? (item.note_zh || item.note || '') : (item.note || '');
+    const env = item.api_key_env ? t('apiKeyEnv',{env:item.api_key_env}) : '';
+    return [note,env,t('providerCustomModel')].filter(Boolean).join(' ');
+  }
+  function providerOptionsHtml() {
+    const items = providerPresets.length ? providerPresets : [{id:'custom',label:'Custom OpenAI-compatible',label_zh:'自定义 OpenAI 兼容接口'}];
+    return items.map(item => `<option value="${esc(item.id)}" ${agentSettings.provider_id===item.id?'selected':''}>${esc(providerLabel(item))}</option>`).join('');
+  }
+  function modelListHtml(item) {
+    const models = item && Array.isArray(item.models) ? item.models : [];
+    return models.map(model => `<option value="${esc(model)}"></option>`).join('');
+  }
+  function syncAgentSettingsFromForm() {
+    const provider=$('aiProvider'), endpoint=$('aiEndpoint'), model=$('aiModel'), key=$('aiKey'), prompt=$('aiPrompt'), auto=$('aiAutoBuild');
+    if(provider) agentSettings.provider_id=provider.value;
+    if(endpoint) agentSettings.base_url=endpoint.value.trim();
+    if(model) agentSettings.model=model.value.trim();
+    if(key) agentSettings.api_key=key.value;
+    if(prompt) agentSettings.prompt=prompt.value.trim();
+    if(auto) agentSettings.auto_build=auto.checked;
+  }
+  function selectProvider(providerId) {
+    syncAgentSettingsFromForm();
+    const preset=providerPresets.find(item=>item.id===providerId);
+    agentSettings.provider_id=providerId;
+    if(preset){agentSettings.kind=preset.kind||'openai_compatible_chat';agentSettings.base_url=preset.default_base_url||'';agentSettings.model=preset.default_model||'';}
+    else {agentSettings.kind='openai_compatible_chat';agentSettings.base_url='';agentSettings.model='';}
+    // Never carry a credential across providers accidentally.
+    agentSettings.api_key='';
+    showAIPanel();
+  }
+  function wireAgentPanelEvents() {
+    const provider=$('aiProvider'), run=$('runAgentButton');
+    if(!run) return;
+    provider.addEventListener('change',()=>selectProvider(provider.value));
+    run.addEventListener('click',runAgent);
+    const preview=$('previewBlueprintButton');if(preview)preview.addEventListener('click',previewAgentBlueprint);
+    const build=$('buildBlueprintButton');if(build)build.addEventListener('click',buildAgentBlueprint);
+  }
+  function showAIPanel() {
+    inspectorMode='ai';selectedId=null;applySelectionAndImpact();renderTree(window.__blocks||[]);
+    if(!editor.bridge||!editor.bridge.enabled){inspector.innerHTML=`<div class="headline"><h2>${t('aiTitle')}</h2><p>${t('aiNeedsLive')}</p></div>`;return;}
+    const preset=currentProviderPreset();
+    inspector.innerHTML=`<div class="headline"><h2>${t('aiTitle')}</h2><p>${t('aiIntro')}</p></div><div class="ai-form">
+      <div class="ai-field"><label>${t('providerPreset')}</label><select id="aiProvider">${providerOptionsHtml()}</select></div>
+      <div class="ai-note">${esc(providerNote(preset))}</div>
+      <div class="ai-field"><label>${t('endpoint')}</label><input id="aiEndpoint" value="${esc(agentSettings.base_url)}" autocomplete="off" spellcheck="false"></div>
+      <div class="ai-field"><label>${t('modelName')}</label><input id="aiModel" list="aiModelList" value="${esc(agentSettings.model)}" autocomplete="off" spellcheck="false" placeholder="model-id"><datalist id="aiModelList">${modelListHtml(preset)}</datalist></div>
+      <div class="ai-field"><label>${t('apiKey')}</label><input id="aiKey" type="password" value="${esc(agentSettings.api_key)}" autocomplete="off" placeholder="${esc(t('apiKeyPlaceholder'))}"></div>
+      <div class="ai-field"><label>${t('engineeringTask')}</label><textarea id="aiPrompt" placeholder="${esc(t('promptPlaceholder'))}">${esc(agentSettings.prompt)}</textarea></div>
+      <label class="ai-check"><input id="aiAutoBuild" type="checkbox" ${agentSettings.auto_build?'checked':''} ${bridgeAvailable?'':'disabled'}><span>${t('autoBuild')}${bridgeAvailable?'':` · ${t('autoBuildUnavailable')}`}</span></label>
+      <div class="ai-actions"><button class="btn" id="runAgentButton" type="button">${t('runAgent')}</button></div>
+      <div class="ai-note">${t('aiSecurity')}</div>
+    </div>${agentResultHtml()}`;
+    wireAgentPanelEvents();
+  }
+  async function runAgent() {
+    const run=$('runAgentButton');
+    syncAgentSettingsFromForm();
+    const preset=currentProviderPreset();
+    agentSettings.kind=preset&&preset.kind?preset.kind:agentSettings.kind;
+    if(!agentSettings.base_url||!agentSettings.model||!agentSettings.prompt){toast(lang==='zh'?'请填写 API 地址、模型名称和工程任务。':'Enter a Base URL, model name, and engineering task.',true);return;}
+    run.disabled=true;run.textContent=t('runningAgent');
+    try{lastAgentResult=await bridgeRequest('/api/v1/agent/chat',{provider:{provider_id:agentSettings.provider_id,kind:agentSettings.kind,base_url:agentSettings.base_url,model:agentSettings.model,api_key:agentSettings.api_key},prompt:agentSettings.prompt,auto_build:agentSettings.auto_build,language:lang});if(lastAgentResult.preview)activateAgentPreview(lastAgentResult.preview);showAIPanel();}
+    catch(err){toast(err.message||String(err),true);showAIPanel();}
+  }
+  function activateAgentPreview(preview) {
+    if(!preview)return;agentPreview=preview;mode='agent';selectedId=null;$('modelSubtitle').textContent=`AI · ${preview.name||'blueprint'}`;setupModes();populateSystems();render();
+  }
+  function previewAgentBlueprint(){if(lastAgentResult&&lastAgentResult.preview)activateAgentPreview(lastAgentResult.preview);}
+  async function buildAgentBlueprint(){
+    if(!lastAgentResult||!lastAgentResult.blueprint)return;if(!bridgeAvailable){toast(t('autoBuildUnavailable'),true);return;}
+    const button=$('buildBlueprintButton');if(button)button.disabled=true;
+    try{const built=await bridgeRequest('/api/v1/blueprints/build',{blueprint:lastAgentResult.blueprint});lastAgentResult.build_result=built;if(built.preview){lastAgentResult.preview=built.preview;activateAgentPreview(built.preview);}toast(t('blueprintBuilt',{output:built.output_model||''}));showAIPanel();}
+    catch(err){toast(err.message||String(err),true);showAIPanel();}
+  }
+  function updateBridgeText() {
+    const pill=$('bridgePill'); pill.classList.remove('ready','missing');
+    if (bridgeState==='standalone') pill.textContent=t('standaloneEditor');
+    else if (bridgeState==='checking') pill.textContent=t('checkingMatlab');
+    else if (bridgeState==='ready') { pill.textContent=t('bridgeReady'); pill.classList.add('ready'); }
+    else if (bridgeState==='missing') { pill.textContent=t('matlabNotFound'); pill.classList.add('missing'); }
+    else { pill.textContent=t('bridgeUnavailable'); pill.classList.add('missing'); }
+    if (bridgeState==='ready') $('statusRight').textContent=t('bridgeOutput',{output:bridgeOutput});
+    else if (bridgeState==='missing') $('statusRight').textContent=t('liveNoMatlab');
+    else if (bridgeState==='standalone') $('statusRight').textContent=lang==='zh'?'独立编辑器 · 可导出补丁':'Standalone editor · patch export ready';
+  }
+  async function detectBridge() {
+    if(!editor.bridge || !editor.bridge.enabled){bridgeState='standalone';updateBridgeText();updatePatchUI();return;}
+    $('aiButton').classList.remove('hidden');
+    if(workbenchMode)$('addBlockButton').classList.remove('hidden');
+    bridgeState='checking';updateBridgeText();
+    try{
+      const response=await fetch('/api/status',{headers:{'X-SLX-Studio-Token':editor.bridge.token}});const data=await response.json();
+      bridgeAvailable=Boolean(data.ok&&data.matlab&&data.matlab.available); bridgeOutput=data.output_model||'';
+      bridgeState=bridgeAvailable?'ready':'missing';
+      $('applyButton').classList.remove('hidden');$('runGroup').classList.remove('hidden'); updateBridgeText();
+    }catch(err){bridgeState='unavailable';updateBridgeText();toast(String(err),true);}
+    updatePatchUI(); if(workbenchMode)render();
+  }
+  function requestWorkbenchSimulation() {
+    if(!workbenchMode){applyInMatlab(true);return;}
+    if(!bridgeAvailable){toast(t('matlabUnavailable'),true);return;}
+    const stopTime=$('stopTime').value.trim()||'10';
+    try{parent.postMessage({type:'slx-simulation-request',path:workspacePath,patch:makePatch(),stop_time:stopTime,had_edits:staged.size>0},location.origin)}catch(err){toast(err.message||String(err),true)}
+  }
+
+  async function applyInMatlab(simulate=false) {
+    if(!bridgeAvailable){toast(t('matlabUnavailable'),true);return;}
+    const stopTime=$('stopTime').value.trim()||'10'; const button=simulate?$('simulateButton'):$('applyButton'); const hadEdits=staged.size>0;
+    button.disabled=true; button.textContent=simulate?t('running'):t('applying');
+    if(workbenchMode&&simulate){try{parent.postMessage({type:'slx-run-state',running:true,path:workspacePath},location.origin)}catch(_){}}
+    try{
+      const route=workbenchMode?'/api/v1/workspace/apply-patch':(simulate?'/api/simulate':'/api/apply');
+      const request=workbenchMode?{path:workspacePath,patch:makePatch(),simulate:Boolean(simulate),stop_time:stopTime}:{patch:makePatch(),stop_time:stopTime};
+      const result=await bridgeRequest(route,request);
+      if(simulate&&result.simulation&&result.simulation.ran){const elapsed=Number(result.simulation.elapsed_seconds||0);const msg=t('simCompleteToast',{stop:result.simulation.stop_time,elapsed:elapsed.toFixed(2)});toast(msg);showSimulationResult(result.simulation);try{parent.postMessage({type:'slx-console',text:`${sourceModel().name}: ${msg}`,kind:'simulation'},location.origin);parent.postMessage({type:'slx-simulation-result',path:workspacePath,simulation:result.simulation},location.origin)}catch(_){}}
+      else toast(workbenchMode?t('modelSavedReload'):t('savedEdited',{output:result.output_model||editor.bridge.output_model||'done'}));
+      if(workbenchMode&&hadEdits){try{parent.postMessage({type:'slx-model-saved',path:workspacePath},location.origin)}catch(_){}setTimeout(()=>location.reload(),350)}
+    }catch(err){toast(err.message||String(err),true);try{if(workbenchMode)parent.postMessage({type:'slx-console',text:`ERROR: ${err.message||String(err)}`,kind:'error'},location.origin)}catch(_){}}
+    finally{if(workbenchMode&&simulate){try{parent.postMessage({type:'slx-run-state',running:false,path:workspacePath},location.origin)}catch(_){}}button.textContent=simulate?t('runSimulation'):(workbenchMode?t('saveModel'):t('applyMatlab'));updatePatchUI();}
+  }
+
+  function reviewCallout(item) {
+    if (!item || !reviewLens || mode !== 'diff') return '';
+    const reasons=(item.reasons||[]).map(reason=>`<li>${esc(reasonLabel(reason))}</li>`).join('');
+    const outports=(item.affected_outports||[]).map(p=>`<code>${esc(p)}</code>`).join(', ') || '—';
+    const direct=(item.direct_consumers||[]).map(p=>`<code>${esc(p)}</code>`).join(', ') || '—';
+    return `<div class="review-callout priority-${esc(item.priority)}"><h3><span>${t('reviewPriority')}</span><span class="priority-pill priority-${esc(item.priority)}">${priorityLabel(item.priority)} · ${item.score}</span></h3><p>${t('impactRadius')}: <strong>${(item.downstream_blocks||[]).length}</strong> ${t('downstream')}</p><p>${t('affectedOutports')}: ${outports}</p><p>${t('directConsumers')}: ${direct}</p><div style="margin-top:7px;font-size:10px;font-weight:800">${t('whyReview')}</div><ul class="reason-list">${reasons}</ul></div>`;
+  }
+  function showReviewOverview() {
+    inspectorMode='overview';
+    if (!review || !review.items || !review.items.length) { inspector.innerHTML=`<div class="headline"><h2>${t('reviewTitle')}</h2><p>${t('noHotspots')}</p></div><div class="review-disclaimer">${t('staticDisclaimer')}</div>`; return; }
+    const counts=review.priority_counts||{high:0,medium:0,low:0}; const top=review.items[0];
+    inspector.innerHTML=`<div class="headline"><h2>${t('reviewTitle')}</h2><p>${t('reviewOverview')}</p></div><div class="review-callout priority-${esc(top.priority)}"><h3><span>${t('reviewHotspots')}</span><span class="priority-pill priority-${esc(top.priority)}">${priorityLabel(top.priority)}</span></h3><p>${t('high')}: ${counts.high||0} · ${t('medium')}: ${counts.medium||0} · ${t('low')}: ${counts.low||0}</p><p><strong>${esc(top.block_path)}</strong> · ${t('score')} ${top.score}/100</p></div><div class="review-disclaimer">${t('staticDisclaimer')}</div>`;
+  }
+  function showInspector(block) {
+    if (!block) { if(reviewLens && payload.mode==='diff' && mode==='diff') showReviewOverview(); else {inspectorMode='overview';inspector.innerHTML=`<p style="color:var(--muted);font-size:12px">${t('selectBlock')}</p>`;} return; }
+    inspectorMode='block';
+    const params=Object.entries(block.parameters||{}).sort(([a],[b])=>a.localeCompare(b));
+    const before=block.before && block.before.parameters ? block.before.parameters : null;
+    const changeMap=new Map((block.parameter_changes||[]).map(c=>[c.name,c])); const status=block.status||'unchanged'; const editable=canEdit(block);
+    const item=reviewForBlock(block);
+    let html=`<div class="headline"><h2>${esc(block.name)}</h2><p>${esc(block.path)}</p>${status!=='unchanged'?`<span class="badge ${esc(status)}">${esc(status==='added'?t('added'):status==='removed'?t('removed'):t('changed'))}</span>`:''}</div>`;
+    html+=reviewCallout(item);
+    html += `<div class="kv"><div class="k">${t('type')}</div><div>${esc(block.block_type)}</div><div class="k">SID</div><div>${esc(block.sid)}</div><div class="k">${t('system')}</div><div>${esc(block.system_id)}</div></div>`;
+    if(!params.length) html+=`<p style="color:var(--muted);font-size:12px">${t('noParams')}</p>`;
+    for(const [k,v] of params){
+      const c=changeMap.get(k);const stagedItem=staged.get(editKey(block.path,k));const value=stagedValue(block,k,v);
+      if(editable){
+        html+=`<div class="edit-row"><label>${esc(k)}</label><div class="edit-control"><input class="param-input${stagedItem?' staged':''}" data-parameter="${esc(k)}" value="${esc(value)}"><div class="edit-actions"><button class="mini-btn stage-param" data-parameter="${esc(k)}" type="button">${stagedItem?t('updateStaged'):t('stage')}</button>${stagedItem?`<button class="mini-btn reset-param" data-parameter="${esc(k)}" type="button">${t('reset')}</button>`:''}</div>${c?`<div class="param-change">${t('gitWas',{value:esc(c.before==null?'∅':c.before)})}</div>`:''}${stagedItem?`<div class="edit-note">${t('patchBase',{before:esc(v),after:esc(stagedItem.after)})}</div>`:''}</div></div>`;
+      }else{
+        html+=`<div class="edit-row"><label>${esc(k)}</label><div class="edit-control"><div style="padding:7px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px">${esc(v)}</div>${c?`<div class="param-change">${t('was',{value:esc(c.before==null?'∅':c.before)})}</div>`:''}</div></div>`;
+      }
+    }
+    if(before&&status==='changed'){for(const [k,v] of Object.entries(before))if(!(k in (block.parameters||{})))html+=`<div class="edit-row"><label>${esc(k)}</label><div class="edit-control">∅<div class="param-change">${t('was',{value:esc(v)})}</div></div></div>`;}
+    if(!editable)html+=`<div class="edit-note">${t('readOnly')}</div>`; html+=structuralActionsHtml(block); inspector.innerHTML=html;
+    for(const button of inspector.querySelectorAll('.stage-param')) button.addEventListener('click',()=>{const parameter=button.dataset.parameter;const input=[...inspector.querySelectorAll('.param-input')].find(el=>el.dataset.parameter===parameter);if(input)stageParameter(block,parameter,block.parameters[parameter]??'',input.value)});
+    for(const button of inspector.querySelectorAll('.reset-param')) button.addEventListener('click',()=>{const parameter=button.dataset.parameter;staged.delete(editKey(block.path,parameter));updatePatchUI();showInspector(block)});
+    wireStructuralActions(block);
+  }
+
+  function renderTree(blocks) {
+    const q=searchBox.value.trim().toLowerCase(); tree.innerHTML='';
+    const filtered=blocks.filter(b=>!q||`${b.name} ${b.block_type} ${b.path}`.toLowerCase().includes(q));
+    for(const b of filtered){const btn=document.createElement('button');btn.type='button';btn.className='tree-item'+(b.id===selectedId?' active':'');btn.dataset.status=b.status||'unchanged';btn.innerHTML=`<span class="dot"></span><span>${esc(shortName(b.path))}</span><span class="kind">${esc(b.block_type)}</span>`;btn.addEventListener('click',()=>selectBlock(b.id,true));tree.appendChild(btn)}
+    if(!filtered.length){const p=document.createElement('div');p.style.cssText='padding:10px;color:var(--muted);font-size:12px';p.textContent=q?t('noMatch'):t('noBlocks');tree.appendChild(p)}
+  }
+  function jumpToReviewItem(item) {
+    if (!item) return; mode='diff'; setupModes(); populateSystems();
+    const all=[...(payload.new.blocks||[]),...(payload.old.blocks||[])]; const target=all.find(b=>b.path===item.block_path);
+    if(target && [...systemSelect.options].some(o=>o.value===target.system_id)) systemSelect.value=target.system_id;
+    render(); const block=(window.__blocks||[]).find(b=>b.path===item.block_path); if(block) selectBlock(block.id,true);
+  }
+  function renderReviewPanel() {
+    if (!review || !reviewLens || mode!=='diff') {reviewPanel.classList.add('hidden');reviewPanel.innerHTML='';return;}
+    reviewPanel.classList.remove('hidden'); const counts=review.priority_counts||{high:0,medium:0,low:0};
+    let html=`<div class="review-heading"><span>${t('reviewHotspots')}</span><span>${counts.high||0}/${counts.medium||0}/${counts.low||0}</span></div>`;
+    for(const item of (review.items||[]).slice(0,8)) html+=`<button type="button" class="review-card${currentSelectedBlock()&&currentSelectedBlock().path===item.block_path?' active':''}" data-review-path="${esc(item.block_path)}"><div class="review-card-top"><span class="priority-pill priority-${esc(item.priority)}">${priorityLabel(item.priority)} ${item.score}</span><strong>${esc(shortName(item.block_path))}</strong></div><div class="review-meta">${t('hotspotMeta',{downstream:(item.downstream_blocks||[]).length,outports:(item.affected_outports||[]).length})}</div></button>`;
+    html+=`<div class="review-disclaimer">${t('staticDisclaimer')}</div>`; reviewPanel.innerHTML=html;
+    for(const button of reviewPanel.querySelectorAll('.review-card')) button.addEventListener('click',()=>jumpToReviewItem(reviewByPath.get(button.dataset.reviewPath)));
+  }
+  function selectBlock(id, center=false) {
+    selectedId=id; const block=currentSelectedBlock(); showInspector(block); renderTree(window.__blocks||[]); renderReviewPanel(); applySelectionAndImpact();
+    if(workbenchMode&&block){try{parent.postMessage({type:'slx-block-selected',path:workspacePath,block_path:block.path,block_name:block.name,block_type:block.block_type,parameters:block.parameters||{}},location.origin)}catch(_){}}
+    if(center && block){const p=window.__positions.get(block.path);const rect=svg.getBoundingClientRect();if(p){transform.x=rect.width/2-(p.x+p.w/2)*transform.scale;transform.y=rect.height/2-(p.y+p.h/2)*transform.scale;updateTransform();}}
+  }
+  function openSubsystem(block) {
+    if(!block)return false;
+    const target=[...systemSelect.options].find(o=>o.textContent.replace(/ \(\d+\)$/,'')===block.path || o.textContent.replace(/ \(\d+\)$/,'')===block.name);
+    if(!target)return false;
+    systemSelect.value=target.value;selectedId=null;render();return true;
+  }
+  function render() {
+    const systemId=currentSystemId(); const blocks=blocksForSystem(systemId); const lines=linesForSystem(systemId); window.__blocks=blocks;
+    const positions=autoLayout(blocks,lines); window.__positions=positions; window.__portCounts=buildPortCounts(blocks,lines); blockLayer.innerHTML=''; wireLayer.innerHTML=''; const byPath=new Map(blocks.map(b=>[b.path,b]));
+    for(const line of lines){const se=endpoint(line.src),de=endpoint(line.dst);const sb=byPath.get(se.path),db=byPath.get(de.path);if(!sb||!db)continue;const sp=positions.get(sb.path),dp=positions.get(db.path);if(!sp||!dp)continue;const a=portPoint(sp,se),b=portPoint(dp,de),dx=Math.max(45,Math.abs(b.x-a.x)*.45);const path=make('path',{d:`M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${b.x-dx} ${b.y}, ${b.x} ${b.y}`,class:`wire ${line.status||''}`});path.dataset.src=se.path;path.dataset.dst=de.path;path.dataset.srcPort=String(se.port||1);path.dataset.dstPort=String(de.port||1);path.setAttribute('marker-end',line.status==='added'?'url(#arrow-added)':line.status==='removed'?'url(#arrow-removed)':'url(#arrow)');wireLayer.appendChild(path)}
+    for(const b of blocks){
+      const p=positions.get(b.path);if(!p)continue;const editable=structuralEditable(b);
+      const g=make('g',{class:`block ${b.status||'unchanged'}${editable?' workbench-editable':''}`,transform:`translate(${p.x} ${p.y})`});g.dataset.id=b.id;g.dataset.path=b.path;g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',`${b.name}, ${b.block_type}`);
+      const rect=make('rect',{class:'body',width:p.w,height:p.h});const name=make('text',{class:'name',x:p.w/2,y:p.h/2-3,'text-anchor':'middle'});name.textContent=b.name.length>18?b.name.slice(0,17)+'…':b.name;const type=make('text',{class:'type',x:p.w/2,y:p.h/2+14,'text-anchor':'middle'});type.textContent=b.block_type;
+      g.append(rect,name,type);const pc=window.__portCounts.get(b.path)||{in:1,out:1};
+      for(let i=1;i<=pc.in;i++){const pin=make('circle',{class:'port in',cx:0,cy:p.h*i/(pc.in+1),r:4.3});pin.dataset.path=b.path;pin.dataset.port=String(i);g.appendChild(pin)}
+      for(let i=1;i<=pc.out;i++){const pout=make('circle',{class:'port out',cx:p.w,cy:p.h*i/(pc.out+1),r:4.3});pout.dataset.path=b.path;pout.dataset.port=String(i);if(editable)pout.addEventListener('pointerdown',e=>startConnection(e,b,p,i));g.appendChild(pout)}
+      const item=reviewForBlock(b);if(reviewLens&&mode==='diff'&&item){const score=make('text',{class:`review-score ${item.priority}`,x:p.w-5,y:11});score.textContent=String(item.score);g.appendChild(score)}
+      if(editable)g.addEventListener('pointerdown',e=>beginBlockMove(e,b,p,g));
+      g.addEventListener('click',e=>{e.stopPropagation();selectBlock(b.id,false)});g.addEventListener('dblclick',e=>{if(String(b.block_type).toLowerCase()==='subsystem'){e.preventDefault();e.stopPropagation();openSubsystem(b)}});g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectBlock(b.id,false)}});blockLayer.appendChild(g)
+    }
+    empty.classList.toggle('hidden',blocks.length>0); renderTree(blocks); renderReviewPanel();
+    if(selectedId && !blocks.some(b=>b.id===selectedId)){selectedId=null;showInspector(null)} else if(selectedId) showInspector(currentSelectedBlock()); else if(inspectorMode==='overview') showInspector(null);
+    applySelectionAndImpact(); $('statusLeft').innerHTML=`<strong>${blocks.length}</strong> ${t('blocks')} · <strong>${lines.length}</strong> ${t('connections')}`; setTimeout(fitView,0);
+  }
+  function populateSystems() {
+    const previous=systemSelect.value; systemSelect.innerHTML='';
+    for(const s of allSystems()){const opt=document.createElement('option');opt.value=s.id;const label=(s.label==='Root'&&lang==='zh')?'根系统':s.label;opt.textContent=`${label} (${s.block_count})`;systemSelect.appendChild(opt)}
+    if([...systemSelect.options].some(o=>o.value===previous)) systemSelect.value=previous;
+  }
+  function clearAgentPreview() {
+    agentPreview=null; mode=payload.mode==='diff'?'diff':'model'; selectedId=null; inspectorMode='overview';
+    $('modelSubtitle').textContent=payload.mode==='diff'?`${payload.old.name} → ${payload.new.name}`:payload.model.name;
+    setupModes(); populateSystems(); render(); showInspector(null);
+  }
+  function setMode(next) {
+    agentPreview=null; mode=next; selectedId=null; inspectorMode='overview'; for(const b of document.querySelectorAll('#modeButtons .btn')) b.classList.toggle('active',b.dataset.mode===mode); populateSystems(); legend.classList.toggle('hidden',mode!=='diff'); render();
+  }
+  function setupModes(){
+    const box=$('modeButtons');box.innerHTML='';
+    if(agentPreview){const a=document.createElement('button');a.type='button';a.className='btn active';a.textContent=t('aiPreview');box.appendChild(a);const back=document.createElement('button');back.type='button';back.className='btn';back.textContent=t('backModel');back.addEventListener('click',clearAgentPreview);box.appendChild(back);legend.classList.add('hidden');return;}
+    if(payload.mode==='diff'){for(const [value,key] of [['diff','modeDiff'],['after','modeAfter'],['before','modeBefore']]){const b=document.createElement('button');b.type='button';b.className='btn'+(value===mode?' active':'');b.dataset.mode=value;b.textContent=t(key);b.addEventListener('click',()=>setMode(value));box.appendChild(b)}}else{legend.classList.add('hidden')}
+  }
+  function setupSummary(){if(payload.mode!=='diff'){summary.classList.add('hidden');return;}summary.classList.remove('hidden');const s=payload.summary;summary.innerHTML=`<div class="stat"><strong>${s.change_count}</strong><small>${t('changes')}</small></div><div class="stat"><strong>${s.changed_blocks}</strong><small>${t('modified')}</small></div><div class="stat"><strong>${s.added_blocks+s.removed_blocks}</strong><small>${t('plusBlocks')}</small></div>`;}
+  function exportSvg(){const clone=svg.cloneNode(true);clone.setAttribute('xmlns','http://www.w3.org/2000/svg');const style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent='text{font-family:Arial,sans-serif}.wire{fill:none;stroke:#647782;stroke-width:2}.block rect{fill:white;stroke:#687983;stroke-width:2}.block text{fill:#14202b}.name{font-weight:700;font-size:12px}.type{font-size:10px;fill:#687681}.added rect{stroke:#167a4a}.removed rect{stroke:#b63b3b;stroke-dasharray:7 4}.changed rect{stroke:#9a6500}.port{fill:white;stroke:#647782}';clone.insertBefore(style,clone.firstChild);const blob=new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(sourceModel().name||'model')+'-slx-studio.svg';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+  function toggleReviewLens(){reviewLens=!reviewLens;$('reviewButton').classList.toggle('active',reviewLens);toast(reviewLens?t('reviewOn'):t('reviewOff'));render();}
+  function applyLanguage() {
+    document.documentElement.lang=lang==='zh'?'zh-CN':'en'; $('languageSelect').value=lang;
+    $('reviewButton').textContent=t('reviewLens'); $('fitButton').textContent=t('fit'); $('exportButton').textContent=t('exportSvg'); $('agentContextButton').textContent=t('agentContext'); $('aiButton').textContent=t('connectAI');
+    $('patchButton').innerHTML=`${t('patch')} <span class="patch-count" id="patchCount">${staged.size}</span>`; $('downloadPatchButton').textContent=t('downloadPatch'); $('applyButton').textContent=workbenchMode?t('saveModel'):t('applyMatlab'); $('simulateButton').textContent=t('runSimulation'); $('addBlockButton').textContent=t('addBlock');
+    $('modelExplorerTitle').textContent=t('modelExplorer'); $('inspectorTitle').textContent=t('inspector'); $('empty').textContent=t('empty'); $('legendAdded').textContent=t('added'); $('legendChanged').textContent=t('changed'); $('legendRemoved').textContent=t('removed');
+    searchBox.placeholder=t('findBlock'); searchBox.setAttribute('aria-label',t('findBlock')); systemSelect.setAttribute('aria-label',t('subsystem')); $('languageSelect').setAttribute('aria-label',t('language')); $('stopTime').setAttribute('aria-label',t('stopTimeAria'));
+    setupModes(); setupSummary(); populateSystems(); updateBridgeText(); render(); updatePatchUI();
+    if(inspectorMode==='patch') showPatchQueue(); else if(inspectorMode==='simulation'&&lastSimulation) showSimulationResult(lastSimulation); else if(inspectorMode==='ai') showAIPanel(); else if(selectedId) showInspector(currentSelectedBlock());
+  }
+
+  $('fitButton').addEventListener('click',fitView); $('resetView').addEventListener('click',fitView); $('zoomIn').addEventListener('click',()=>{const r=svg.getBoundingClientRect();zoomAt(1.22,r.width/2,r.height/2)}); $('zoomOut').addEventListener('click',()=>{const r=svg.getBoundingClientRect();zoomAt(.82,r.width/2,r.height/2)}); $('exportButton').addEventListener('click',exportSvg);
+  $('reviewButton').addEventListener('click',toggleReviewLens); $('agentContextButton').addEventListener('click',downloadAgentContext); $('aiButton').addEventListener('click',showAIPanel); $('addBlockButton').addEventListener('click',showAddBlockPanel); $('patchButton').addEventListener('click',showPatchQueue); $('downloadPatchButton').addEventListener('click',downloadPatch); $('applyButton').addEventListener('click',()=>applyInMatlab(false)); $('simulateButton').addEventListener('click',requestWorkbenchSimulation);
+  $('languageSelect').addEventListener('change',()=>{lang=$('languageSelect').value==='zh'?'zh':'en';try{localStorage.setItem('slx-studio-language',lang)}catch(_){}applyLanguage()});
+  systemSelect.addEventListener('change',()=>{selectedId=null;inspectorMode='overview';showInspector(null);render()}); searchBox.addEventListener('input',()=>renderTree(window.__blocks||[]));
+  svg.addEventListener('wheel',e=>{e.preventDefault();const r=svg.getBoundingClientRect();zoomAt(e.deltaY<0?1.1:.9,e.clientX-r.left,e.clientY-r.top)},{passive:false});
+  svg.addEventListener('pointerdown',e=>{if(e.target.closest && e.target.closest('.block'))return;dragging=true;dragStart={x:e.clientX-transform.x,y:e.clientY-transform.y};try{svg.setPointerCapture(e.pointerId)}catch(_){}});
+  svg.addEventListener('pointermove',e=>{if(blockDragging){updateBlockMove(e);return}if(connecting){updateConnection(e);return}if(!dragging)return;transform.x=e.clientX-dragStart.x;transform.y=e.clientY-dragStart.y;updateTransform()});
+  svg.addEventListener('pointerup',async e=>{if(blockDragging){await finishBlockMove(e);return}if(connecting){await finishConnection(e);return}dragging=false;try{svg.releasePointerCapture(e.pointerId)}catch(_){}});
+  svg.addEventListener('pointercancel',e=>{if(blockDragging){const state=blockDragging;blockDragging=null;state.group.setAttribute('transform',`translate(${state.origin.x} ${state.origin.y})`);updateLiveWires(state.block.path,state.origin);state.group.classList.remove('block-dragging')}if(connecting){connecting=null;connectPreview.classList.add('hidden');connectPreview.setAttribute('d','')}dragging=false;try{svg.releasePointerCapture(e.pointerId)}catch(_){}});
+  svg.addEventListener('click',e=>{if(e.target===svg||e.target===viewport){selectedId=null;inspectorMode='overview';showInspector(null);renderTree(window.__blocks||[]);renderReviewPanel();applySelectionAndImpact()}});
+  window.addEventListener('resize',()=>{if(!dragging)fitView()});
+  window.addEventListener('message',event=>{if(event.origin!==location.origin||!event.data)return;if(event.data.type==='slx-studio-run'&&bridgeAvailable)requestWorkbenchSimulation();else if(event.data.type==='slx-simulation-finished'&&event.data.simulation){lastSimulation=event.data.simulation;showSimulationResult(lastSimulation)}else if(event.data.type==='slx-studio-save'){if(staged.size&&bridgeAvailable)$('applyButton').click();else{try{parent.postMessage({type:'slx-model-saved',path:workspacePath},location.origin)}catch(_){}}}else if(event.data.type==='slx-studio-add-block')showAddBlockPanel();else if(event.data.type==='slx-studio-select-block'){const path=String(event.data.block_path||'');let block=(window.__blocks||[]).find(b=>b.path===path);if(!block){const all=[...(sourceModel().blocks||[])];block=all.find(b=>b.path===path);if(block&&systemSelect&&block.system_id){systemSelect.value=block.system_id;render();block=(window.__blocks||[]).find(b=>b.path===path)}}if(block)selectBlock(block.id,true)}});
+
+  if(payload.mode==='diff'){$('reviewButton').classList.remove('hidden');$('reviewButton').classList.add('active');if(payload.agent_context)$('agentContextButton').classList.remove('hidden')}
+  const titleModel = payload.mode==='diff' ? `${payload.old.name} → ${payload.new.name}` : payload.model.name; $('modelSubtitle').textContent=titleModel;
+  applyLanguage(); detectBridge();
+})();
+</script>
+</body>
+</html>

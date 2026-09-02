@@ -1,0 +1,37 @@
+name: SLX compatibility report
+about: Tell us which MATLAB/Simulink release produced a model and whether slx-diff handled it correctly
+title: "[compat] "
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Compatibility reports help us build a real-world release matrix. Do not upload proprietary or confidential models.
+  - type: input
+    id: matlab_release
+    attributes:
+      label: MATLAB release
+      placeholder: R2026a
+    validations:
+      required: true
+  - type: input
+    id: simulink_version
+    attributes:
+      label: Simulink version (if known)
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Parsed and diffed correctly
+        - Parsed, but semantic output was incomplete/wrong
+        - Parser failed
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Include the command, output, and a reduced/anonymized reproduction if possible.
+    validations:
+      required: true

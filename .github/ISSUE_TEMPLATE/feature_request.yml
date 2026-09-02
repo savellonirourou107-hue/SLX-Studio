@@ -1,0 +1,29 @@
+name: Feature request
+about: Suggest a semantic check, model element, integration, or workflow
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Review problem
+      description: What is hard to understand or automate today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should slx-diff show or do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Parser / model semantics
+        - GitHub Action / CI
+        - CLI / JSON
+        - Stateflow / model references
+        - Agent integration
+        - Other

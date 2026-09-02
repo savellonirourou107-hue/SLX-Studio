@@ -1,0 +1,20 @@
+name: SLX review
+
+on:
+  pull_request:
+    paths:
+      - "**/*.slx"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      # Needed only because this workflow tests the local action from this repository.
+      - uses: actions/checkout@v6
+      - name: Review Simulink model changes
+        uses: ./
+        # After publishing, consumers use: YOUR_GITHUB_USERNAME/slx-studio@v0.8.0
