@@ -212,10 +212,14 @@ def _unsupported_features_for_block(block: ET.Element, block_type: str) -> set[s
         or block_type in {"VariantSubsystem", "VariantSource"}
     ):
         features.add("variant")
-    if "link" in tags or "librarylink" in tags or (
-        "linkstatus" in names
-        and block_type != "SubSystem"
-        and any(value not in {"", "none", "inactive", "unresolved"} for value in link_statuses)
+    if (
+        "link" in tags
+        or "librarylink" in tags
+        or (
+            "linkstatus" in names
+            and block_type != "SubSystem"
+            and any(value not in {"", "none", "inactive", "unresolved"} for value in link_statuses)
+        )
     ):
         features.add("library_link")
     if block_type in {"ModelReference", "ModelReferenceBlock"} or any(
