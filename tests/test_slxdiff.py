@@ -929,6 +929,7 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
     import http.client
     import json
     import threading
+    import time
     from urllib.parse import quote, urlparse
 
     from slxdiff.workbench_server import serve_workbench
@@ -943,14 +944,20 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
     try:
         parsed = urlparse(url)
         headers = {"X-SLX-Studio-Token": "workbench-token"}
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("GET", "/api/v1/workspace", headers=headers)
-        response = conn.getresponse()
-        payload = json.loads(response.read())
-        assert response.status == 200
+        payload = {}
+        for _ in range(50):
+            conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+            conn.request("GET", "/api/v1/workspace", headers=headers)
+            response = conn.getresponse()
+            payload = json.loads(response.read())
+            conn.close()
+            assert response.status == 200
+            flat = str(payload)
+            if "demo.m" in flat and "controller.slx" in flat:
+                break
+            time.sleep(0.01)
         flat = str(payload)
         assert "demo.m" in flat and "controller.slx" in flat
-        conn.close()
 
         body = json.dumps({"path": "demo.m", "content": "x = 7;\n"})
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
