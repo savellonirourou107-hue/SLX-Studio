@@ -29,9 +29,9 @@ from .studio import model_payload, render_studio_html
 from .sweep import SweepRunManager
 from .workbench import render_workbench_html
 from .workspace import (
+    WorkspaceIndex,
     copy_workspace_file,
     create_m_file,
-    list_workspace,
     read_text_file,
     resolve_workspace_path,
     search_workspace,
@@ -93,6 +93,7 @@ class WorkbenchServer(StudioServer):
         )
         self.state = StudioState()
         self.state.mark_recent(root)
+        self.workspace_index = WorkspaceIndex(root)
         # Parsing an SLX package is intentionally strict and can be expensive
         # for large models.  Keep a small stat-keyed cache for the live browser
         # session; writes explicitly invalidate it, while external edits are
@@ -185,7 +186,8 @@ class WorkbenchHandler(StudioHandler):
             if not self._authorized():
                 self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
                 return
-            payload = list_workspace(self.server.workspace_root)
+            force = (parse_qs(parsed.query).get("refresh") or [""])[0].lower() in {"1", "true", "yes"}
+            payload = self.server.workspace_index.snapshot(force=force)
             payload["ok"] = True
             self._send_json(HTTPStatus.OK, payload)
             return
@@ -271,6 +273,7 @@ class WorkbenchHandler(StudioHandler):
                 if not isinstance(content, str):
                     raise ValueError("content must be a string")
                 path = write_text_file(self.server.workspace_root, relative, content)
+                self.server.workspace_index.invalidate()
                 self.server.state.clear_recovery(self.server.workspace_root, self._relative(path))
                 self._send_json(
                     HTTPStatus.OK,
@@ -297,6 +300,7 @@ class WorkbenchHandler(StudioHandler):
                     path = write_text_file(self.server.workspace_root, destination, body["content"])
                 else:
                     path = copy_workspace_file(self.server.workspace_root, relative, destination)
+                self.server.workspace_index.invalidate()
                 self._send_json(
                     HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
                 )
@@ -310,6 +314,7 @@ class WorkbenchHandler(StudioHandler):
 
             if parsed.path == "/api/v1/workspace/new-m":
                 path = create_m_file(self.server.workspace_root, relative)
+                self.server.workspace_index.invalidate()
                 self._send_json(
                     HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
                 )
@@ -319,6 +324,7 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative, must_exist=False)
                 with self.server.execution_lock:
                     result = create_empty_model_with_matlab(path, matlab=self.server.matlab)
+                self.server.workspace_index.invalidate()
                 result.update({"relative_path": self._relative(path)})
                 self._send_json(HTTPStatus.OK, result)
                 return
@@ -484,6 +490,7 @@ class WorkbenchHandler(StudioHandler):
                         history = self.server.model_history.redo(path)
                         action = "redo"
                     self.server.invalidate_model(path)
+                    self.server.workspace_index.invalidate()
                     refreshed = self.server.load_model(path)
                 self.server.model_path = path
                 self.server.output_path = path
@@ -536,6 +543,7 @@ class WorkbenchHandler(StudioHandler):
                             before_snapshot = None
                             history = self.server.model_history.status(path)
                         self.server.invalidate_model(path)
+                        self.server.workspace_index.invalidate()
                         refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:
@@ -570,6 +578,7 @@ class WorkbenchHandler(StudioHandler):
                         history = self.server.model_history.record(path, before_snapshot)
                         before_snapshot = None
                         self.server.invalidate_model(path)
+                        self.server.workspace_index.invalidate()
                         refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:

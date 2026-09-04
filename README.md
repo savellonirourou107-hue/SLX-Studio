@@ -215,6 +215,8 @@ Ctrl+Shift+S     Save As
 
 MATLAB Figures are captured after script execution and shown beside Workspace Variables. Supported numeric Simulink `timeseries` and `Simulink.SimulationData.Dataset` outputs are reduced to bounded plot payloads and rendered locally.
 
+The project tree uses a small session-scoped background index for visible `.m` and `.slx` files. The Workbench can render immediately while the first walk completes, refreshes the index after file writes, and the toolbar **Refresh** button forces a rebuild. No database or extra runtime dependency is added; the existing project-search command remains on-demand.
+
 ### Command Window and shared workspace
 
 Scripts, sections, Command Window commands and variable edits share a session-scoped MATLAB workspace checkpoint. SLX Studio does **not** keep a heavyweight MATLAB desktop session embedded; instead, each explicit run inherits the checkpoint and writes the resulting user variables back. The checkpoint lives in a temporary session directory and is discarded when the Workbench closes.

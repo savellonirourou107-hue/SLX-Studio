@@ -839,6 +839,35 @@ def test_workspace_edits_matlab_scripts_and_blocks_traversal(tmp_path: Path) -> 
         read_text_file(tmp_path, "../outside.m")
 
 
+def test_workspace_index_builds_in_background_and_invalidates(tmp_path: Path) -> None:
+    import time
+
+    from slxdiff.workspace import WorkspaceIndex
+
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "demo.m").write_text("x = 1;\n", encoding="utf-8")
+    index = WorkspaceIndex(tmp_path)
+
+    deadline = time.monotonic() + 2
+    while index.snapshot()["indexing"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+    snapshot = index.snapshot()
+    assert snapshot["index_state"] == "ready"
+    assert "demo.m" in str(snapshot["items"])
+
+    (tmp_path / "new_model.slx").write_bytes(b"placeholder")
+    previous_generation = snapshot["index_generation"]
+    index.invalidate()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        snapshot = index.snapshot()
+        if snapshot["index_state"] == "ready" and snapshot["index_generation"] > previous_generation:
+            break
+        time.sleep(0.01)
+    assert snapshot["index_state"] == "ready"
+    assert "new_model.slx" in str(snapshot["items"])
+
+
 def test_matlab_m_runner_with_fake_executable(tmp_path: Path) -> None:
     import os
 
@@ -900,6 +929,7 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
     import http.client
     import json
     import threading
+    import time
     from urllib.parse import quote, urlparse
 
     from slxdiff.workbench_server import serve_workbench
@@ -914,14 +944,20 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
     try:
         parsed = urlparse(url)
         headers = {"X-SLX-Studio-Token": "workbench-token"}
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("GET", "/api/v1/workspace", headers=headers)
-        response = conn.getresponse()
-        payload = json.loads(response.read())
-        assert response.status == 200
+        payload = {}
+        for _ in range(50):
+            conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+            conn.request("GET", "/api/v1/workspace", headers=headers)
+            response = conn.getresponse()
+            payload = json.loads(response.read())
+            conn.close()
+            assert response.status == 200
+            flat = str(payload)
+            if "demo.m" in flat and "controller.slx" in flat:
+                break
+            time.sleep(0.01)
         flat = str(payload)
         assert "demo.m" in flat and "controller.slx" in flat
-        conn.close()
 
         body = json.dumps({"path": "demo.m", "content": "x = 7;\n"})
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
