@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added a dependency-free, read-only `slx-diff doctor` command for quick Python, workspace, static-SLX and optional MATLAB diagnostics.
+- Reworked the bilingual README and Workbench guide with installation prerequisites, a five-minute workflow, CLI reference and troubleshooting notes.
+
 ## 1.0.0b2 - 2026-09-02
 
 - Hardened XML parsing against delayed DTD/entity declarations and internal-entity expansion, while preserving per-member, archive-entry and total XML size limits.

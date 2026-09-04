@@ -100,6 +100,7 @@ The Workbench keeps a session-scoped MATLAB workspace checkpoint. It is temporar
 | `slx-diff run-m SCRIPT.m` | Run a script with captured output | Yes |
 | `slx-diff apply MODEL.slx PATCH.json -o OUTPUT.slx` | Validate and apply a staged patch | Yes |
 | `slx-diff serve PATH --token TOKEN` | Start the loopback REST API | Only for requested MATLAB jobs |
+| `slx-diff doctor [PATH]` | Run read-only environment and workspace diagnostics | No (MATLAB is optional) |
 
 Run `slx-diff --help` or `slx-diff COMMAND --help` for the complete option list.
 
@@ -358,7 +359,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-The v1.0 Beta regression suite currently contains 80 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts and Workbench HTTP APIs.
+The v1.0 Beta regression suite currently contains 83 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts, Workbench HTTP APIs and the read-only `doctor` diagnostics.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 

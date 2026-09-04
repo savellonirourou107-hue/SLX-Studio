@@ -38,10 +38,11 @@
 - [x] Command Palette
 - [x] Cancellable SLX simulations and parameter sweeps
 - [x] Parameter sweep overlay + convenience metrics
+- [x] Read-only `slx-diff doctor` environment/workspace diagnostics
 
-- [ ] Real Windows installer and `.m` / `.slx` file associations
+- [x] Windows EXE + installer workflow with opt-in `.m` / `.slx` file associations (CI smoke-tested)
 - [ ] Compatibility test matrix across supported MATLAB releases
-- [ ] Crash recovery / autosave
+- [x] Crash recovery / autosave
 - [ ] More Simulink libraries and multi-port semantics
 - [ ] Subsystem create/open/edit workflow
 - [ ] Model references and library links

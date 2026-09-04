@@ -6,7 +6,7 @@ This report records the additional adversarial testing performed after v1.0.0 Be
 
 ## What was exercised
 
-- Full Python regression suite (80 collected tests; 79 pass and the opt-in MATLAB test skips when no path is configured).
+- Full Python regression suite (83 collected tests; 82 pass and the opt-in MATLAB test skips when no path is configured).
 - Python bytecode compilation of `src/` and `tests/`.
 - Real parsing of synthetic SLX ZIP/XML packages, including Unicode, newlines, literal `/` in block names, malformed XML and archive-limit cases.
 - Workspace sandbox checks for `..`, absolute paths and symlink escape attempts.
@@ -20,6 +20,7 @@ This report records the additional adversarial testing performed after v1.0.0 Be
 - Clean wheel build, clean-target installation, package-data presence and `slx-diff --version`.
 - Windows installer configuration review, including optional (non-default-hijacking) `.m` / `.slx` Open-With registration.
 - XML delayed-DTD/entity regressions, structured edit endpoint/context checks, REST JSON schema failures and completed-job retention/TTL checks.
+- Read-only `slx-diff doctor` diagnostics for workspace, static-SLX and MATLAB discovery checks.
 
 When a licensed MATLAB R2026a installation is explicitly configured through
 `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB`, run:

@@ -78,9 +78,10 @@ slx-diff review before.slx after.slx
 slx-diff context before.slx after.slx -o agent-context.json
 slx-diff view before.slx after.slx
 slx-diff html before.slx after.slx -o review.html
+slx-diff doctor .
 ```
 
-These commands parse bounded SLX ZIP/XML packages and do not execute callbacks, scripts or MATLAB code. The output is a semantic review aid, not a stability, safety or robustness proof.
+These commands parse bounded SLX ZIP/XML packages and do not execute callbacks, scripts or MATLAB code. `doctor` additionally checks the Python/package version, workspace path, optional MATLAB discovery and (for an `.slx` path) static parsing. The output is a semantic review aid, not a stability, safety or robustness proof.
 
 ## Parameter sweeps and stopping jobs
 

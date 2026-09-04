@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from zipfile import BadZipFile
 
 from . import __version__
 from .context import render_agent_context_json
@@ -114,6 +115,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     status_cmd = sub.add_parser("matlab-status", help="Check whether the MATLAB bridge can find MATLAB")
     status_cmd.add_argument("--matlab", help="MATLAB executable path")
+
+    doctor_cmd = sub.add_parser("doctor", help="Run read-only environment and workspace diagnostics")
+    doctor_cmd.add_argument(
+        "path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file"
+    )
+    doctor_cmd.add_argument("--matlab", help="MATLAB executable path")
+    doctor_cmd.add_argument("--format", choices=("text", "json"), default="text")
     return parser
 
 
@@ -127,6 +135,110 @@ def _inspect(path: Path) -> str:
         "lines": [asdict(line) for line in sorted(model.lines)],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def _doctor(path: Path, *, matlab: str | None, output_format: str) -> tuple[str, int]:
+    """Run read-only environment and workspace checks without starting MATLAB."""
+
+    checks: list[dict[str, object]] = [
+        {
+            "name": "python",
+            "ok": sys.version_info >= (3, 10),
+            "required": True,
+            "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        },
+        {
+            "name": "slx_studio",
+            "ok": True,
+            "required": True,
+            "detail": f"slx-studio {__version__}",
+        },
+    ]
+
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        checks.append(
+            {
+                "name": "workspace",
+                "ok": False,
+                "required": True,
+                "detail": f"path does not exist: {resolved}",
+            }
+        )
+    elif resolved.is_dir():
+        checks.append(
+            {
+                "name": "workspace",
+                "ok": True,
+                "required": True,
+                "detail": f"workspace folder: {resolved}",
+            }
+        )
+    elif resolved.suffix.lower() == ".slx":
+        try:
+            model = parse_slx(resolved)
+        except (OSError, ValueError, BadZipFile) as exc:
+            checks.append(
+                {
+                    "name": "workspace",
+                    "ok": False,
+                    "required": True,
+                    "detail": f"SLX parse failed: {exc}",
+                }
+            )
+        else:
+            unsupported = model.metadata.get("unsupported_features", [])
+            detail = f"SLX parsed: {len(model.blocks)} blocks, {len(model.lines)} lines"
+            if unsupported:
+                detail += f"; review warnings: {', '.join(str(item) for item in unsupported)}"
+            checks.append({"name": "workspace", "ok": True, "required": True, "detail": detail})
+    elif resolved.suffix.lower() == ".m":
+        checks.append(
+            {
+                "name": "workspace",
+                "ok": True,
+                "required": True,
+                "detail": f"MATLAB script: {resolved}",
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "workspace",
+                "ok": False,
+                "required": True,
+                "detail": "path must be a workspace folder, .m script or .slx model",
+            }
+        )
+
+    matlab_status = find_matlab(matlab)
+    checks.append(
+        {
+            "name": "matlab",
+            "ok": matlab_status.available,
+            "required": False,
+            "detail": matlab_status.detail,
+            "executable": matlab_status.executable,
+        }
+    )
+    ready = all(bool(item["ok"]) for item in checks if item.get("required"))
+    payload = {
+        "ok": ready,
+        "status": "ready" if ready else "action_required",
+        "version": __version__,
+        "checks": checks,
+        "note": "MATLAB is optional for static inspection, diff and review; it is required for execution, real SLX writes and simulation.",
+    }
+    if output_format == "json":
+        return json.dumps(payload, indent=2, ensure_ascii=False), 0 if ready else 1
+
+    lines = ["SLX Studio doctor", f"Version: {__version__}"]
+    for item in checks:
+        state = "OK" if item["ok"] else ("WARN" if not item.get("required") else "FAIL")
+        lines.append(f"{state:4} {item['name']}: {item['detail']}")
+    lines.append(f"Result: {'READY' if ready else 'ACTION REQUIRED'}")
+    lines.append("MATLAB is optional for static inspection, diff and review.")
+    return "\n".join(lines), 0 if ready else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -149,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             "run-m",
             "apply",
             "matlab-status",
+            "doctor",
         }
     ):
         raw = ["diff", *raw]
@@ -196,6 +309,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0 if status.available else 1
+
+        if args.command == "doctor":
+            output, code = _doctor(args.path, matlab=args.matlab, output_format=args.format)
+            print(output)
+            return code
 
         if args.command in {"studio", "serve"}:
             run_workbench_server(

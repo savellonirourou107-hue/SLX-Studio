@@ -100,6 +100,7 @@ Workbench 使用会话级 MATLAB Workspace checkpoint。它位于项目目录之
 | `slx-diff run-m SCRIPT.m` | 捕获输出并运行脚本 | 是 |
 | `slx-diff apply MODEL.slx PATCH.json -o OUTPUT.slx` | 校验并应用 staged patch | 是 |
 | `slx-diff serve PATH --token TOKEN` | 启动 loopback REST API | 仅请求 MATLAB Job 时需要 |
+| `slx-diff doctor [PATH]` | 执行不启动 MATLAB 的环境/工程诊断 | 否（MATLAB 为可选） |
 
 完整参数请运行 `slx-diff --help` 或 `slx-diff COMMAND --help`。
 
@@ -343,7 +344,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-v1.0 Beta 当前收集到 **80 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约和 Workbench HTTP API。
+v1.0 Beta 当前收集到 **83 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约、Workbench HTTP API 和只读 `doctor` 诊断。
 
 在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
 

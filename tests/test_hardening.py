@@ -263,3 +263,48 @@ def test_completed_job_retention_does_not_remove_running_jobs(module_name: str, 
     with pytest.raises(ValueError, match="unknown"):
         manager.status("old")
     assert "running" in manager._jobs
+
+
+def test_cli_doctor_reports_ready_json_without_matlab(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    from slxdiff import cli
+    from slxdiff.matlab_bridge import MatlabStatus
+
+    monkeypatch.setattr(
+        cli, "find_matlab", lambda _explicit=None: MatlabStatus(False, None, "MATLAB not configured")
+    )
+    assert cli.main(["doctor", str(tmp_path), "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["status"] == "ready"
+    assert {item["name"] for item in payload["checks"]} == {"python", "slx_studio", "workspace", "matlab"}
+    assert next(item for item in payload["checks"] if item["name"] == "matlab")["required"] is False
+
+
+def test_cli_doctor_parses_slx_and_surfaces_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    from slxdiff import cli
+    from slxdiff.matlab_bridge import MatlabStatus
+
+    model_path = tmp_path / "controller.slx"
+    _write_slx(model_path, _simple_xml())
+    monkeypatch.setattr(
+        cli, "find_matlab", lambda _explicit=None: MatlabStatus(True, "matlab", "MATLAB executable found")
+    )
+    assert cli.main(["doctor", str(model_path)]) == 0
+    output = capsys.readouterr().out
+    assert "SLX parsed: 3 blocks, 2 lines" in output
+    assert "Result: READY" in output
+
+
+def test_cli_doctor_returns_action_required_for_missing_path(monkeypatch, capsys, tmp_path: Path) -> None:
+    from slxdiff import cli
+    from slxdiff.matlab_bridge import MatlabStatus
+
+    monkeypatch.setattr(
+        cli, "find_matlab", lambda _explicit=None: MatlabStatus(False, None, "MATLAB not configured")
+    )
+    assert cli.main(["doctor", str(tmp_path / "missing")]) == 1
+    assert "ACTION REQUIRED" in capsys.readouterr().out
