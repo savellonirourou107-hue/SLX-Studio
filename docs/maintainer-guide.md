@@ -33,6 +33,8 @@ That test is evidence for the covered bridge path only (`set_param`, block and
 line edits, `save_system`, `sim`, Figure export and the workspace checkpoint).
 It does not claim complete compatibility with Stateflow, masks, variants,
 library links, model references, buses or specialized toolbox blocks.
+Record the result in the [compatibility matrix](compatibility-matrix.md), using
+`NOT_EVALUATED` for releases that have not actually been exercised.
 
 ## Release checklist
 
@@ -40,6 +42,7 @@ library links, model references, buses or specialized toolbox blocks.
 - Run the real MATLAB check when the release is expected to change MATLAB-facing code.
 - Trigger **Build Windows desktop** and confirm both the portable EXE and Inno Setup installer smoke checks.
 - Update `CHANGELOG.md`, bilingual README test counts and the compatibility notes.
+- Update [`docs/compatibility-matrix.json`](compatibility-matrix.json) and its human-readable table together.
 - Build release assets from the final verified commit. Do not move an existing annotated tag; use a new version for a new release.
 - Record the commit, test evidence and known limitations in `docs/BETA2_SELF_TEST.md` or the next release report.
 

@@ -344,7 +344,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-v1.0 Beta 当前收集到 **83 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约、Workbench HTTP API 和只读 `doctor` 诊断。
+v1.0 Beta 当前收集到 **85 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约、Workbench HTTP API、只读 `doctor` 诊断和兼容性矩阵 schema。
 
 在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
 
@@ -356,6 +356,8 @@ python -m pytest -ra -m matlab_integration
 该入口覆盖 `set_param`、`add_block`、`delete_block`、`add_line`、`delete_line`、`save_system`、`sim`、Figure 导出和 Workspace checkpoint；它与 fake MATLAB 协议测试互补，不能互相冒充。
 
 更多操作说明见 [`docs/studio.md`](docs/studio.md)、[`docs/agent-api.md`](docs/agent-api.md) 和 [`examples/README.md`](examples/README.md)。
+
+已审阅的 MATLAB/Simulink 证据记录在[兼容性矩阵](docs/compatibility-matrix.md)中。未验证的版本统一标记为 `NOT_EVALUATED`，不会从单次成功运行推断兼容性。
 
 ## 开源维护
 

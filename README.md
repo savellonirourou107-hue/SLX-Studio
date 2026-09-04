@@ -359,7 +359,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-The v1.0 Beta regression suite currently contains 83 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts, Workbench HTTP APIs and the read-only `doctor` diagnostics.
+The v1.0 Beta regression suite currently contains 85 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts, Workbench HTTP APIs, the read-only `doctor` diagnostics and compatibility-matrix schema.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 
@@ -371,6 +371,8 @@ python -m pytest -ra -m matlab_integration
 This check exercises `set_param`, `add_block`, `delete_block`, `add_line`, `delete_line`, `save_system`, `sim`, Figure export and the workspace checkpoint. It complements, and does not replace, the fake-MATLAB protocol tests.
 
 More focused usage notes and examples are available in [`docs/studio.md`](docs/studio.md), [`docs/agent-api.md`](docs/agent-api.md) and [`examples/README.md`](examples/README.md).
+
+The reviewed MATLAB/Simulink evidence is tracked in the [compatibility matrix](docs/compatibility-matrix.md). Unknown releases are marked `NOT_EVALUATED` instead of being inferred from one successful run.
 
 ## Open-source maintenance
 

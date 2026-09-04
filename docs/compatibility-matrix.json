@@ -1,0 +1,55 @@
+{
+  "schema_version": "1",
+  "project_version": "1.0.0b2",
+  "last_updated": "2026-09-04",
+  "records": [
+    {
+      "id": "python-static-parser",
+      "evidence_class": "static_parser",
+      "status": "PASS",
+      "verified_commit": "5cecfc9e360ddd47cf85b2fee1071925c8367ed0",
+      "matlab_release": null,
+      "simulink_release": null,
+      "test": "tests/test_slxdiff.py and tests/test_hardening.py",
+      "command": "python -m pytest -ra",
+      "scope": "Bounded SLX ZIP/XML parsing, diff, review, context and API contracts using synthetic fixtures.",
+      "limitations": "Does not exercise MATLAB semantics or model callbacks."
+    },
+    {
+      "id": "fake-matlab-protocol",
+      "evidence_class": "fake_matlab",
+      "status": "PASS",
+      "verified_commit": "5cecfc9e360ddd47cf85b2fee1071925c8367ed0",
+      "matlab_release": null,
+      "simulink_release": null,
+      "test": "tests/test_slxdiff.py and tests/test_hardening.py",
+      "command": "python -m pytest -ra",
+      "scope": "Subprocess envelopes, cancellation, workspace checkpoints and bridge error handling against a test double.",
+      "limitations": "Proves the protocol contract only; it is not evidence of MATLAB/Simulink behavior."
+    },
+    {
+      "id": "matlab-r2026a-core-bridge",
+      "evidence_class": "real_matlab",
+      "status": "PASS",
+      "verified_commit": "5cecfc9e360ddd47cf85b2fee1071925c8367ed0",
+      "matlab_release": "R2026a",
+      "simulink_release": "R2026a",
+      "test": "tests/test_matlab_r2026a_integration.py::test_matlab_r2026a_edit_sim_figure_and_checkpoint",
+      "command": "SLX_STUDIO_MATLAB=<path-to-matlab.exe> python -m pytest -ra -m matlab_integration",
+      "scope": "set_param, add_block, delete_block, add_line, delete_line, save_system, sim, Figure export and workspace checkpoint on a reduced model.",
+      "limitations": "Does not establish complete compatibility for Stateflow, masks, variants, links, model references, buses or specialized toolbox blocks."
+    },
+    {
+      "id": "matlab-other-releases",
+      "evidence_class": "real_matlab",
+      "status": "NOT_EVALUATED",
+      "verified_commit": null,
+      "matlab_release": "R2025b and earlier releases",
+      "simulink_release": "R2025b and earlier releases",
+      "test": null,
+      "command": null,
+      "scope": "No reviewed real-runtime result is recorded for these releases.",
+      "limitations": "Run the same reduced test on a licensed installation before making a release-specific compatibility claim."
+    }
+  ]
+}
