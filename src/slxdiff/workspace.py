@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,79 @@ def _walk(root: Path, *, max_files: int, max_depth: int) -> list[dict[str, Any]]
 
     items = visit(root, 0)
     return items
+
+
+class WorkspaceIndex:
+    """Asynchronously build and cache the lightweight Workbench file tree.
+
+    The index is session-scoped and deliberately contains only visible `.m` and
+    `.slx` entries.  A first request can return immediately while the directory
+    walk continues in a daemon thread; explicit refreshes and Workbench writes
+    invalidate it without adding a persistent database or runtime dependency.
+    """
+
+    def __init__(self, root: str | Path, *, max_files: int = 2000, max_depth: int = 8) -> None:
+        self.root = Path(root).resolve()
+        if not self.root.is_dir():
+            raise ValueError("workspace root must be a directory")
+        self.max_files = max_files
+        self.max_depth = max_depth
+        self._lock = threading.RLock()
+        self._items: list[dict[str, Any]] = []
+        self._state = "idle"
+        self._error = ""
+        self._generation = 0
+        self._thread: threading.Thread | None = None
+        self._schedule_locked()
+
+    def _schedule_locked(self) -> None:
+        if self._state == "indexing":
+            return
+        self._state = "indexing"
+        self._error = ""
+        self._generation += 1
+        generation = self._generation
+        self._thread = threading.Thread(
+            target=self._build, args=(generation,), name="slx-studio-workspace-index", daemon=True
+        )
+        self._thread.start()
+
+    def _build(self, generation: int) -> None:
+        try:
+            items = _walk(self.root, max_files=self.max_files, max_depth=self.max_depth)
+        except Exception as exc:  # noqa: BLE001 - report indexing failure through the API
+            with self._lock:
+                if generation == self._generation:
+                    self._state = "error"
+                    self._error = str(exc)
+            return
+        with self._lock:
+            if generation != self._generation:
+                return
+            self._items = items
+            self._state = "ready"
+            self._error = ""
+
+    def invalidate(self) -> None:
+        """Schedule a fresh index after a write or an explicit user refresh."""
+
+        with self._lock:
+            self._schedule_locked()
+
+    def snapshot(self, *, force: bool = False) -> dict[str, Any]:
+        with self._lock:
+            if force:
+                self._schedule_locked()
+            return {
+                "root": str(self.root),
+                "items": self._items,
+                "max_files": self.max_files,
+                "max_depth": self.max_depth,
+                "indexing": self._state == "indexing",
+                "index_state": self._state,
+                "index_error": self._error,
+                "index_generation": self._generation,
+            }
 
 
 def list_workspace(root: str | Path, *, max_files: int = 2000, max_depth: int = 8) -> dict[str, Any]:

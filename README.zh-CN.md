@@ -220,6 +220,8 @@ Ctrl+Shift+S     另存为
 
 `.m` 执行结束后会捕获 MATLAB Figure 并显示在 Workbench。`.slx` 仿真则会从支持的数值 `timeseries` / `Simulink.SimulationData.Dataset` 中提取有界曲线数据，在本地 Plots 面板绘制。
 
+项目树使用会话级后台索引，只收集可见的 `.m` / `.slx` 文件。首次打开时索引在后台建立，文件写入后自动失效并重建，工具栏的**刷新**按钮可以强制重建。该功能不引入数据库或额外运行时依赖；全文搜索仍按需执行。
+
 ### Command Window 与共享 Workspace
 
 默认 batch 模式下，脚本、Section、Command Window 命令和变量编辑共享临时 Workspace checkpoint。使用 `slx-studio . --matlab-session persistent` 后，它们改为复用同一个独立 MATLAB worker，无需每次保存/恢复 MAT 文件。停止或超时会丢失内存状态；图形化 SLX 仿真和扫描仍是独立 batch 操作。这是可选的开发中功能，不增加运行时依赖；详见[配置、验证与限制](docs/persistent-matlab.md)。

@@ -839,6 +839,35 @@ def test_workspace_edits_matlab_scripts_and_blocks_traversal(tmp_path: Path) -> 
         read_text_file(tmp_path, "../outside.m")
 
 
+def test_workspace_index_builds_in_background_and_invalidates(tmp_path: Path) -> None:
+    import time
+
+    from slxdiff.workspace import WorkspaceIndex
+
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "demo.m").write_text("x = 1;\n", encoding="utf-8")
+    index = WorkspaceIndex(tmp_path)
+
+    deadline = time.monotonic() + 2
+    while index.snapshot()["indexing"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+    snapshot = index.snapshot()
+    assert snapshot["index_state"] == "ready"
+    assert "demo.m" in str(snapshot["items"])
+
+    (tmp_path / "new_model.slx").write_bytes(b"placeholder")
+    previous_generation = snapshot["index_generation"]
+    index.invalidate()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        snapshot = index.snapshot()
+        if snapshot["index_state"] == "ready" and snapshot["index_generation"] > previous_generation:
+            break
+        time.sleep(0.01)
+    assert snapshot["index_state"] == "ready"
+    assert "new_model.slx" in str(snapshot["items"])
+
+
 def test_matlab_m_runner_with_fake_executable(tmp_path: Path) -> None:
     import os
 
