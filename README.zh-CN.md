@@ -213,6 +213,8 @@ Ctrl+Shift+S     另存为
 
 `.m` 执行结束后会捕获 MATLAB Figure 并显示在 Workbench。`.slx` 仿真则会从支持的数值 `timeseries` / `Simulink.SimulationData.Dataset` 中提取有界曲线数据，在本地 Plots 面板绘制。
 
+项目树使用会话级后台索引，只收集可见的 `.m` / `.slx` 文件。首次打开时索引在后台建立，文件写入后自动失效并重建，工具栏的**刷新**按钮可以强制重建。该功能不引入数据库或额外运行时依赖；全文搜索仍按需执行。
+
 ### Command Window 与共享 Workspace
 
 脚本、Section、Command Window 命令和变量编辑共享一个会话级 MATLAB Workspace checkpoint。SLX Studio **不会**把完整 MATLAB Desktop 常驻嵌进程序；每次用户主动运行时继承临时 checkpoint，并把新的用户变量写回。Workbench 关闭后，这个临时会话随之清理。
