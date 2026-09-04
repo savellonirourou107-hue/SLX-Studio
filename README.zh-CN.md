@@ -357,6 +357,10 @@ python -m pytest -ra -m matlab_integration
 
 更多操作说明见 [`docs/studio.md`](docs/studio.md)、[`docs/agent-api.md`](docs/agent-api.md) 和 [`examples/README.md`](examples/README.md)。
 
+## 开源维护
+
+贡献者可以先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。仓库提供了[维护者指南](docs/maintainer-guide.md)、Issue/PR 模板和用于科研/工程引用的 [`CITATION.cff`](CITATION.cff)。这些内容明确发布门槛和证据边界，不会增加运行时依赖。
+
 ## License
 
 MIT。MATLAB / Simulink 属于 MathWorks，本项目不包含 MATLAB 或 Simulink 本体。

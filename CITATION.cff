@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If SLX Studio supports your research or engineering work, please cite the repository."
+title: "SLX Studio"
+version: "1.0.0b2"
+type: software
+authors:
+  - name: "SLX Studio contributors"
+repository-code: "https://github.com/savellonirourou107-hue/SLX-Studio"
+url: "https://github.com/savellonirourou107-hue/SLX-Studio"
+license: MIT
+abstract: >-
+  A lightweight local-first workbench for MATLAB scripts and Simulink models,
+  with static model diff, review, visual editing and optional MATLAB-backed
+  execution.
+keywords:
+  - MATLAB
+  - Simulink
+  - model-based design
+  - software engineering
+  - static analysis

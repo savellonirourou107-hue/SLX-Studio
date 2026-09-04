@@ -4,6 +4,7 @@
 
 - Added a dependency-free, read-only `slx-diff doctor` command for quick Python, workspace, static-SLX and optional MATLAB diagnostics.
 - Reworked the bilingual README and Workbench guide with installation prerequisites, a five-minute workflow, CLI reference and troubleshooting notes.
+- Added a maintainer guide, pull-request checklist, research citation metadata and focused OSS contribution surfaces without adding runtime dependencies.
 
 ## 1.0.0b2 - 2026-09-02
 

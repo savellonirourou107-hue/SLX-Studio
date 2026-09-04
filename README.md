@@ -372,6 +372,10 @@ This check exercises `set_param`, `add_block`, `delete_block`, `add_line`, `dele
 
 More focused usage notes and examples are available in [`docs/studio.md`](docs/studio.md), [`docs/agent-api.md`](docs/agent-api.md) and [`examples/README.md`](examples/README.md).
 
+## Open-source maintenance
+
+Contributors can start with [`CONTRIBUTING.md`](CONTRIBUTING.md). The repository includes a focused [maintainer guide](docs/maintainer-guide.md), reproducible Issue/PR templates and [`CITATION.cff`](CITATION.cff) for research and engineering users. These files describe the release gate and evidence boundaries without adding runtime dependencies.
+
 ## License
 
 MIT. MATLAB and Simulink are products of MathWorks and are not bundled with this project.

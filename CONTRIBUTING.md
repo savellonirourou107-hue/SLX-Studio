@@ -25,6 +25,27 @@ Keep changes focused. Explain:
 3. which test proves the behavior,
 4. whether JSON output compatibility changes.
 
+Before opening a pull request, run the lightweight local gate:
+
+```bash
+python -m pytest -ra
+python -m ruff check .
+python -m ruff format --check .
+python -m compileall -q src tests
+```
+
+If a change touches MATLAB/Simulink execution, also run the opt-in real-runtime
+check when a licensed installation is available:
+
+```powershell
+$env:SLX_STUDIO_MATLAB = 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
+python -m pytest -ra -m matlab_integration
+```
+
+The [maintainer guide](docs/maintainer-guide.md) records issue triage, release,
+security and MATLAB compatibility checks. The repository includes lightweight
+Issue and pull-request templates under `.github/`.
+
 ## Commit style
 
 Conventional Commits are welcome but not required. Examples:
