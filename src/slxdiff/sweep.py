@@ -15,6 +15,8 @@ from .matlab_bridge import _matlab_command, _matlab_quote, find_matlab, validate
 from .parser import parse_slx
 
 _MAX_SWEEP_VALUES = 20
+_MAX_RETAINED_JOBS = 100
+_JOB_RETENTION_SECONDS = 60 * 60
 
 
 def parse_sweep_values(value: str | list[Any] | tuple[Any, ...]) -> list[str]:
@@ -45,7 +47,7 @@ def parse_sweep_values(value: str | list[Any] | tuple[Any, ...]) -> list[str]:
             numeric: list[float] = []
             current = start
             tolerance = abs(step) * 1e-9 + 1e-12
-            while (current <= end + tolerance if step > 0 else current >= end - tolerance):
+            while current <= end + tolerance if step > 0 else current >= end - tolerance:
                 numeric.append(current)
                 if len(numeric) > _MAX_SWEEP_VALUES:
                     raise ValueError(f"sweep supports at most {_MAX_SWEEP_VALUES} values")
@@ -72,7 +74,9 @@ def parse_sweep_values(value: str | list[Any] | tuple[Any, ...]) -> list[str]:
     return normalized
 
 
-def validate_sweep(model_path: str | Path, block_path: str, parameter: str, values: list[str]) -> dict[str, Any]:
+def validate_sweep(
+    model_path: str | Path, block_path: str, parameter: str, values: list[str]
+) -> dict[str, Any]:
     model = parse_slx(model_path)
     matches = [block for block in model.blocks.values() if block.path == block_path]
     if not matches:
@@ -202,7 +206,11 @@ def _normalize_runs(value: Any) -> list[dict[str, Any]]:
         if not isinstance(raw, dict):
             continue
         series_raw = raw.get("series")
-        series_items = series_raw if isinstance(series_raw, list) else ([series_raw] if isinstance(series_raw, dict) and series_raw else [])
+        series_items = (
+            series_raw
+            if isinstance(series_raw, list)
+            else ([series_raw] if isinstance(series_raw, dict) and series_raw else [])
+        )
         series: list[dict[str, Any]] = []
         for item in series_items[:6]:
             if not isinstance(item, dict):
@@ -212,7 +220,13 @@ def _normalize_runs(value: Any) -> list[dict[str, Any]]:
             clean = {"name": str(item.get("name", "signal")), "time": t[:600], "data": d[:600]}
             clean["metrics"] = _series_metrics(clean)
             series.append(clean)
-        runs.append({"value": str(raw.get("value", "")), "elapsed_seconds": float(raw.get("elapsed_seconds") or 0), "series": series})
+        runs.append(
+            {
+                "value": str(raw.get("value", "")),
+                "elapsed_seconds": float(raw.get("elapsed_seconds") or 0),
+                "series": series,
+            }
+        )
     return runs
 
 
@@ -262,11 +276,20 @@ def run_parameter_sweep_with_matlab(
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            proc.kill(); proc.communicate()
+            proc.kill()
+            proc.communicate()
             raise RuntimeError(f"MATLAB parameter sweep timed out after {timeout:g} seconds") from exc
         was_cancelled = bool(cancelled()) if cancelled else False
         if was_cancelled and not result_path.exists():
-            return {"ok": False, "cancelled": True, "validation": validation, "runs": [], "stdout": stdout or "", "stderr": stderr or "", "elapsed_seconds": time.perf_counter() - started}
+            return {
+                "ok": False,
+                "cancelled": True,
+                "validation": validation,
+                "runs": [],
+                "stdout": stdout or "",
+                "stderr": stderr or "",
+                "elapsed_seconds": time.perf_counter() - started,
+            }
         if not result_path.exists():
             raise RuntimeError((stderr or stdout or "MATLAB exited without a sweep result").strip())
         try:
@@ -275,7 +298,15 @@ def run_parameter_sweep_with_matlab(
             raise RuntimeError(f"MATLAB sweep returned invalid JSON: {exc}") from exc
         if proc.returncode != 0 or not raw.get("ok"):
             if was_cancelled:
-                return {"ok": False, "cancelled": True, "validation": validation, "runs": [], "stdout": stdout or "", "stderr": stderr or "", "elapsed_seconds": time.perf_counter() - started}
+                return {
+                    "ok": False,
+                    "cancelled": True,
+                    "validation": validation,
+                    "runs": [],
+                    "stdout": stdout or "",
+                    "stderr": stderr or "",
+                    "elapsed_seconds": time.perf_counter() - started,
+                }
             raise RuntimeError(str(raw.get("message") or stderr or stdout or "MATLAB sweep failed").strip())
         return {
             "ok": True,
@@ -291,7 +322,13 @@ def run_parameter_sweep_with_matlab(
 
 
 class SweepRunManager:
-    def __init__(self, *, matlab: str | Path | None = None, timeout: float = 900.0, execution_lock: threading.RLock | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        matlab: str | Path | None = None,
+        timeout: float = 900.0,
+        execution_lock: threading.RLock | None = None,
+    ) -> None:
         self.matlab = matlab
         self.timeout = timeout
         self.execution_lock = execution_lock or threading.RLock()
@@ -299,15 +336,48 @@ class SweepRunManager:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active: str | None = None
 
-    def start(self, path: str | Path, *, block_path: str, parameter: str, values: Any, stop_time: str = "10") -> dict[str, Any]:
+    def _prune_jobs_locked(self) -> None:
+        now = time.time()
+        completed = [
+            (job_id, job)
+            for job_id, job in self._jobs.items()
+            if job.get("state") != "running" and job.get("finished_at")
+        ]
+        expired = {
+            job_id
+            for job_id, job in completed
+            if now - float(job.get("finished_at") or now) > _JOB_RETENTION_SECONDS
+        }
+        keep = sorted(completed, key=lambda item: float(item[1].get("finished_at") or 0), reverse=True)[
+            :_MAX_RETAINED_JOBS
+        ]
+        keep_ids = {job_id for job_id, _ in keep}
+        for job_id, _ in completed:
+            if job_id in expired or (len(completed) > _MAX_RETAINED_JOBS and job_id not in keep_ids):
+                self._jobs.pop(job_id, None)
+
+    def start(
+        self, path: str | Path, *, block_path: str, parameter: str, values: Any, stop_time: str = "10"
+    ) -> dict[str, Any]:
         parsed = parse_sweep_values(values)
         validate_sweep(path, block_path, parameter, parsed)
         with self._lock:
+            self._prune_jobs_locked()
             if self._active and self._jobs.get(self._active, {}).get("state") == "running":
                 raise RuntimeError("a parameter sweep is already active")
             job_id = uuid.uuid4().hex
-            job: dict[str, Any] = {"id": job_id, "path": str(Path(path).resolve()), "state": "running", "started_at": time.time(), "process": None, "cancel_requested": False, "result": None, "error": None}
-            self._jobs[job_id] = job; self._active = job_id
+            job: dict[str, Any] = {
+                "id": job_id,
+                "path": str(Path(path).resolve()),
+                "state": "running",
+                "started_at": time.time(),
+                "process": None,
+                "cancel_requested": False,
+                "result": None,
+                "error": None,
+            }
+            self._jobs[job_id] = job
+            self._active = job_id
 
         def set_process(proc: subprocess.Popen[str]) -> None:
             with self._lock:
@@ -321,40 +391,62 @@ class SweepRunManager:
                     if job.get("cancel_requested"):
                         result = {"ok": False, "cancelled": True, "runs": [], "stdout": "", "stderr": ""}
                     else:
-                        result = run_parameter_sweep_with_matlab(path, block_path=block_path, parameter=parameter, values=parsed, stop_time=stop_time, matlab=self.matlab, timeout=self.timeout, on_process=set_process, cancelled=lambda: bool(job.get("cancel_requested")))
+                        result = run_parameter_sweep_with_matlab(
+                            path,
+                            block_path=block_path,
+                            parameter=parameter,
+                            values=parsed,
+                            stop_time=stop_time,
+                            matlab=self.matlab,
+                            timeout=self.timeout,
+                            on_process=set_process,
+                            cancelled=lambda: bool(job.get("cancel_requested")),
+                        )
                 with self._lock:
-                    job["result"] = result; job["state"] = "cancelled" if result.get("cancelled") else "finished"
+                    job["result"] = result
+                    job["state"] = "cancelled" if result.get("cancelled") else "finished"
             except Exception as exc:  # noqa: BLE001 - worker failures are reported through job status
                 with self._lock:
-                    job["error"] = str(exc); job["state"] = "cancelled" if job.get("cancel_requested") else "failed"
+                    job["error"] = str(exc)
+                    job["state"] = "cancelled" if job.get("cancel_requested") else "failed"
             finally:
                 with self._lock:
-                    job["process"] = None; job["finished_at"] = time.time()
-                    if self._active == job_id: self._active = None
+                    job["process"] = None
+                    job["finished_at"] = time.time()
+                    if self._active == job_id:
+                        self._active = None
 
         threading.Thread(target=worker, name=f"slxstudio-sweep-{job_id[:8]}", daemon=True).start()
         return self.status(job_id)
 
     def status(self, job_id: str) -> dict[str, Any]:
         with self._lock:
+            self._prune_jobs_locked()
             job = self._jobs.get(str(job_id))
-            if not job: raise ValueError("unknown parameter sweep job")
+            if not job:
+                raise ValueError("unknown parameter sweep job")
             payload = {k: job[k] for k in ("id", "path", "state", "started_at")}
-            if job.get("finished_at"): payload["finished_at"] = job["finished_at"]
-            if job.get("result") is not None: payload["result"] = job["result"]
-            if job.get("error"): payload["error"] = job["error"]
+            if job.get("finished_at"):
+                payload["finished_at"] = job["finished_at"]
+            if job.get("result") is not None:
+                payload["result"] = job["result"]
+            if job.get("error"):
+                payload["error"] = job["error"]
             return payload
 
     def stop(self, job_id: str) -> dict[str, Any]:
         with self._lock:
             job = self._jobs.get(str(job_id))
-            if not job: raise ValueError("unknown parameter sweep job")
-            if job.get("state") != "running": return self.status(job_id)
+            if not job:
+                raise ValueError("unknown parameter sweep job")
+            if job.get("state") != "running":
+                return self.status(job_id)
             job["cancel_requested"] = True
             proc = job.get("process")
             if isinstance(proc, subprocess.Popen) and proc.poll() is None:
                 try:
-                    proc.terminate(); proc.wait(timeout=2.0)
+                    proc.terminate()
+                    proc.wait(timeout=2.0)
                 except subprocess.TimeoutExpired:
                     proc.kill()
                 except OSError:
@@ -362,7 +454,10 @@ class SweepRunManager:
             return self.status(job_id)
 
     def stop_all(self) -> None:
-        with self._lock: ids = [job_id for job_id, job in self._jobs.items() if job.get("state") == "running"]
+        with self._lock:
+            ids = [job_id for job_id, job in self._jobs.items() if job.get("state") == "running"]
         for job_id in ids:
-            try: self.stop(job_id)
-            except (ValueError, OSError): pass
+            try:
+                self.stop(job_id)
+            except (ValueError, OSError):
+                pass

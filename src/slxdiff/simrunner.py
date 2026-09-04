@@ -12,6 +12,9 @@ from .history import ModelHistory
 from .matlab_bridge import apply_patch_with_matlab, validate_simulation_stop_time
 from .patching import PatchDocument, patch_from_dict
 
+_MAX_RETAINED_JOBS = 100
+_JOB_RETENTION_SECONDS = 60 * 60
+
 
 def _sha(path: Path) -> str:
     digest = hashlib.sha256()
@@ -24,7 +27,14 @@ def _sha(path: Path) -> str:
 class SimulationRunManager:
     """Cancelable workbench simulation jobs, including optional staged parameter patches."""
 
-    def __init__(self, *, matlab: str | Path | None, history: ModelHistory, timeout: float = 600.0, execution_lock: threading.RLock | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        matlab: str | Path | None,
+        history: ModelHistory,
+        timeout: float = 600.0,
+        execution_lock: threading.RLock | None = None,
+    ) -> None:
         self.matlab = matlab
         self.history = history
         self.timeout = timeout
@@ -33,12 +43,35 @@ class SimulationRunManager:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active: str | None = None
 
-    def start(self, path: str | Path, *, patch: PatchDocument | dict[str, Any], stop_time: str = "10") -> dict[str, Any]:
+    def _prune_jobs_locked(self) -> None:
+        now = time.time()
+        completed = [
+            (job_id, job)
+            for job_id, job in self._jobs.items()
+            if job.get("state") != "running" and job.get("finished_at")
+        ]
+        expired = {
+            job_id
+            for job_id, job in completed
+            if now - float(job.get("finished_at") or now) > _JOB_RETENTION_SECONDS
+        }
+        keep = sorted(completed, key=lambda item: float(item[1].get("finished_at") or 0), reverse=True)[
+            :_MAX_RETAINED_JOBS
+        ]
+        keep_ids = {job_id for job_id, _ in keep}
+        for job_id, _ in completed:
+            if job_id in expired or (len(completed) > _MAX_RETAINED_JOBS and job_id not in keep_ids):
+                self._jobs.pop(job_id, None)
+
+    def start(
+        self, path: str | Path, *, patch: PatchDocument | dict[str, Any], stop_time: str = "10"
+    ) -> dict[str, Any]:
         model = Path(path).resolve()
         document = patch if isinstance(patch, PatchDocument) else patch_from_dict(patch)
         stop_time = validate_simulation_stop_time(stop_time)
         # apply_patch_with_matlab performs the authoritative hash/parameter validation.
         with self._lock:
+            self._prune_jobs_locked()
             if self._active and self._jobs.get(self._active, {}).get("state") == "running":
                 raise RuntimeError("a Simulink simulation is already active")
             before = self.history.capture(model, label="simulation-before") if document.operations else None
@@ -130,6 +163,7 @@ class SimulationRunManager:
 
     def status(self, job_id: str) -> dict[str, Any]:
         with self._lock:
+            self._prune_jobs_locked()
             job = self._jobs.get(str(job_id))
             if not job:
                 raise ValueError("unknown Simulink simulation job")
@@ -154,7 +188,8 @@ class SimulationRunManager:
             proc = job.get("process")
             if isinstance(proc, subprocess.Popen) and proc.poll() is None:
                 try:
-                    proc.terminate(); proc.wait(timeout=2.0)
+                    proc.terminate()
+                    proc.wait(timeout=2.0)
                 except subprocess.TimeoutExpired:
                     proc.kill()
                 except OSError:

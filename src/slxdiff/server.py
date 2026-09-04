@@ -98,6 +98,35 @@ class StudioHandler(BaseHTTPRequestHandler):
             raise ValueError("request JSON must be an object")  # noqa: TRY004 - preserve HTTP validation error handling
         return value
 
+    @staticmethod
+    def _string_field(
+        body: dict[str, Any], name: str, *, default: str | None = None, required: bool = False
+    ) -> str:
+        if name not in body:
+            if required and default is None:
+                raise ValueError(f"{name} is required")
+            return "" if default is None else default
+        value = body[name]
+        if not isinstance(value, str):
+            raise TypeError(f"{name} must be a string")
+        return value
+
+    @staticmethod
+    def _bool_field(body: dict[str, Any], name: str, *, default: bool = False) -> bool:
+        if name not in body:
+            return default
+        value = body[name]
+        if not isinstance(value, bool):
+            raise TypeError(f"{name} must be a boolean")
+        return value
+
+    @staticmethod
+    def _object_field(body: dict[str, Any], name: str, *, default: Any = None) -> dict[str, Any]:
+        value = body.get(name, default)
+        if not isinstance(value, dict):
+            raise TypeError(f"{name} must be an object")
+        return value
+
     def _require_model_path(self) -> Path:
         if self.server.model_path is None:
             raise ValueError("this Studio session is blank and has no source SLX model")
@@ -184,7 +213,12 @@ class StudioHandler(BaseHTTPRequestHandler):
             if not self._authorized():
                 self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
                 return
-            runtime = ToolRuntime(self.server.model_path, matlab=self.server.matlab, allow_build=False, execution_lock=self.server.execution_lock)
+            runtime = ToolRuntime(
+                self.server.model_path,
+                matlab=self.server.matlab,
+                allow_build=False,
+                execution_lock=self.server.execution_lock,
+            )
             self._send_json(HTTPStatus.OK, {"ok": True, "tools": runtime.definitions()})
             return
 
@@ -218,7 +252,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if self.path == "/api/validate":
                     self._send_json(HTTPStatus.OK, {"ok": True, "operations": len(patch.operations)})
                     return
-                stop_time = str(body.get("stop_time", "10")).strip() or "10"
+                stop_time = self._string_field(body, "stop_time", default="10")
                 if len(stop_time) > 128 or "\n" in stop_time or "\r" in stop_time:
                     raise ValueError("invalid simulation stop time")
                 with self.server.execution_lock:
@@ -243,7 +277,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                         "valid": True,
                         "blueprint": blueprint.to_dict(),
                         "preview": preview,
-                        "summary": {"blocks": len(blueprint.blocks), "connections": len(blueprint.connections)},
+                        "summary": {
+                            "blocks": len(blueprint.blocks),
+                            "connections": len(blueprint.connections),
+                        },
                     },
                 )
                 return
@@ -263,9 +300,16 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
 
             if self.path == "/api/v1/tools/call":
-                name = str(body.get("name", ""))
-                arguments = body.get("arguments", {})
-                runtime = ToolRuntime(self.server.model_path, matlab=self.server.matlab, allow_build=False, execution_lock=self.server.execution_lock)
+                name = self._string_field(body, "name", required=True).strip()
+                if not name:
+                    raise ValueError("name is required")
+                arguments = self._object_field(body, "arguments", default={})
+                runtime = ToolRuntime(
+                    self.server.model_path,
+                    matlab=self.server.matlab,
+                    allow_build=False,
+                    execution_lock=self.server.execution_lock,
+                )
                 result = runtime.call(name, arguments)
                 payload: dict[str, Any] = {"ok": True, "result": result}
                 patch = runtime.patch_document()
@@ -278,10 +322,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
 
             if self.path == "/api/v1/agent/chat":
-                provider = provider_from_dict(body.get("provider", {}))
-                prompt = str(body.get("prompt", ""))
-                language = str(body.get("language", "en"))
-                allow_build = bool(body.get("auto_build", False))
+                provider = provider_from_dict(self._object_field(body, "provider", default={}))
+                prompt = self._string_field(body, "prompt", required=True)
+                language = self._string_field(body, "language", default="en")
+                allow_build = self._bool_field(body, "auto_build", default=False)
                 run = run_agent(
                     provider,
                     prompt,
@@ -298,8 +342,11 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.OK, payload)
                 return
 
-        except (ValueError, RuntimeError) as exc:
+        except (FileNotFoundError, TypeError, ValueError, OverflowError, RuntimeError) as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+        except Exception as exc:  # noqa: BLE001 - never expose internal tracebacks through the API
+            self.log_message("internal POST error: %s", exc)
+            self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "error": "internal server error"})
 
 
 def serve_studio(

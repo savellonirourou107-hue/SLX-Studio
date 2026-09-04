@@ -17,21 +17,66 @@ _ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _SAFE_EXPR_RE = re.compile(r"^[A-Za-z0-9_+\-*/^.,;:\[\]() \t]+$")
 _MATLAB_IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
 _FUNCTION_CALL_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*\(")
-_DANGEROUS_IDENTIFIERS = frozenset({
-    "eval", "evalin", "feval", "system", "unix", "dos", "winopen", "web",
-    "delete", "fopen", "fprintf", "javaaddpath", "py", "perl", "clear",
-})
-_NUMERIC_PARAMETERS = frozenset({
-    "Port", "SampleTime", "Time", "Before", "After", "Value", "Gain",
-    "UpperLimit", "LowerLimit", "InitialCondition", "UpperSaturationLimit",
-    "LowerSaturationLimit", "Numerator", "Denominator", "AbsoluteTolerance",
-    "gainval", "NumInputPorts", "MaxDataPoints", "Decimation",
-})
-_SAFE_OUT_TYPES = frozenset({
-    "double", "single", "int8", "uint8", "int16", "uint16", "int32", "uint32",
-    "int64", "uint64", "boolean", "Inherit: Same as input",
-    "Inherit: Inherit via internal rule", "Inherit: Inherit via back propagation",
-})
+_DANGEROUS_IDENTIFIERS = frozenset(
+    {
+        "eval",
+        "evalin",
+        "feval",
+        "system",
+        "unix",
+        "dos",
+        "winopen",
+        "web",
+        "delete",
+        "fopen",
+        "fprintf",
+        "javaaddpath",
+        "py",
+        "perl",
+        "clear",
+    }
+)
+_NUMERIC_PARAMETERS = frozenset(
+    {
+        "Port",
+        "SampleTime",
+        "Time",
+        "Before",
+        "After",
+        "Value",
+        "Gain",
+        "UpperLimit",
+        "LowerLimit",
+        "InitialCondition",
+        "UpperSaturationLimit",
+        "LowerSaturationLimit",
+        "Numerator",
+        "Denominator",
+        "AbsoluteTolerance",
+        "gainval",
+        "NumInputPorts",
+        "MaxDataPoints",
+        "Decimation",
+    }
+)
+_SAFE_OUT_TYPES = frozenset(
+    {
+        "double",
+        "single",
+        "int8",
+        "uint8",
+        "int16",
+        "uint16",
+        "int32",
+        "uint32",
+        "int64",
+        "uint64",
+        "boolean",
+        "Inherit: Same as input",
+        "Inherit: Inherit via internal rule",
+        "Inherit: Inherit via back propagation",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -44,20 +89,104 @@ class BlockSpec:
 
 
 BLOCK_CATALOG: dict[str, BlockSpec] = {
-    "inport": BlockSpec("inport", "simulink/Ports & Subsystems/In1", "Inport", frozenset({"Port", "SampleTime"}), "Model input port"),
-    "outport": BlockSpec("outport", "simulink/Ports & Subsystems/Out1", "Outport", frozenset({"Port"}), "Model output port"),
-    "step": BlockSpec("step", "simulink/Sources/Step", "Step", frozenset({"Time", "Before", "After", "SampleTime"}), "Step source"),
-    "constant": BlockSpec("constant", "simulink/Sources/Constant", "Constant", frozenset({"Value", "SampleTime", "OutDataTypeStr"}), "Constant source"),
-    "gain": BlockSpec("gain", "simulink/Math Operations/Gain", "Gain", frozenset({"Gain", "Multiplication", "SampleTime", "OutDataTypeStr"}), "Gain block"),
-    "sum": BlockSpec("sum", "simulink/Math Operations/Sum", "Sum", frozenset({"Inputs", "IconShape", "OutDataTypeStr"}), "Sum/add block"),
-    "saturation": BlockSpec("saturation", "simulink/Discontinuities/Saturation", "Saturate", frozenset({"UpperLimit", "LowerLimit", "OutDataTypeStr"}), "Saturation limits"),
-    "integrator": BlockSpec("integrator", "simulink/Continuous/Integrator", "Integrator", frozenset({"InitialCondition", "LimitOutput", "UpperSaturationLimit", "LowerSaturationLimit"}), "Continuous integrator"),
-    "transfer_fcn": BlockSpec("transfer_fcn", "simulink/Continuous/Transfer Fcn", "TransferFcn", frozenset({"Numerator", "Denominator", "AbsoluteTolerance"}), "Continuous transfer function"),
-    "unit_delay": BlockSpec("unit_delay", "simulink/Discrete/Unit Delay", "UnitDelay", frozenset({"InitialCondition", "SampleTime", "OutDataTypeStr"}), "Discrete unit delay"),
-    "discrete_integrator": BlockSpec("discrete_integrator", "simulink/Discrete/Discrete-Time Integrator", "DiscreteIntegrator", frozenset({"IntegratorMethod", "gainval", "SampleTime", "InitialCondition", "LimitOutput", "UpperSaturationLimit", "LowerSaturationLimit"}), "Discrete-time integrator"),
-    "mux": BlockSpec("mux", "simulink/Signal Routing/Mux", "Mux", frozenset({"Inputs", "DisplayOption"}), "Signal multiplexer"),
+    "inport": BlockSpec(
+        "inport",
+        "simulink/Ports & Subsystems/In1",
+        "Inport",
+        frozenset({"Port", "SampleTime"}),
+        "Model input port",
+    ),
+    "outport": BlockSpec(
+        "outport", "simulink/Ports & Subsystems/Out1", "Outport", frozenset({"Port"}), "Model output port"
+    ),
+    "step": BlockSpec(
+        "step",
+        "simulink/Sources/Step",
+        "Step",
+        frozenset({"Time", "Before", "After", "SampleTime"}),
+        "Step source",
+    ),
+    "constant": BlockSpec(
+        "constant",
+        "simulink/Sources/Constant",
+        "Constant",
+        frozenset({"Value", "SampleTime", "OutDataTypeStr"}),
+        "Constant source",
+    ),
+    "gain": BlockSpec(
+        "gain",
+        "simulink/Math Operations/Gain",
+        "Gain",
+        frozenset({"Gain", "Multiplication", "SampleTime", "OutDataTypeStr"}),
+        "Gain block",
+    ),
+    "sum": BlockSpec(
+        "sum",
+        "simulink/Math Operations/Sum",
+        "Sum",
+        frozenset({"Inputs", "IconShape", "OutDataTypeStr"}),
+        "Sum/add block",
+    ),
+    "saturation": BlockSpec(
+        "saturation",
+        "simulink/Discontinuities/Saturation",
+        "Saturate",
+        frozenset({"UpperLimit", "LowerLimit", "OutDataTypeStr"}),
+        "Saturation limits",
+    ),
+    "integrator": BlockSpec(
+        "integrator",
+        "simulink/Continuous/Integrator",
+        "Integrator",
+        frozenset({"InitialCondition", "LimitOutput", "UpperSaturationLimit", "LowerSaturationLimit"}),
+        "Continuous integrator",
+    ),
+    "transfer_fcn": BlockSpec(
+        "transfer_fcn",
+        "simulink/Continuous/Transfer Fcn",
+        "TransferFcn",
+        frozenset({"Numerator", "Denominator", "AbsoluteTolerance"}),
+        "Continuous transfer function",
+    ),
+    "unit_delay": BlockSpec(
+        "unit_delay",
+        "simulink/Discrete/Unit Delay",
+        "UnitDelay",
+        frozenset({"InitialCondition", "SampleTime", "OutDataTypeStr"}),
+        "Discrete unit delay",
+    ),
+    "discrete_integrator": BlockSpec(
+        "discrete_integrator",
+        "simulink/Discrete/Discrete-Time Integrator",
+        "DiscreteIntegrator",
+        frozenset(
+            {
+                "IntegratorMethod",
+                "gainval",
+                "SampleTime",
+                "InitialCondition",
+                "LimitOutput",
+                "UpperSaturationLimit",
+                "LowerSaturationLimit",
+            }
+        ),
+        "Discrete-time integrator",
+    ),
+    "mux": BlockSpec(
+        "mux",
+        "simulink/Signal Routing/Mux",
+        "Mux",
+        frozenset({"Inputs", "DisplayOption"}),
+        "Signal multiplexer",
+    ),
     "scope": BlockSpec("scope", "simulink/Sinks/Scope", "Scope", frozenset({"NumInputPorts"}), "Scope sink"),
-    "to_workspace": BlockSpec("to_workspace", "simulink/Sinks/To Workspace", "ToWorkspace", frozenset({"VariableName", "MaxDataPoints", "Decimation", "Save2DSignal", "SampleTime"}), "Log a signal to the workspace"),
+    "to_workspace": BlockSpec(
+        "to_workspace",
+        "simulink/Sinks/To Workspace",
+        "ToWorkspace",
+        frozenset({"VariableName", "MaxDataPoints", "Decimation", "Save2DSignal", "SampleTime"}),
+        "Log a signal to the workspace",
+    ),
 }
 
 _ALLOWED_MODEL_PARAMETERS = frozenset({"StopTime", "Solver", "SolverType", "FixedStep"})
@@ -121,7 +250,6 @@ def _text(value: Any, *, field: str, max_chars: int = _MAX_VALUE_CHARS) -> str:
     return value
 
 
-
 def _safe_numeric_expression(value: str, *, field: str) -> str:
     text = value.strip()
     if not text:
@@ -172,7 +300,11 @@ def validate_automatic_parameter_value(block_type: str, name: str, value: str) -
 
 
 def _position(value: Any, *, field: str) -> tuple[int, int, int, int]:
-    if not isinstance(value, list) or len(value) != 4 or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in value):
+    if (
+        not isinstance(value, list)
+        or len(value) != 4
+        or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in value)
+    ):
         raise ValueError(f"blueprint field {field!r} must be [left, top, right, bottom]")
     nums = tuple(round(float(x)) for x in value)
     left, top, right, bottom = nums
@@ -209,7 +341,9 @@ def blueprint_from_dict(payload: dict[str, Any]) -> ModelBlueprint:
         raise ValueError(f"unsupported blueprint schema {version!r}; expected {BLUEPRINT_SCHEMA_VERSION!r}")
     model_name = _text(payload.get("model_name", ""), field="model_name", max_chars=63)
     if not _MODEL_NAME_RE.fullmatch(model_name):
-        raise ValueError("model_name must start with a letter and contain only letters, digits, or underscores")
+        raise ValueError(
+            "model_name must start with a letter and contain only letters, digits, or underscores"
+        )
     description = _text(payload.get("description", ""), field="description", max_chars=4000)
 
     raw_blocks = payload.get("blocks")
@@ -367,7 +501,12 @@ def blueprint_tool_schema() -> dict[str, Any]:
                         "id": {"type": "string"},
                         "type": {"type": "string", "enum": sorted(BLOCK_CATALOG)},
                         "name": {"type": "string"},
-                        "position": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+                        "position": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 4,
+                            "maxItems": 4,
+                        },
                         "parameters": {"type": "object", "additionalProperties": {"type": "string"}},
                     },
                     "required": ["id", "type", "name", "position", "parameters"],

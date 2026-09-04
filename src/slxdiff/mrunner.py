@@ -15,6 +15,8 @@ from .matlab_bridge import _matlab_command, _matlab_quote, find_matlab
 
 _MAX_FIGURES = 6
 _MAX_FIGURE_BYTES = 3 * 1024 * 1024
+_MAX_RETAINED_JOBS = 100
+_JOB_RETENTION_SECONDS = 60 * 60
 
 
 def _runner_source(
@@ -248,7 +250,14 @@ def _prepare_execution(
         offset = max(0, int(start_line) - 1)
     runner_path = root / "run_slxstudio_script.m"
     runner_path.write_text(
-        _runner_source(executable, result_path, figure_dir, source_path=script, line_offset=offset, workspace_file=workspace_file),
+        _runner_source(
+            executable,
+            result_path,
+            figure_dir,
+            source_path=script,
+            line_offset=offset,
+            workspace_file=workspace_file,
+        ),
         encoding="utf-8",
     )
     return runner_path, result_path, figure_dir, offset
@@ -292,7 +301,9 @@ def _result_from_process(
             "identifier": str(error.get("identifier", "")),
             "line": int(error.get("line") or 0),
             "file": str(error.get("file", "")),
-        } if error else None,
+        }
+        if error
+        else None,
     }
 
 
@@ -320,7 +331,9 @@ def _run_m(
         checkpoint = Path(workspace_file).resolve() if workspace_file is not None else None
         if checkpoint is not None:
             checkpoint.parent.mkdir(parents=True, exist_ok=True)
-        runner_path, result_path, figure_dir, _ = _prepare_execution(script, root, code=code, start_line=start_line, workspace_file=checkpoint)
+        runner_path, result_path, figure_dir, _ = _prepare_execution(
+            script, root, code=code, start_line=start_line, workspace_file=checkpoint
+        )
         expression = f"run('{_matlab_quote(str(runner_path.resolve()))}')"
         proc = subprocess.Popen(
             [*_matlab_command(status.executable), "-batch", expression],
@@ -374,13 +387,22 @@ def run_m_code(
 ) -> dict[str, Any]:
     if not isinstance(code, str) or not code.strip():
         raise ValueError("MATLAB section code must be a non-empty string")
-    return _run_m(path, matlab=matlab, timeout=timeout, code=code, start_line=start_line, workspace_file=workspace_file)
+    return _run_m(
+        path, matlab=matlab, timeout=timeout, code=code, start_line=start_line, workspace_file=workspace_file
+    )
 
 
 class MatlabRunManager:
     """One-session asynchronous MATLAB job manager used by the desktop Workbench."""
 
-    def __init__(self, *, matlab: str | Path | None = None, timeout: float = 300.0, workspace_file: str | Path | None = None, execution_lock: threading.RLock | None = None):
+    def __init__(
+        self,
+        *,
+        matlab: str | Path | None = None,
+        timeout: float = 300.0,
+        workspace_file: str | Path | None = None,
+        execution_lock: threading.RLock | None = None,
+    ):
         self.matlab = matlab
         self.timeout = timeout
         self.workspace_file = Path(workspace_file).resolve() if workspace_file is not None else None
@@ -388,6 +410,27 @@ class MatlabRunManager:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active_job: str | None = None
+
+    def _prune_jobs_locked(self) -> None:
+        """Bound completed-job memory while never removing a running job."""
+        now = time.time()
+        completed = [
+            (job_id, job)
+            for job_id, job in self._jobs.items()
+            if job.get("state") != "running" and job.get("finished_at")
+        ]
+        expired = {
+            job_id
+            for job_id, job in completed
+            if now - float(job.get("finished_at") or now) > _JOB_RETENTION_SECONDS
+        }
+        keep = sorted(completed, key=lambda item: float(item[1].get("finished_at") or 0), reverse=True)[
+            :_MAX_RETAINED_JOBS
+        ]
+        keep_ids = {job_id for job_id, _ in keep}
+        for job_id, _ in completed:
+            if job_id in expired or (len(completed) > _MAX_RETAINED_JOBS and job_id not in keep_ids):
+                self._jobs.pop(job_id, None)
 
     def start(self, path: str | Path, *, code: str | None = None, start_line: int = 1) -> dict[str, Any]:
         script = Path(path).resolve()
@@ -397,6 +440,7 @@ class MatlabRunManager:
         if not status.available:
             raise RuntimeError(status.detail)
         with self._lock:
+            self._prune_jobs_locked()
             if self._active_job:
                 active = self._jobs.get(self._active_job)
                 if active and active.get("state") == "running":
@@ -425,7 +469,14 @@ class MatlabRunManager:
             try:
                 with self.execution_lock:
                     if job.get("cancel_requested"):
-                        result = {"ok": False, "cancelled": True, "stdout": "", "stderr": "", "variables": [], "figures": []}
+                        result = {
+                            "ok": False,
+                            "cancelled": True,
+                            "stdout": "",
+                            "stderr": "",
+                            "variables": [],
+                            "figures": [],
+                        }
                     else:
                         result = _run_m(
                             script,
@@ -456,6 +507,7 @@ class MatlabRunManager:
 
     def status(self, job_id: str) -> dict[str, Any]:
         with self._lock:
+            self._prune_jobs_locked()
             job = self._jobs.get(str(job_id))
             if not job:
                 raise ValueError("unknown MATLAB run job")

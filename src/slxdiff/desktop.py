@@ -26,11 +26,18 @@ def _choose_path() -> Path:
         root.update()
         selected = filedialog.askopenfilename(
             title="Open MATLAB / Simulink file",
-            filetypes=[("MATLAB & Simulink", "*.m *.slx"), ("MATLAB script", "*.m"), ("Simulink model", "*.slx"), ("All files", "*.*")],
+            filetypes=[
+                ("MATLAB & Simulink", "*.m *.slx"),
+                ("MATLAB script", "*.m"),
+                ("Simulink model", "*.slx"),
+                ("All files", "*.*"),
+            ],
             initialdir=recent_dir or None,
         )
         if not selected:
-            selected = filedialog.askdirectory(title="Open SLX Studio workspace", initialdir=recent_dir or None)
+            selected = filedialog.askdirectory(
+                title="Open SLX Studio workspace", initialdir=recent_dir or None
+            )
         root.destroy()
         if selected:
             return Path(selected)
@@ -40,10 +47,14 @@ def _choose_path() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="slx-studio", description="Lightweight .m + .slx editor for MATLAB/Simulink.")
+    parser = argparse.ArgumentParser(
+        prog="slx-studio", description="Lightweight .m + .slx editor for MATLAB/Simulink."
+    )
     parser.add_argument("path", nargs="?", type=Path, help="Workspace folder, .m file, or .slx file")
     parser.add_argument("--matlab", help="MATLAB executable path")
-    parser.add_argument("--browser", action="store_true", help="Use the system browser instead of an embedded WebView")
+    parser.add_argument(
+        "--browser", action="store_true", help="Use the system browser instead of an embedded WebView"
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     path = args.path or _choose_path()
 

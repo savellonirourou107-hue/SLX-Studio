@@ -2,6 +2,12 @@
 
 ## 1.0.0b2 - 2026-09-02
 
+- Hardened XML parsing against delayed DTD/entity declarations and internal-entity expansion, while preserving per-member, archive-entry and total XML size limits.
+- Normalized REST input validation and JSON error responses for malformed types, invalid patch/edit/sweep inputs, missing tokens and oversized request bodies; unexpected server errors no longer expose tracebacks to clients.
+- Added explicit unsupported Simulink-structure metadata and surfaced it through model, Agent and review-context payloads; static parsing remains complementary to MATLAB/Simulink validation.
+- Added an opt-in MATLAB R2026a integration-test entry point and a manual self-hosted workflow template; absent MATLAB is reported as skipped rather than passed.
+- Added bounded retention/TTL cleanup for completed asynchronous MATLAB, simulation and sweep jobs without changing start/status/stop fields.
+- Added `ruff format --check .` to CI and refreshed bilingual test/compatibility documentation.
 - Hardened Simulink path handling for literal `/` and newline-containing block names across parsing, navigation, rename and edit paths.
 - Added stale recovery-draft detection when `.m` files change externally.
 - Made failed simulation-after-edit results report disk changes so the Workbench refreshes and preserves undo history.

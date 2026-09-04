@@ -22,7 +22,8 @@ The Workbench owns file navigation, text editing, the graphical canvas, Inspecto
 2. Apply archive/XML safety limits.
 3. Locate Simulink system XML.
 4. Normalize blocks, parameters and signal endpoints.
-5. Render the canonical graph without starting MATLAB.
+5. Record conservative `metadata.unsupported_features` diagnostics for structures that are only partially understood (for example Stateflow, masks, variants, links, model references, bus metadata and dynamic ports).
+6. Render the canonical graph without starting MATLAB.
 
 This read path powers viewing, diff, review and AI context.
 
@@ -94,3 +95,13 @@ before/after SLX -> canonical graphs -> semantic diff -> review intelligence -> 
 ```
 
 This is useful, but it is a secondary capability of the editor rather than the primary product boundary.
+
+## Compatibility and validation boundary
+
+The parser's canonical graph is intentionally smaller than the full Simulink
+object model. Unsupported-feature metadata is advisory: it prevents callers
+from mistaking a partial view for a complete semantic model. MATLAB/Simulink
+R2026a remains authoritative for `set_param`, structural edits, compilation,
+simulation, figure export and `save_system`. The optional
+`tests/test_matlab_r2026a_integration.py` entry point is skipped unless the
+caller explicitly configures `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB`.

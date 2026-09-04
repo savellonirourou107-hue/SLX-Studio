@@ -6,7 +6,7 @@ This report records the additional adversarial testing performed after v1.0.0 Be
 
 ## What was exercised
 
-- Full Python regression suite (69 tests).
+- Full Python regression suite (80 collected tests; 79 pass and the opt-in MATLAB test skips when no path is configured).
 - Python bytecode compilation of `src/` and `tests/`.
 - Real parsing of synthetic SLX ZIP/XML packages, including Unicode, newlines, literal `/` in block names, malformed XML and archive-limit cases.
 - Workspace sandbox checks for `..`, absolute paths and symlink escape attempts.
@@ -19,6 +19,19 @@ This report records the additional adversarial testing performed after v1.0.0 Be
 - GitHub Actions YAML parsing.
 - Clean wheel build, clean-target installation, package-data presence and `slx-diff --version`.
 - Windows installer configuration review, including optional (non-default-hijacking) `.m` / `.slx` Open-With registration.
+- XML delayed-DTD/entity regressions, structured edit endpoint/context checks, REST JSON schema failures and completed-job retention/TTL checks.
+
+When a licensed MATLAB R2026a installation is explicitly configured through
+`SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB`, run:
+
+```powershell
+python -m pytest -ra -m matlab_integration
+```
+
+That opt-in test was run against `E:\matlab2026\bin\matlab.exe` during this
+release pass and passed. It exercises a real Simulink model and MATLAB Figure;
+the default Python run intentionally reports the test as **skipped** when the
+environment variable is absent.
 
 ## Defects found and fixed
 
@@ -37,7 +50,13 @@ This report records the additional adversarial testing performed after v1.0.0 Be
 
 ## What is *not* claimed as verified
 
-The test container does **not** contain MATLAB or Simulink. Therefore Beta 2 does not claim that a real R2026a process executed every generated `set_param`, `save_system`, `sim`, `exportgraphics`, `assignin` or `evalin` command. Those paths are covered by protocol/fake-executable/fault-injection tests and by source generation checks, but the real MathWorks runtime boundary remains unexercised here.
+Python unit tests, fake-MATLAB protocol tests and real MATLAB integration tests
+are separate evidence classes. A default run with no MATLAB environment must
+not be reported as real-runtime validation. The opt-in test covers the core
+`set_param`, `add_block`, `delete_block`, `add_line`, `delete_line`,
+`save_system`, `sim`, Figure export and workspace-checkpoint path; broader
+toolbox-specific and advanced Simulink object semantics still require a
+separate compatibility matrix.
 
 Likewise, no paid third-party AI credentials were available. Provider endpoints/defaults were checked against current official documentation and the provider/tool-calling loop was tested against a local mock endpoint; no claim is made that every vendor account/region/plan accepts every optional model ID.
 

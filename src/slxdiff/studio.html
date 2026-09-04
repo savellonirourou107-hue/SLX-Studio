@@ -165,6 +165,7 @@
   .ai-result pre { margin:6px 0; padding:8px; max-height:220px; overflow:auto; white-space:pre-wrap; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--text); font-size:10px; line-height:1.45; }
   .ai-trace { display:grid; gap:5px; margin-top:8px; }
   .ai-trace-item { border-left:3px solid var(--accent); padding:5px 7px; background:var(--panel2); font-size:9px; overflow-wrap:anywhere; }
+  .unsupported-notice { margin:0 8px 10px; padding:8px 9px; border:1px solid var(--changed); border-left-width:4px; border-radius:8px; background:var(--changed-bg); color:var(--text); font-size:10px; line-height:1.4; }
   .ai-check { display:flex; align-items:flex-start; gap:7px; color:var(--text); font-size:10px; }
   .ai-check input { margin-top:2px; }
   @media (max-width: 980px) {
@@ -209,6 +210,7 @@
     <aside class="sidebar">
       <div class="pane-title" id="modelExplorerTitle">Model Explorer</div>
       <div id="summary" class="summary hidden"></div>
+      <div id="unsupportedNotice" class="unsupported-notice hidden" role="note"></div>
       <div id="reviewPanel" class="review-panel hidden"></div>
       <div class="tree" id="tree"></div>
     </aside>
@@ -299,7 +301,7 @@
       aiPreview:'AI Preview', backModel:'Back to model', noAgentText:'Agent completed without a text response.', autoBuildUnavailable:'Automatic build requires the MATLAB bridge.',
       reason_block_added:'Block added', reason_block_removed:'Block removed', reason_connection_changed:'Connections changed',
       reason_block_type_changed:'Block type changed', reason_block_renamed:'Block renamed', reason_sample_time_changed:'Sample time changed',
-      reason_data_type_changed:'Data type changed', reason_limit_changed:'Limit or threshold changed', reason_initial_condition_changed:'Initial condition changed',
+       reason_data_type_changed:'Data type changed', reason_limit_changed:'Limit or threshold changed', reason_initial_condition_changed:'Initial condition changed', unsupportedNotice:'Partial-parse warning', unsupportedNoticeDetail:'These structures require authoritative MATLAB/Simulink validation; static output is not a safety or stability proof.',
       reason_gain_changed:'Gain-related parameter changed', reason_parameter_changed:'Parameter changed', reason_numeric_scale_jump:'Large numeric scale change',
       reason_numeric_sign_flip:'Numeric sign changed', reason_downstream_reach:'Downstream propagation', reason_reaches_outport:'Reaches model outport'
     },
@@ -336,7 +338,7 @@
       aiPreview:'AI 预览', backModel:'返回原模型', noAgentText:'智能体已完成，但没有返回文字说明。', autoBuildUnavailable:'自动搭建需要 MATLAB 桥接。',
       reason_block_added:'新增模块', reason_block_removed:'删除模块', reason_connection_changed:'连接关系改变',
       reason_block_type_changed:'模块类型改变', reason_block_renamed:'模块重命名', reason_sample_time_changed:'采样时间改变',
-      reason_data_type_changed:'数据类型改变', reason_limit_changed:'限幅或阈值改变', reason_initial_condition_changed:'初始条件改变',
+       reason_data_type_changed:'数据类型改变', reason_limit_changed:'限幅或阈值改变', reason_initial_condition_changed:'初始条件改变', unsupportedNotice:'部分解析提示', unsupportedNoticeDetail:'这些结构必须回到 MATLAB/Simulink 做权威验证；静态结果不是安全性或稳定性证明。',
       reason_gain_changed:'增益类参数改变', reason_parameter_changed:'参数改变', reason_numeric_scale_jump:'数值尺度发生较大变化',
       reason_numeric_sign_flip:'数值符号改变', reason_downstream_reach:'存在下游传播', reason_reaches_outport:'影响可传播至模型输出端口'
     }
@@ -371,6 +373,13 @@
     return model.systems && model.systems.length ? model.systems : [{id:'',label:'Root',block_count:model.blocks.length}];
   }
   function currentSystemId() { return systemSelect.value || (allSystems()[0] && allSystems()[0].id) || ''; }
+  function renderUnsupportedNotice() {
+    const notice = $('unsupportedNotice');
+    const models = payload.mode === 'diff' ? [payload.old, payload.new] : [sourceModel()];
+    const features = [...new Set(models.flatMap(model => Array.isArray(model && model.metadata && model.metadata.unsupported_features) ? model.metadata.unsupported_features : []))].sort();
+    notice.classList.toggle('hidden', !features.length);
+    if (features.length) notice.textContent = `${t('unsupportedNotice')}: ${features.join(', ')}. ${t('unsupportedNoticeDetail')}`;
+  }
   function pathSeparatorIndexes(path) { const text=String(path||''); const out=[]; for(let i=0;i<text.length;i++){if(text[i]==='/'){if(i+1<text.length&&text[i+1]==='/'){i++;continue}out.push(i)}} return out; }
   function shortName(path) { const text=String(path||''); const indexes=pathSeparatorIndexes(text); const raw=indexes.length?text.slice(indexes[indexes.length-1]+1):text; return raw.replaceAll('//','/') || path || 'Block'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -915,7 +924,7 @@
       if(editable)g.addEventListener('pointerdown',e=>beginBlockMove(e,b,p,g));
       g.addEventListener('click',e=>{e.stopPropagation();selectBlock(b.id,false)});g.addEventListener('dblclick',e=>{if(String(b.block_type).toLowerCase()==='subsystem'){e.preventDefault();e.stopPropagation();openSubsystem(b)}});g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectBlock(b.id,false)}});blockLayer.appendChild(g)
     }
-    empty.classList.toggle('hidden',blocks.length>0); renderTree(blocks); renderReviewPanel();
+    empty.classList.toggle('hidden',blocks.length>0); renderTree(blocks); renderReviewPanel(); renderUnsupportedNotice();
     if(selectedId && !blocks.some(b=>b.id===selectedId)){selectedId=null;showInspector(null)} else if(selectedId) showInspector(currentSelectedBlock()); else if(inspectorMode==='overview') showInspector(null);
     applySelectionAndImpact(); $('statusLeft').innerHTML=`<strong>${blocks.length}</strong> ${t('blocks')} · <strong>${lines.length}</strong> ${t('connections')}`; setTimeout(fitView,0);
   }
@@ -944,7 +953,7 @@
     document.documentElement.lang=lang==='zh'?'zh-CN':'en'; $('languageSelect').value=lang;
     $('reviewButton').textContent=t('reviewLens'); $('fitButton').textContent=t('fit'); $('exportButton').textContent=t('exportSvg'); $('agentContextButton').textContent=t('agentContext'); $('aiButton').textContent=t('connectAI');
     $('patchButton').innerHTML=`${t('patch')} <span class="patch-count" id="patchCount">${staged.size}</span>`; $('downloadPatchButton').textContent=t('downloadPatch'); $('applyButton').textContent=workbenchMode?t('saveModel'):t('applyMatlab'); $('simulateButton').textContent=t('runSimulation'); $('addBlockButton').textContent=t('addBlock');
-    $('modelExplorerTitle').textContent=t('modelExplorer'); $('inspectorTitle').textContent=t('inspector'); $('empty').textContent=t('empty'); $('legendAdded').textContent=t('added'); $('legendChanged').textContent=t('changed'); $('legendRemoved').textContent=t('removed');
+    $('modelExplorerTitle').textContent=t('modelExplorer'); $('inspectorTitle').textContent=t('inspector'); $('empty').textContent=t('empty'); $('legendAdded').textContent=t('added'); $('legendChanged').textContent=t('changed'); $('legendRemoved').textContent=t('removed'); renderUnsupportedNotice();
     searchBox.placeholder=t('findBlock'); searchBox.setAttribute('aria-label',t('findBlock')); systemSelect.setAttribute('aria-label',t('subsystem')); $('languageSelect').setAttribute('aria-label',t('language')); $('stopTime').setAttribute('aria-label',t('stopTimeAria'));
     setupModes(); setupSummary(); populateSystems(); updateBridgeText(); render(); updatePatchUI();
     if(inspectorMode==='patch') showPatchQueue(); else if(inspectorMode==='simulation'&&lastSimulation) showSimulationResult(lastSimulation); else if(inspectorMode==='ai') showAIPanel(); else if(selectedId) showInspector(currentSelectedBlock());

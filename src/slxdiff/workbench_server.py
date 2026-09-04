@@ -56,7 +56,9 @@ def _restore_model_snapshot(snapshot: Path, target: Path) -> None:
 
 
 class WorkbenchServer(StudioServer):
-    def __init__(self, address, handler, *, root: Path, initial_file: str | None, matlab: str | None, token: str):
+    def __init__(
+        self, address, handler, *, root: Path, initial_file: str | None, matlab: str | None, token: str
+    ):
         initial_model = None
         if initial_file and initial_file.lower().endswith(".slx"):
             initial_model = resolve_workspace_path(root, initial_file)
@@ -76,10 +78,19 @@ class WorkbenchServer(StudioServer):
         self.session_temp = tempfile.TemporaryDirectory(prefix="slx-studio-session-")
         self.session_root = Path(self.session_temp.name)
         self.workspace_checkpoint = self.session_root / "workspace.mat"
-        self.run_manager = MatlabRunManager(matlab=matlab, workspace_file=self.workspace_checkpoint, execution_lock=self.execution_lock)
-        self.command_session = MatlabCommandSession(work_dir=root, workspace_file=self.workspace_checkpoint, matlab=matlab, execution_lock=self.execution_lock)
+        self.run_manager = MatlabRunManager(
+            matlab=matlab, workspace_file=self.workspace_checkpoint, execution_lock=self.execution_lock
+        )
+        self.command_session = MatlabCommandSession(
+            work_dir=root,
+            workspace_file=self.workspace_checkpoint,
+            matlab=matlab,
+            execution_lock=self.execution_lock,
+        )
         self.sweep_manager = SweepRunManager(matlab=matlab, execution_lock=self.execution_lock)
-        self.simulation_manager = SimulationRunManager(matlab=matlab, history=self.model_history, execution_lock=self.execution_lock)
+        self.simulation_manager = SimulationRunManager(
+            matlab=matlab, history=self.model_history, execution_lock=self.execution_lock
+        )
         self.state = StudioState()
         self.state.mark_recent(root)
 
@@ -154,7 +165,9 @@ class WorkbenchHandler(StudioHandler):
             if not self._authorized():
                 self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
                 return
-            self._send_json(HTTPStatus.OK, {"ok": True, "recent_projects": self.server.state.recent_projects()})
+            self._send_json(
+                HTTPStatus.OK, {"ok": True, "recent_projects": self.server.state.recent_projects()}
+            )
             return
 
         super().do_GET()
@@ -196,12 +209,16 @@ class WorkbenchHandler(StudioHandler):
             return
         try:
             body = self._read_json()
-            relative = str(body.get("path", ""))
+            relative = self._string_field(body, "path", default="")
 
             if parsed.path == "/api/v1/workspace/read":
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 content = read_text_file(self.server.workspace_root, relative)
-                recovery = self.server.state.get_recovery(self.server.workspace_root, self._relative(path)) if path.suffix.lower() == ".m" else None
+                recovery = (
+                    self.server.state.get_recovery(self.server.workspace_root, self._relative(path))
+                    if path.suffix.lower() == ".m"
+                    else None
+                )
                 if recovery is not None:
                     recovery = dict(recovery)
                     saved_mtime = int(recovery.get("disk_mtime_ns") or 0)
@@ -210,7 +227,13 @@ class WorkbenchHandler(StudioHandler):
                     recovery["current_disk_mtime_ns"] = current_mtime
                 self._send_json(
                     HTTPStatus.OK,
-                    {"ok": True, "path": str(path), "relative_path": self._relative(path), "content": content, "recovery": recovery},
+                    {
+                        "ok": True,
+                        "path": str(path),
+                        "relative_path": self._relative(path),
+                        "content": content,
+                        "recovery": recovery,
+                    },
                 )
                 return
 
@@ -222,12 +245,17 @@ class WorkbenchHandler(StudioHandler):
                 self.server.state.clear_recovery(self.server.workspace_root, self._relative(path))
                 self._send_json(
                     HTTPStatus.OK,
-                    {"ok": True, "path": str(path), "relative_path": self._relative(path), "bytes": len(content.encode("utf-8"))},
+                    {
+                        "ok": True,
+                        "path": str(path),
+                        "relative_path": self._relative(path),
+                        "bytes": len(content.encode("utf-8")),
+                    },
                 )
                 return
 
             if parsed.path == "/api/v1/workspace/save-as":
-                destination = str(body.get("destination", ""))
+                destination = self._string_field(body, "destination", required=True)
                 if not destination:
                     raise ValueError("destination is required")
                 source = resolve_workspace_path(self.server.workspace_root, relative)
@@ -240,18 +268,22 @@ class WorkbenchHandler(StudioHandler):
                     path = write_text_file(self.server.workspace_root, destination, body["content"])
                 else:
                     path = copy_workspace_file(self.server.workspace_root, relative, destination)
-                self._send_json(HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)})
+                self._send_json(
+                    HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
+                )
                 return
 
             if parsed.path == "/api/v1/workspace/search":
-                query = str(body.get("query", ""))
+                query = self._string_field(body, "query", required=True)
                 payload = search_workspace(self.server.workspace_root, query)
                 self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                 return
 
             if parsed.path == "/api/v1/workspace/new-m":
                 path = create_m_file(self.server.workspace_root, relative)
-                self._send_json(HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)})
+                self._send_json(
+                    HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
+                )
                 return
 
             if parsed.path == "/api/v1/workspace/new-slx":
@@ -265,7 +297,9 @@ class WorkbenchHandler(StudioHandler):
             if parsed.path == "/api/v1/workspace/run-m":
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 with self.server.execution_lock:
-                    result = run_m_file(path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint)
+                    result = run_m_file(
+                        path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint
+                    )
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
                 return
 
@@ -274,28 +308,44 @@ class WorkbenchHandler(StudioHandler):
                 code = body.get("code")
                 if code is not None and not isinstance(code, str):
                     raise ValueError("code must be a string")
-                start_line = int(body.get("start_line") or 1)
+                raw_start_line = body.get("start_line", 1)
+                if (
+                    isinstance(raw_start_line, bool)
+                    or not isinstance(raw_start_line, int)
+                    or raw_start_line < 1
+                ):
+                    raise ValueError("start_line must be a positive integer")
+                start_line = raw_start_line
                 job = self.server.run_manager.start(path, code=code, start_line=start_line)
                 self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/run/status":
-                job = self.server.run_manager.status(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.run_manager.status(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/run/stop":
-                job = self.server.run_manager.stop(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.run_manager.stop(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/command":
-                result = self.server.command_session.execute(str(body.get("code", "")))
+                code = self._string_field(body, "code", required=True)
+                result = self.server.command_session.execute(code)
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
                 return
 
             if parsed.path == "/api/v1/workspace/variables/set":
-                result = self.server.command_session.set_variable(str(body.get("name", "")), str(body.get("expression", "")))
+                name = self._string_field(body, "name", required=True)
+                expression = self._string_field(body, "expression", required=True)
+                result = self.server.command_session.set_variable(name, expression)
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
                 return
 
@@ -306,7 +356,12 @@ class WorkbenchHandler(StudioHandler):
                 content = body.get("content")
                 if not isinstance(content, str):
                     raise ValueError("content must be a string")
-                entry = self.server.state.save_recovery(self.server.workspace_root, self._relative(path), content, disk_mtime_ns=path.stat().st_mtime_ns)
+                entry = self.server.state.save_recovery(
+                    self.server.workspace_root,
+                    self._relative(path),
+                    content,
+                    disk_mtime_ns=path.stat().st_mtime_ns,
+                )
                 self._send_json(HTTPStatus.OK, {"ok": True, "recovery": entry})
                 return
 
@@ -320,17 +375,31 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 if path.suffix.lower() != ".slx":
                     raise ValueError("parameter sweeps require a .slx model")
-                job = self.server.sweep_manager.start(path, block_path=str(body.get("block_path", "")), parameter=str(body.get("parameter", "")), values=body.get("values", ""), stop_time=str(body.get("stop_time", "10")))
+                block_path = self._string_field(body, "block_path", required=True)
+                parameter = self._string_field(body, "parameter", required=True)
+                values = body.get("values", "")
+                if not isinstance(values, (str, list)):
+                    raise TypeError("values must be a string or array")
+                stop_time = self._string_field(body, "stop_time", default="10")
+                job = self.server.sweep_manager.start(
+                    path, block_path=block_path, parameter=parameter, values=values, stop_time=stop_time
+                )
                 self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/sweep/status":
-                job = self.server.sweep_manager.status(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.sweep_manager.status(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/sweep/stop":
-                job = self.server.sweep_manager.stop(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.sweep_manager.stop(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
@@ -338,26 +407,40 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 if path.suffix.lower() != ".slx":
                     raise ValueError("simulation requires a .slx model")
-                job = self.server.simulation_manager.start(path, patch=body.get("patch", {}), stop_time=str(body.get("stop_time", "10")))
+                patch = self._object_field(body, "patch", default={})
+                stop_time = self._string_field(body, "stop_time", default="10")
+                job = self.server.simulation_manager.start(path, patch=patch, stop_time=stop_time)
                 self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/sim/status":
-                job = self.server.simulation_manager.status(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.simulation_manager.status(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/sim/stop":
-                job = self.server.simulation_manager.stop(str(body.get("job_id", "")))
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.simulation_manager.stop(job_id)
                 self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
-
 
             if parsed.path == "/api/v1/workspace/history":
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 if path.suffix.lower() != ".slx":
                     raise ValueError("model history requires a .slx file")
-                self._send_json(HTTPStatus.OK, {"ok": True, "relative_path": self._relative(path), **self.server.model_history.status(path)})
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "relative_path": self._relative(path),
+                        **self.server.model_history.status(path),
+                    },
+                )
                 return
 
             if parsed.path in {"/api/v1/workspace/undo", "/api/v1/workspace/redo"}:
@@ -376,7 +459,13 @@ class WorkbenchHandler(StudioHandler):
                 self.server.output_path = path
                 self._send_json(
                     HTTPStatus.OK,
-                    {"ok": True, "action": action, "relative_path": self._relative(path), "model": model_payload(refreshed), **history},
+                    {
+                        "ok": True,
+                        "action": action,
+                        "relative_path": self._relative(path),
+                        "model": model_payload(refreshed),
+                        **history,
+                    },
                 )
                 return
 
@@ -384,9 +473,9 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 if path.suffix.lower() != ".slx":
                     raise ValueError("model patches require a .slx file")
-                patch = patch_from_dict(body.get("patch", {}))
-                simulate = bool(body.get("simulate", False))
-                stop_time = str(body.get("stop_time", "10")).strip() or "10"
+                patch = patch_from_dict(self._object_field(body, "patch", default={}))
+                simulate = self._bool_field(body, "simulate", default=False)
+                stop_time = self._string_field(body, "stop_time", default="10").strip() or "10"
                 if len(stop_time) > 128 or "\n" in stop_time or "\r" in stop_time:
                     raise ValueError("invalid simulation stop time")
                 before_snapshot = None
@@ -424,7 +513,13 @@ class WorkbenchHandler(StudioHandler):
                     raise
                 self.server.model_path = path
                 self.server.output_path = path
-                result.update({"relative_path": self._relative(path), "model": model_payload(refreshed), "history": history})
+                result.update(
+                    {
+                        "relative_path": self._relative(path),
+                        "model": model_payload(refreshed),
+                        "history": history,
+                    }
+                )
                 self._send_json(HTTPStatus.OK, result)
                 return
 
@@ -432,12 +527,14 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 if path.suffix.lower() != ".slx":
                     raise ValueError("model edits require a .slx file")
-                document = edit_document_from_dict(body.get("edit", {}))
+                document = edit_document_from_dict(self._object_field(body, "edit", default={}))
                 before_snapshot = None
                 try:
                     with self.server.execution_lock:
                         before_snapshot = self.server.model_history.capture(path, label="before")
-                        result = apply_model_edit_with_matlab(path, document, output_path=path, matlab=self.server.matlab)
+                        result = apply_model_edit_with_matlab(
+                            path, document, output_path=path, matlab=self.server.matlab
+                        )
                         result["output_model"] = str(path)
                         history = self.server.model_history.record(path, before_snapshot)
                         before_snapshot = None
@@ -449,12 +546,21 @@ class WorkbenchHandler(StudioHandler):
                     raise
                 self.server.model_path = path
                 self.server.output_path = path
-                result.update({"relative_path": self._relative(path), "model": model_payload(refreshed), "history": history})
+                result.update(
+                    {
+                        "relative_path": self._relative(path),
+                        "model": model_payload(refreshed),
+                        "history": history,
+                    }
+                )
                 self._send_json(HTTPStatus.OK, result)
                 return
 
-        except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        except (FileNotFoundError, TypeError, ValueError, OverflowError, RuntimeError) as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+        except Exception as exc:  # noqa: BLE001 - never expose internal tracebacks through the API
+            self.log_message("internal Workbench POST error: %s", exc)
+            self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "error": "internal server error"})
 
 
 def serve_workbench(
@@ -470,7 +576,9 @@ def serve_workbench(
         raise ValueError("SLX Studio desktop API is loopback-only")
     root, initial = workspace_root(path)
     session_token = token or secrets.token_urlsafe(24)
-    server = WorkbenchServer((host, port), WorkbenchHandler, root=root, initial_file=initial, matlab=matlab, token=session_token)
+    server = WorkbenchServer(
+        (host, port), WorkbenchHandler, root=root, initial_file=initial, matlab=matlab, token=session_token
+    )
     actual_host, actual_port = server.server_address[:2]
     display_host = f"[{actual_host}]" if ":" in actual_host else actual_host
     url = f"http://{display_host}:{actual_port}/"

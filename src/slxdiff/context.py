@@ -16,8 +16,16 @@ def build_agent_context(old: Model, new: Model, *, max_hotspots: int = 20) -> di
         "schema_version": "0.1",
         "kind": "slx-agent-review-context",
         "models": {
-            "before": {"name": old.name, "sha256": old.metadata.get("sha256", "")},
-            "after": {"name": new.name, "sha256": new.metadata.get("sha256", "")},
+            "before": {
+                "name": old.name,
+                "sha256": old.metadata.get("sha256", ""),
+                "unsupported_features": list(old.metadata.get("unsupported_features", [])),
+            },
+            "after": {
+                "name": new.name,
+                "sha256": new.metadata.get("sha256", ""),
+                "unsupported_features": list(new.metadata.get("unsupported_features", [])),
+            },
         },
         "summary": {
             "change_count": result.change_count,
@@ -30,9 +38,7 @@ def build_agent_context(old: Model, new: Model, *, max_hotspots: int = 20) -> di
             "review_priority_counts": review.priority_counts,
         },
         "semantic_changes": {
-            "added_blocks": [
-                {"path": block.path, "type": block.block_type} for block in result.added_blocks
-            ],
+            "added_blocks": [{"path": block.path, "type": block.block_type} for block in result.added_blocks],
             "removed_blocks": [
                 {"path": block.path, "type": block.block_type} for block in result.removed_blocks
             ],

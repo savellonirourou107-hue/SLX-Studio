@@ -26,8 +26,18 @@ def main() -> int:
     change_count = sum(item.result.change_count for item in diffs)
     changed = any(item.result.changed for item in diffs)
     priorities = [item.review.max_priority for item in diffs if item.result.changed]
-    review_priority = "high" if "high" in priorities else "medium" if "medium" in priorities else "low" if priorities else "none"
-    high_review_count = sum(1 for item in diffs for hotspot in item.review.items if hotspot.priority == "high")
+    review_priority = (
+        "high"
+        if "high" in priorities
+        else "medium"
+        if "medium" in priorities
+        else "low"
+        if priorities
+        else "none"
+    )
+    high_review_count = sum(
+        1 for item in diffs for hotspot in item.review.items if hotspot.priority == "high"
+    )
 
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as handle:

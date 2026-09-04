@@ -19,6 +19,53 @@ _ENDPOINT_RE = re.compile(r"^(?P<sid>[^#]+)#(?P<kind>in|out):(?P<port>\d+)$")
 _MAX_XML_MEMBER_BYTES = 32 * 1024 * 1024
 _MAX_ARCHIVE_XML_BYTES = 128 * 1024 * 1024
 _MAX_ARCHIVE_ENTRIES = 20_000
+_ENTITY_REF_RE = re.compile(rb"&([A-Za-z_:][A-Za-z0-9_.:-]*);")
+_DECLARATION_RE = re.compile(rb"<!\s*(?:DOCTYPE|ENTITY)\b", re.IGNORECASE)
+_PREDEFINED_ENTITIES = frozenset({b"amp", b"apos", b"lt", b"gt", b"quot"})
+_TEXT_ENTITY_REF_RE = re.compile(r"&([A-Za-z_:][A-Za-z0-9_.:-]*);")
+_TEXT_DECLARATION_RE = re.compile(r"<!\s*(?:DOCTYPE|ENTITY)\b", re.IGNORECASE)
+
+# Blocks outside this deliberately small vocabulary remain visible for diff
+# and review, but are explicitly reported as requiring MATLAB/Simulink
+# verification instead of being silently treated as fully supported.
+_SUPPORTED_BLOCK_TYPES = frozenset(
+    {
+        "Inport",
+        "Outport",
+        "Step",
+        "Constant",
+        "Gain",
+        "Sum",
+        "Saturate",
+        "Integrator",
+        "TransferFcn",
+        "UnitDelay",
+        "DiscreteIntegrator",
+        "Mux",
+        "Scope",
+        "ToWorkspace",
+        "SubSystem",
+    }
+)
+_DYNAMIC_PORT_BLOCK_TYPES = frozenset(
+    {
+        "BusSelector",
+        "Demux",
+        "FromWorkspace",
+        "Goto",
+        "If",
+        "InportShadow",
+        "MultiPortSwitch",
+        "Selector",
+        "Switch",
+        "TriggeredSubsystem",
+        "EnabledSubsystem",
+        "ForIterator",
+        "WhileIterator",
+        "ForEach",
+        "VariantSubsystem",
+    }
+)
 
 
 def _local(tag: str) -> str:
@@ -124,10 +171,70 @@ def _safe_xml(archive: zipfile.ZipFile, member: str) -> bytes:
     if info.file_size > _MAX_XML_MEMBER_BYTES:
         raise ValueError(f"SLX XML member is too large to inspect safely: {member}")
     data = archive.read(info)
-    upper = data[:4096].upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+    # ElementTree expands internal entities. Scan the complete bounded member
+    # before parsing so delayed DTDs and entity bombs cannot bypass a prefix
+    # check or consume parser resources.
+    if _DECLARATION_RE.search(data):
         raise ValueError(f"SLX XML member contains a forbidden DTD/entity declaration: {member}")
+    for match in _ENTITY_REF_RE.finditer(data):
+        if match.group(1) not in _PREDEFINED_ENTITIES:
+            raise ValueError(f"SLX XML member contains a forbidden DTD/entity declaration: {member}")
+    # ElementTree also accepts UTF-16 XML.  Scan a decoded view when NUL bytes
+    # indicate a UTF-16 representation so encoding cannot bypass the guard.
+    if b"\x00" in data:
+        for encoding in ("utf-16", "utf-16-le", "utf-16-be"):
+            try:
+                text = data.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            if _TEXT_DECLARATION_RE.search(text) or any(
+                match.group(1) not in {"amp", "apos", "lt", "gt", "quot"}
+                for match in _TEXT_ENTITY_REF_RE.finditer(text)
+            ):
+                raise ValueError(f"SLX XML member contains a forbidden DTD/entity declaration: {member}")
     return data
+
+
+def _unsupported_features_for_block(block: ET.Element, block_type: str) -> set[str]:
+    features: set[str] = set()
+    names = {str(child.attrib.get("Name", "")).lower() for child in block.iter() if _local(child.tag) == "P"}
+    tags = {_local(child.tag).lower() for child in block.iter()}
+    link_statuses = {
+        (child.text or "").strip().lower()
+        for child in block.iter()
+        if _local(child.tag) == "P" and str(child.attrib.get("Name", "")).lower() == "linkstatus"
+    }
+    if "mask" in tags or any(name.startswith("mask") for name in names):
+        features.add("mask")
+    if (
+        "variant" in tags
+        or any("variant" in name for name in names)
+        or block_type in {"VariantSubsystem", "VariantSource"}
+    ):
+        features.add("variant")
+    if "link" in tags or "librarylink" in tags or (
+        "linkstatus" in names
+        and block_type != "SubSystem"
+        and any(value not in {"", "none", "inactive", "unresolved"} for value in link_statuses)
+    ):
+        features.add("library_link")
+    if block_type in {"ModelReference", "ModelReferenceBlock"} or any(
+        name in {"modelfile", "modelname", "referencedmodel"} for name in names
+    ):
+        features.add("model_reference")
+    if (
+        "bus" in tags
+        or "busobject" in tags
+        or any("bus" in name or "signalhierarchy" in name for name in names)
+    ):
+        features.add("bus_data_type_metadata")
+    if block_type in _DYNAMIC_PORT_BLOCK_TYPES or any(
+        name in {"ports", "inputports", "outputports", "numberofports", "portdimensions"} for name in names
+    ):
+        features.add("dynamic_or_conditional_ports")
+    if block_type not in _SUPPORTED_BLOCK_TYPES:
+        features.add("specialized_toolbox_block")
+    return features
 
 
 def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) -> Model:
@@ -139,6 +246,13 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
     if xml_bytes > _MAX_ARCHIVE_XML_BYTES:
         raise ValueError("SLX package contains too much uncompressed XML to inspect safely")
 
+    # Inspect every XML member, including metadata/stateflow members that are
+    # not part of the graph extraction path, so no archive member is a blind
+    # spot for DTD/entity declarations.
+    for info in infos:
+        if info.filename.lower().endswith(".xml"):
+            _safe_xml(archive, info.filename)
+
     names = {info.filename for info in infos}
     root_name = next((candidate for candidate in _ROOT_CANDIDATES if candidate in names), None)
     if root_name is None:
@@ -148,6 +262,9 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
         root_name = candidates[0]
 
     model = Model(name=model_name)
+    unsupported_features: set[str] = set()
+    if any("stateflow" in info.filename.lower() for info in infos):
+        unsupported_features.add("stateflow")
     visited: set[str] = set()
 
     def parse_system_file(member: str, system_path: str, inline: ET.Element | None = None) -> None:
@@ -177,6 +294,7 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
             fallback = f"SID_{sid or 'unknown'}"
             name = _normalize_name(raw_name) or raw_name or fallback
             block_type = block.attrib.get("BlockType", "Unknown")
+            unsupported_features.update(_unsupported_features_for_block(block, block_type))
             path_name = escape_component(raw_name or fallback)
             block_path = f"{system_path}/{path_name}" if system_path else path_name
             if sid:
@@ -222,6 +340,8 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
 
     parse_system_file(root_name, "")
     model.metadata["source"] = source
+    if unsupported_features:
+        model.metadata["unsupported_features"] = sorted(unsupported_features)
     return model
 
 

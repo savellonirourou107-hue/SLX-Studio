@@ -73,7 +73,11 @@ def _known_matlab_candidates() -> list[Path]:
 def find_matlab(explicit: str | Path | None = None) -> MatlabStatus:
     configured = str(explicit) if explicit else os.environ.get("SLX_DIFF_MATLAB")
     if configured:
-        path = shutil.which(configured) if os.path.sep not in configured and "/" not in configured else configured
+        path = (
+            shutil.which(configured)
+            if os.path.sep not in configured and "/" not in configured
+            else configured
+        )
         if path and Path(path).exists():
             return MatlabStatus(True, str(Path(path).resolve()), "MATLAB executable found")
         if path and shutil.which(path):
@@ -87,7 +91,9 @@ def find_matlab(explicit: str | Path | None = None) -> MatlabStatus:
 
     known = _known_matlab_candidates()
     if known:
-        return MatlabStatus(True, str(known[0].resolve()), "MATLAB executable found in a standard install location")
+        return MatlabStatus(
+            True, str(known[0].resolve()), "MATLAB executable found in a standard install location"
+        )
     return MatlabStatus(False, None, "MATLAB executable not found on PATH or in a standard install location")
 
 
@@ -291,7 +297,8 @@ def _run_matlab_request(
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            proc.kill(); proc.communicate()
+            proc.kill()
+            proc.communicate()
             raise RuntimeError(f"MATLAB bridge timed out after {timeout:g} seconds") from exc
         was_cancelled = bool(cancelled()) if cancelled else False
         if result_path.exists():
@@ -300,7 +307,13 @@ def _run_matlab_request(
             except json.JSONDecodeError as exc:
                 raise RuntimeError(f"MATLAB bridge returned invalid JSON: {exc}") from exc
         elif was_cancelled:
-            return {"ok": False, "cancelled": True, "message": "MATLAB operation cancelled", "stdout": stdout or "", "stderr": stderr or ""}
+            return {
+                "ok": False,
+                "cancelled": True,
+                "message": "MATLAB operation cancelled",
+                "stdout": stdout or "",
+                "stderr": stderr or "",
+            }
         else:
             detail = (stderr or stdout or "MATLAB exited without a bridge result").strip()
             raise RuntimeError(detail)
@@ -341,7 +354,9 @@ def apply_patch_with_matlab(
         "patch": document.to_dict(),
         "simulate": {"enabled": bool(simulate), "stop_time": normalized_stop_time},
     }
-    return _run_matlab_request(request, matlab=matlab, timeout=timeout, on_process=on_process, cancelled=cancelled)
+    return _run_matlab_request(
+        request, matlab=matlab, timeout=timeout, on_process=on_process, cancelled=cancelled
+    )
 
 
 def _blueprint_runner_source(request_path: Path, result_path: Path) -> str:
@@ -679,7 +694,9 @@ def apply_model_edit_with_matlab(
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"MATLAB edit bridge returned invalid JSON: {exc}") from exc
         if proc.returncode != 0 or not result.get("ok"):
-            raise RuntimeError(str(result.get("message") or proc.stderr or proc.stdout or "MATLAB model edit failed").strip())
+            raise RuntimeError(
+                str(result.get("message") or proc.stderr or proc.stdout or "MATLAB model edit failed").strip()
+            )
         return result
 
 
@@ -696,7 +713,9 @@ def create_empty_model_with_matlab(
         raise ValueError(f"file already exists: {output}")
     name = output.stem
     if not name or not name[0].isalpha() or not all(ch.isalnum() or ch == "_" for ch in name):
-        raise ValueError("Simulink model file name must start with a letter and use only letters, digits, or underscores")
+        raise ValueError(
+            "Simulink model file name must start with a letter and use only letters, digits, or underscores"
+        )
     status = find_matlab(matlab)
     if not status.available or not status.executable:
         raise RuntimeError(status.detail)

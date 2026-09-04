@@ -48,6 +48,23 @@ GET /api/v1/tools
 ```
 
 `/capabilities` returns the safe block catalog, tool definitions, provider registry and MATLAB bridge status.
+`/model` includes the parser's optional `metadata.unsupported_features` list when
+Stateflow, masks, variants, links, model references, bus metadata, dynamic
+ports or non-catalog BlockTypes are present.  This list is a warning that
+authoritative validation must return to MATLAB/Simulink.
+
+All JSON POST validation failures use a stable response shape and include the
+correct `Content-Type`/`Content-Length` headers:
+
+```json
+{"ok": false, "error": "human-readable message"}
+```
+
+Malformed types, missing fields, invalid patch/edit/sweep values, oversized
+request bodies and invalid tokens are rejected without disconnecting the
+request. Unexpected internal failures return the same shape with HTTP 500 and
+the generic message `internal server error`; implementation tracebacks are not
+sent to clients.
 
 ## Run an agent
 

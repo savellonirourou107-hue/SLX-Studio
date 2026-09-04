@@ -7,7 +7,18 @@ from typing import Any
 
 VISIBLE_SUFFIXES = {".m", ".slx"}
 TEXT_SUFFIXES = {".m"}
-_IGNORED_DIRS = {".git", ".svn", ".hg", "__pycache__", ".pytest_cache", "build", "dist", ".venv", "venv", "node_modules"}
+_IGNORED_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "__pycache__",
+    ".pytest_cache",
+    "build",
+    "dist",
+    ".venv",
+    "venv",
+    "node_modules",
+}
 _MAX_TEXT_BYTES = 4 * 1024 * 1024
 
 
@@ -141,7 +152,9 @@ def create_m_file(root: str | Path, relative: str | Path) -> Path:
     return write_text_file(root, relative, content)
 
 
-def copy_workspace_file(root: str | Path, source_relative: str | Path, destination_relative: str | Path) -> Path:
+def copy_workspace_file(
+    root: str | Path, source_relative: str | Path, destination_relative: str | Path
+) -> Path:
     """Copy a .m/.slx workspace file without overwriting an existing destination."""
     import shutil
 
@@ -179,8 +192,11 @@ def search_workspace(
 
     for folder, dirs, files in os.walk(base):
         dirs[:] = [
-            name for name in dirs
-            if name not in _IGNORED_DIRS and not name.startswith(".") and not (Path(folder) / name).is_symlink()
+            name
+            for name in dirs
+            if name not in _IGNORED_DIRS
+            and not name.startswith(".")
+            and not (Path(folder) / name).is_symlink()
         ]
         for name in sorted(files, key=str.casefold):
             if len(results) >= max_results:

@@ -45,7 +45,9 @@ def _model_payload(model: Model) -> dict:
         grouped[block.system_id].append(block)
 
     systems = []
-    for system_id, blocks in sorted(grouped.items(), key=lambda item: _system_label(item[1], item[0]).lower()):
+    for system_id, blocks in sorted(
+        grouped.items(), key=lambda item: _system_label(item[1], item[0]).lower()
+    ):
         systems.append(
             {
                 "id": system_id,
@@ -133,7 +135,14 @@ def _diff_payload(old: Model, new: Model) -> dict:
     }
     review = review_to_dict(build_review_report(old, new))
     agent_context = build_agent_context(old, new)
-    return {"mode": "diff", "old": old_payload, "new": new_payload, "summary": summary, "review": review, "agent_context": agent_context}
+    return {
+        "mode": "diff",
+        "old": old_payload,
+        "new": new_payload,
+        "summary": summary,
+        "review": review,
+        "agent_context": agent_context,
+    }
 
 
 def _safe_json_for_html(payload: dict) -> str:

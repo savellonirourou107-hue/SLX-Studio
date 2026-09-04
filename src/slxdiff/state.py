@@ -63,7 +63,11 @@ class StudioState:
         root = str(Path(project_root).resolve())
         with self._lock:
             data = self._load()
-            existing = [item for item in data.get("recent_projects", []) if isinstance(item, dict) and item.get("path") != root]
+            existing = [
+                item
+                for item in data.get("recent_projects", [])
+                if isinstance(item, dict) and item.get("path") != root
+            ]
             existing.insert(0, {"path": root, "opened_at": time.time()})
             data["recent_projects"] = existing[:_MAX_RECENTS]
             self._save(data)
@@ -115,7 +119,9 @@ class StudioState:
             recovery[key] = entry
             # Keep the state file bounded even if many projects are edited.
             if len(recovery) > 80:
-                ordered = sorted(recovery.items(), key=lambda item: float(item[1].get("saved_at") or 0), reverse=True)
+                ordered = sorted(
+                    recovery.items(), key=lambda item: float(item[1].get("saved_at") or 0), reverse=True
+                )
                 data["recovery"] = dict(ordered[:80])
             self._save(data)
         return {k: v for k, v in entry.items() if k != "content"}

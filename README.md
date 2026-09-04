@@ -266,17 +266,30 @@ v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replace
 - Script, SLX simulation and parameter-sweep jobs are cancellable; Command Window commands are currently synchronous requests and are not independently stoppable.
 - MATLAB stdout/stderr is collected when a job completes rather than streamed live.
 - SLX editing now renders explicit ports found in the model, but dynamic/conditional port semantics and advanced Simulink object types need broader adapters.
-- Stateflow, masks, variants, library links, model references and specialized toolbox blocks are not fully supported.
-- Real MATLAB R2026a end-to-end validation must still be performed on a machine with MATLAB/Simulink installed.
+- Static parsing reports `metadata.unsupported_features` for Stateflow, masks, variants, library links, model references, bus/data-type metadata, dynamic/conditional ports and BlockTypes outside the conservative catalog. Such structures remain visible for review, but are not claimed to be fully editable or semantically complete.
+- When a structure is reported as unsupported or only partially parsed, return to MATLAB/Simulink for authoritative parameter, port, compile, simulation and save validation. Static graph output is never a stability, safety or robustness proof.
+- Optional real MATLAB R2026a integration tests are enabled only when `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB` is explicitly set. GitHub-hosted CI does not include MATLAB; `.github/workflows/matlab-self-hosted.yml` is a manual self-hosted template.
 - The included Windows workflow is configured for `SLXStudio.exe` plus `SLX-Studio-Setup-x64.exe`; this repository was prepared in a non-Windows build environment, so neither Windows binary is claimed as locally verified yet.
 
 ## Development
 
 ```bash
-python -m pytest
+python -m pytest -ra
+python -m pytest --collect-only -q
+python -m ruff check .
+python -m ruff format --check .
 ```
 
-The v1.0 Beta regression suite contains 53 tests covering SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts and Workbench HTTP APIs.
+The v1.0 Beta regression suite currently contains 80 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts and Workbench HTTP APIs.
+
+For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
+
+```powershell
+$env:SLX_STUDIO_MATLAB = 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
+python -m pytest -ra -m matlab_integration
+```
+
+This check exercises `set_param`, `add_block`, `delete_block`, `add_line`, `delete_line`, `save_system`, `sim`, Figure export and the workspace checkpoint. It complements, and does not replace, the fake-MATLAB protocol tests.
 
 ## License
 

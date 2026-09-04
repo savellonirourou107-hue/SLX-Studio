@@ -251,17 +251,30 @@ v1.0 Beta 仍然是“小型工程编辑器”，不是 MATLAB 替代品：
 - `.m`、SLX Simulation 和 Parameter Sweep 都支持 Stop；Command Window 命令目前仍是同步请求，尚不能单独中途停止；
 - stdout / stderr 目前在 MATLAB Job 完成后回收，还不是实时流式 Console；
 - SLX 已能按已有连接显示明确多端口，但动态/条件端口语义和高级 Simulink 对象还需要继续适配；
-- Stateflow、Mask、Variant、Library Link、Model Reference、专用 Toolbox 尚未完整支持；
-- 当前构建环境没有真正 MATLAB/Simulink，因此真实 MATLAB R2026a 端到端验证仍需在安装 MATLAB 的机器上完成；
+- 静态解析会在 `metadata.unsupported_features` 中显式报告 Stateflow、Mask、Variant、Library Link、Model Reference、Bus/Data Type 元数据、动态/条件端口，以及安全目录之外的 BlockType。它们仍可用于查看/Review，但不宣称可完整编辑或语义完整；
+- 一旦出现这些提示，参数、端口、编译、仿真和保存必须回到 MATLAB/Simulink 做权威验证。静态图结果不是稳定性、安全性或鲁棒性证明；
+- 真实 MATLAB R2026a 集成测试只有在显式设置 `SLX_STUDIO_MATLAB` 或 `SLX_DIFF_MATLAB` 时才启用。GitHub hosted runner 不包含 MATLAB；`.github/workflows/matlab-self-hosted.yml` 只是手动 self-hosted 模板；
 - 仓库已配置 Windows 便携 EXE + Setup EXE 工作流，但当前环境不是 Windows，因此不会虚报这两个 Windows 二进制已经在本机验证。
 
 ## 测试
 
 ```bash
-python -m pytest
+python -m pytest -ra
+python -m pytest --collect-only -q
+python -m ruff check .
+python -m ruff format --check .
 ```
 
-v1.0 Beta 当前有 **53 项回归测试**，覆盖 SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约和 Workbench HTTP API。
+v1.0 Beta 当前收集到 **80 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约和 Workbench HTTP API。
+
+在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
+
+```powershell
+$env:SLX_STUDIO_MATLAB = 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
+python -m pytest -ra -m matlab_integration
+```
+
+该入口覆盖 `set_param`、`add_block`、`delete_block`、`add_line`、`delete_line`、`save_system`、`sim`、Figure 导出和 Workspace checkpoint；它与 fake MATLAB 协议测试互补，不能互相冒充。
 
 ## License
 

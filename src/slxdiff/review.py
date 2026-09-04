@@ -266,9 +266,15 @@ def build_review_report(old: Model, new: Model) -> ReviewReport:
         changed_parameters: list[str] = []
         if change is not None:
             if change.type_changed:
-                reasons.append(ReviewReason("block_type_changed", 30, f"{change.before.block_type} -> {change.after.block_type}"))
+                reasons.append(
+                    ReviewReason(
+                        "block_type_changed", 30, f"{change.before.block_type} -> {change.after.block_type}"
+                    )
+                )
             if change.renamed:
-                reasons.append(ReviewReason("block_renamed", 3, f"{change.before.name} -> {change.after.name}"))
+                reasons.append(
+                    ReviewReason("block_renamed", 3, f"{change.before.name} -> {change.after.name}")
+                )
             changed_parameters = [item.name for item in change.parameter_changes]
             reasons.extend(_parameter_reasons(change.parameter_changes))
 
@@ -277,11 +283,19 @@ def build_review_report(old: Model, new: Model) -> ReviewReport:
             connection_paths.update({change.before.path, change.after.path})
         connection_changes = sum(connection_counts.get(candidate, 0) for candidate in connection_paths)
         if connection_changes and status != "rewired":
-            reasons.append(ReviewReason("connection_changed", min(14, 5 + connection_changes * 3), str(connection_changes)))
+            reasons.append(
+                ReviewReason(
+                    "connection_changed", min(14, 5 + connection_changes * 3), str(connection_changes)
+                )
+            )
         if downstream:
-            reasons.append(ReviewReason("downstream_reach", min(18, 4 + len(downstream) * 2), str(len(downstream))))
+            reasons.append(
+                ReviewReason("downstream_reach", min(18, 4 + len(downstream) * 2), str(len(downstream)))
+            )
         if outports:
-            reasons.append(ReviewReason("reaches_outport", min(22, 12 + (len(outports) - 1) * 5), str(len(outports))))
+            reasons.append(
+                ReviewReason("reaches_outport", min(22, 12 + (len(outports) - 1) * 5), str(len(outports)))
+            )
 
         # Avoid one noisy class of generic parameter changes dominating the score.
         score = min(100, sum(reason.weight for reason in reasons))

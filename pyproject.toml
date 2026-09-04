@@ -37,6 +37,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "matlab_integration: optional tests requiring a configured MATLAB/Simulink installation",
+]
 
 [tool.ruff]
 line-length = 110

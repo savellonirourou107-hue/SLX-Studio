@@ -79,7 +79,9 @@ def _build_parser() -> argparse.ArgumentParser:
     html_cmd.add_argument("-o", "--output", type=Path, required=True, help="Destination .html file")
 
     studio_cmd = sub.add_parser("studio", help="Open the lightweight .m + .slx editor workbench")
-    studio_cmd.add_argument("path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file")
+    studio_cmd.add_argument(
+        "path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file"
+    )
     studio_cmd.add_argument("--matlab", help="MATLAB executable path; defaults to PATH or SLX_DIFF_MATLAB")
     studio_cmd.add_argument("--host", default="127.0.0.1", help="Local bind address")
     studio_cmd.add_argument("--port", type=int, default=0, help="Local port; 0 chooses a free port")
@@ -87,7 +89,9 @@ def _build_parser() -> argparse.ArgumentParser:
     studio_cmd.add_argument("--token", help="Explicit local API token; random by default")
 
     serve_cmd = sub.add_parser("serve", help="Run the SLX Studio workbench API without opening a browser")
-    serve_cmd.add_argument("path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file")
+    serve_cmd.add_argument(
+        "path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file"
+    )
     serve_cmd.add_argument("--matlab", help="MATLAB executable path")
     serve_cmd.add_argument("--host", default="127.0.0.1")
     serve_cmd.add_argument("--port", type=int, default=8765)
@@ -103,7 +107,9 @@ def _build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("patch", type=Path)
     apply_cmd.add_argument("-o", "--output", type=Path, required=True)
     apply_cmd.add_argument("--matlab", help="MATLAB executable path")
-    apply_cmd.add_argument("--simulate", action="store_true", help="Run a simulation after applying the patch")
+    apply_cmd.add_argument(
+        "--simulate", action="store_true", help="Run a simulation after applying the patch"
+    )
     apply_cmd.add_argument("--stop-time", default="10", help="Simulation stop time when --simulate is used")
 
     status_cmd = sub.add_parser("matlab-status", help="Check whether the MATLAB bridge can find MATLAB")
@@ -126,7 +132,25 @@ def _inspect(path: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     raw = list(sys.argv[1:] if argv is None else argv)
-    if len(raw) >= 2 and not raw[0].startswith("-") and raw[0] not in {"diff", "git-diff", "review", "context", "inspect", "view", "html", "studio", "serve", "run-m", "apply", "matlab-status"}:
+    if (
+        len(raw) >= 2
+        and not raw[0].startswith("-")
+        and raw[0]
+        not in {
+            "diff",
+            "git-diff",
+            "review",
+            "context",
+            "inspect",
+            "view",
+            "html",
+            "studio",
+            "serve",
+            "run-m",
+            "apply",
+            "matlab-status",
+        }
+    ):
         raw = ["diff", *raw]
 
     args = parser.parse_args(raw)
@@ -139,7 +163,11 @@ def main(argv: list[str] | None = None) -> int:
             old = parse_slx(args.old)
             new = parse_slx(args.new)
             report = build_review_report(old, new)
-            renderer = {"text": render_review_text, "markdown": render_review_markdown, "json": render_review_json}[args.format]
+            renderer = {
+                "text": render_review_text,
+                "markdown": render_review_markdown,
+                "json": render_review_json,
+            }[args.format]
             print(renderer(report))
             return 0
 
@@ -161,7 +189,12 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "matlab-status":
             status = find_matlab(args.matlab)
-            print(json.dumps({"available": status.available, "executable": status.executable, "detail": status.detail}, indent=2))
+            print(
+                json.dumps(
+                    {"available": status.available, "executable": status.executable, "detail": status.detail},
+                    indent=2,
+                )
+            )
             return 0 if status.available else 1
 
         if args.command in {"studio", "serve"}:

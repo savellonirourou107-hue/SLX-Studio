@@ -1,0 +1,25 @@
+name: MATLAB R2026a (self-hosted)
+
+# This workflow is intentionally manual and self-hosted. GitHub-hosted runners
+# do not include a licensed MATLAB/Simulink installation.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  matlab-r2026a:
+    runs-on: [self-hosted, windows, matlab-r2026a]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run optional MATLAB integration suite
+        shell: pwsh
+        env:
+          SLX_STUDIO_MATLAB: ${{ runner.temp }}\matlab\R2026a\bin\matlab.exe
+        run: |
+          if (-not (Test-Path -LiteralPath $env:SLX_STUDIO_MATLAB)) {
+            throw "Configure SLX_STUDIO_MATLAB or update this template for the self-hosted MATLAB installation."
+          }
+          python -m pip install -e ".[dev]"
+          python -m pytest -ra -m matlab_integration

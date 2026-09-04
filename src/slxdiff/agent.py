@@ -194,18 +194,27 @@ def provider_from_dict(payload: dict[str, Any]) -> ProviderConfig:
     if not isinstance(payload, dict):
         raise TypeError("provider must be an object")
 
-    provider_id = str(payload.get("provider_id", payload.get("id", "custom"))).strip() or "custom"
+    raw_provider_id = payload.get("provider_id", payload.get("id", "custom"))
+    if not isinstance(raw_provider_id, str):
+        raise TypeError("provider_id must be a string")
+    provider_id = raw_provider_id.strip() or "custom"
     preset = _PROVIDER_BY_ID.get(provider_id)
     if preset is None:
         raise ValueError(f"unknown provider preset {provider_id!r}")
 
-    kind = str(payload.get("kind", preset.kind)).strip()
+    raw_kind = payload.get("kind", preset.kind)
+    if not isinstance(raw_kind, str):
+        raise TypeError("provider kind must be a string")
+    kind = raw_kind.strip()
     if kind not in {"openai_responses", "openai_compatible_chat"}:
         raise ValueError("provider kind must be openai_responses or openai_compatible_chat")
     if provider_id != "custom":
         kind = preset.kind
 
-    base_url = str(payload.get("base_url", "")).strip() or preset.base_url
+    raw_base_url = payload.get("base_url", "")
+    if not isinstance(raw_base_url, str):
+        raise TypeError("provider base_url must be a string")
+    base_url = raw_base_url.strip() or preset.base_url
     if not base_url:
         base_url = "https://api.openai.com/v1" if kind == "openai_responses" else ""
     if not base_url:
@@ -216,11 +225,17 @@ def provider_from_dict(payload: dict[str, Any]) -> ProviderConfig:
     if parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("plain HTTP provider endpoints are allowed only on localhost")
 
-    model = str(payload.get("model", "")).strip() or preset.default_model
+    raw_model = payload.get("model", "")
+    if not isinstance(raw_model, str):
+        raise TypeError("provider model must be a string")
+    model = raw_model.strip() or preset.default_model
     if not model or len(model) > 256:
         raise ValueError("provider model is required")
 
-    api_key = str(payload.get("api_key", ""))
+    raw_api_key = payload.get("api_key", "")
+    if not isinstance(raw_api_key, str):
+        raise TypeError("provider api_key must be a string")
+    api_key = raw_api_key
     if not api_key:
         for env_name in (preset.api_key_env, *preset.api_key_env_aliases):
             if env_name:
@@ -230,7 +245,13 @@ def provider_from_dict(payload: dict[str, Any]) -> ProviderConfig:
     if len(api_key) > 8192 or "\r" in api_key or "\n" in api_key:
         raise ValueError("invalid API key")
 
-    timeout = float(payload.get("timeout", 60.0))
+    raw_timeout = payload.get("timeout", 60.0)
+    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, (int, float, str)):
+        raise TypeError("provider timeout must be numeric")
+    try:
+        timeout = float(raw_timeout)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("provider timeout must be numeric") from exc
     if not math.isfinite(timeout) or not (1 <= timeout <= 180):
         raise ValueError("provider timeout must be between 1 and 180 seconds")
     return ProviderConfig(
@@ -301,17 +322,78 @@ class ToolRuntime:
 
     def definitions(self) -> list[dict[str, Any]]:
         defs = [
-            _tool("get_capabilities", "Return the safe SLX Studio tool and block catalog available to this agent.", {"type": "object", "properties": {}, "additionalProperties": False}),
-            _tool("get_model_summary", "Summarize the currently loaded Simulink model without executing it.", {"type": "object", "properties": {}, "additionalProperties": False}),
-            _tool("analyze_model_structure", "Return deterministic static graph structure: sources, sinks, disconnected blocks, fan-out hotspots, outports and feedback components. This does not compile or simulate the model.", {"type": "object", "properties": {}, "additionalProperties": False}),
-            _tool("list_blocks", "List model blocks. Optionally filter by text in name/path/type.", {"type": "object", "properties": {"query": {"type": "string"}}, "additionalProperties": False}),
-            _tool("get_block", "Inspect one block by exact path.", {"type": "object", "properties": {"block_path": {"type": "string"}}, "required": ["block_path"], "additionalProperties": False}),
-            _tool("get_downstream", "Return deterministic static downstream signal-flow reach from one block.", {"type": "object", "properties": {"block_path": {"type": "string"}}, "required": ["block_path"], "additionalProperties": False}),
-            _tool("stage_parameter_edit", "Stage a conservative conflict-detecting parameter edit for a supported block. This does not modify the SLX file and rejects callback/code-like values.", {"type": "object", "properties": {"block_path": {"type": "string"}, "parameter": {"type": "string"}, "after": {"type": "string"}}, "required": ["block_path", "parameter", "after"], "additionalProperties": False}),
-            _tool("submit_blueprint", "Submit a complete safe model blueprint for validation and visual preview. Use this to design a new model.", blueprint_tool_schema()),
+            _tool(
+                "get_capabilities",
+                "Return the safe SLX Studio tool and block catalog available to this agent.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+            ),
+            _tool(
+                "get_model_summary",
+                "Summarize the currently loaded Simulink model without executing it.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+            ),
+            _tool(
+                "analyze_model_structure",
+                "Return deterministic static graph structure: sources, sinks, disconnected blocks, fan-out hotspots, outports and feedback components. This does not compile or simulate the model.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+            ),
+            _tool(
+                "list_blocks",
+                "List model blocks. Optionally filter by text in name/path/type.",
+                {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+            ),
+            _tool(
+                "get_block",
+                "Inspect one block by exact path.",
+                {
+                    "type": "object",
+                    "properties": {"block_path": {"type": "string"}},
+                    "required": ["block_path"],
+                    "additionalProperties": False,
+                },
+            ),
+            _tool(
+                "get_downstream",
+                "Return deterministic static downstream signal-flow reach from one block.",
+                {
+                    "type": "object",
+                    "properties": {"block_path": {"type": "string"}},
+                    "required": ["block_path"],
+                    "additionalProperties": False,
+                },
+            ),
+            _tool(
+                "stage_parameter_edit",
+                "Stage a conservative conflict-detecting parameter edit for a supported block. This does not modify the SLX file and rejects callback/code-like values.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "block_path": {"type": "string"},
+                        "parameter": {"type": "string"},
+                        "after": {"type": "string"},
+                    },
+                    "required": ["block_path", "parameter", "after"],
+                    "additionalProperties": False,
+                },
+            ),
+            _tool(
+                "submit_blueprint",
+                "Submit a complete safe model blueprint for validation and visual preview. Use this to design a new model.",
+                blueprint_tool_schema(),
+            ),
         ]
         if self.allow_build:
-            defs.append(_tool("build_blueprint", "Build the last validated blueprint through the restricted MATLAB bridge. No arbitrary MATLAB code is accepted.", {"type": "object", "properties": {}, "additionalProperties": False}))
+            defs.append(
+                _tool(
+                    "build_blueprint",
+                    "Build the last validated blueprint through the restricted MATLAB bridge. No arbitrary MATLAB code is accepted.",
+                    {"type": "object", "properties": {}, "additionalProperties": False},
+                )
+            )
         return defs
 
     def _require_model(self) -> Model:
@@ -331,6 +413,12 @@ class ToolRuntime:
                 "matlab": {"available": matlab.available, "detail": matlab.detail},
                 "build_enabled": self.allow_build,
                 "security": {"arbitrary_matlab_execution": False, "blueprint_validation_required": True},
+                "model": {
+                    "loaded": self.model is not None,
+                    "unsupported_features": list(self.model.metadata.get("unsupported_features", []))
+                    if self.model is not None
+                    else [],
+                },
             }
         if name == "get_model_summary":
             model = self._require_model()
@@ -340,6 +428,7 @@ class ToolRuntime:
                 "block_count": len(model.blocks),
                 "connection_count": len(model.lines),
                 "block_types": _counts(block.block_type for block in model.blocks.values()),
+                "unsupported_features": list(model.metadata.get("unsupported_features", [])),
             }
         if name == "analyze_model_structure":
             return _analyze_structure(self._require_model())
@@ -361,14 +450,24 @@ class ToolRuntime:
             block = next((item for item in model.blocks.values() if item.path == path), None)
             if block is None:
                 raise ValueError(f"block not found: {path}")
-            return {"path": block.path, "name": block.name, "type": block.block_type, "sid": block.sid, "parameters": dict(block.parameters)}
+            return {
+                "path": block.path,
+                "name": block.name,
+                "type": block.block_type,
+                "sid": block.sid,
+                "parameters": dict(block.parameters),
+            }
         if name == "get_downstream":
             model = self._require_model()
             path = str(arguments.get("block_path", ""))
             if not any(item.path == path for item in model.blocks.values()):
                 raise ValueError(f"block not found: {path}")
             downstream = _downstream(model, path)
-            outports = [block.path for block in model.blocks.values() if block.path in downstream and block.block_type == "Outport"]
+            outports = [
+                block.path
+                for block in model.blocks.values()
+                if block.path in downstream and block.block_type == "Outport"
+            ]
             return {"block_path": path, "downstream": downstream, "affected_outports": sorted(outports)}
         if name == "stage_parameter_edit":
             model = self._require_model()
@@ -382,18 +481,39 @@ class ToolRuntime:
                 raise ValueError(f"block not found: {path}")
             if parameter not in block.parameters:
                 raise ValueError(f"parameter {parameter!r} is not exposed for block {path!r}")
-            catalog_key = next((key for key, spec in BLOCK_CATALOG.items() if spec.block_type == block.block_type and parameter in spec.parameters), None)
+            catalog_key = next(
+                (
+                    key
+                    for key, spec in BLOCK_CATALOG.items()
+                    if spec.block_type == block.block_type and parameter in spec.parameters
+                ),
+                None,
+            )
             if catalog_key is None:
-                raise ValueError(f"automatic agent edits do not allow parameter {parameter!r} on block type {block.block_type!r}")
+                raise ValueError(
+                    f"automatic agent edits do not allow parameter {parameter!r} on block type {block.block_type!r}"
+                )
             after = validate_automatic_parameter_value(catalog_key, parameter, after)
             before = str(block.parameters[parameter])
             op = PatchOperation("set_param", path, parameter, before, after, block.sid, block.system_id)
             self.staged[(path, parameter)] = op
-            return {"staged": True, "block_path": path, "parameter": parameter, "before": before, "after": after}
+            return {
+                "staged": True,
+                "block_path": path,
+                "parameter": parameter,
+                "before": before,
+                "after": after,
+            }
         if name == "submit_blueprint":
             document = blueprint_from_dict(arguments)
             self.blueprint = document
-            return {"valid": True, "model_name": document.model_name, "blocks": len(document.blocks), "connections": len(document.connections), "blueprint": document.to_dict()}
+            return {
+                "valid": True,
+                "model_name": document.model_name,
+                "blocks": len(document.blocks),
+                "connections": len(document.connections),
+                "blueprint": document.to_dict(),
+            }
         if name == "build_blueprint":
             if not self.allow_build:
                 raise ValueError("automatic MATLAB build is not enabled for this agent run")
@@ -407,7 +527,9 @@ class ToolRuntime:
             else:
                 output = self.build_output / f"{self.blueprint.model_name}.slx"
             with self.execution_lock:
-                self.build_result = build_blueprint_with_matlab(self.blueprint, output_path=output, matlab=self.matlab)
+                self.build_result = build_blueprint_with_matlab(
+                    self.blueprint, output_path=output, matlab=self.matlab
+                )
             return self.build_result
         raise ValueError(f"unknown tool {name!r}")
 
@@ -466,7 +588,11 @@ def _analyze_structure(model: Model) -> dict[str, Any]:
     disconnected = sorted(path for path in block_paths if not reverse[path] and not adjacency[path])
     outports = sorted(block.path for block in model.blocks.values() if block.block_type == "Outport")
     fanout = sorted(
-        ({"block_path": path, "fanout": len(targets)} for path, targets in adjacency.items() if len(targets) > 1),
+        (
+            {"block_path": path, "fanout": len(targets)}
+            for path, targets in adjacency.items()
+            if len(targets) > 1
+        ),
         key=lambda item: (-item["fanout"], item["block_path"]),
     )[:20]
 
@@ -519,6 +645,7 @@ def _analyze_structure(model: Model) -> dict[str, Any]:
         "high_fanout": fanout,
         "feedback_components": components[:50],
         "block_types": _counts(block.block_type for block in by_path.values()),
+        "unsupported_features": list(model.metadata.get("unsupported_features", [])),
     }
 
 
@@ -549,7 +676,13 @@ def run_agent(
         raise ValueError("agent prompt is required")
     if len(prompt) > _MAX_PROMPT_CHARS:
         raise ValueError("agent prompt is too large")
-    runtime = ToolRuntime(model_path, matlab=matlab, build_output=build_output, allow_build=allow_build, execution_lock=execution_lock)
+    runtime = ToolRuntime(
+        model_path,
+        matlab=matlab,
+        build_output=build_output,
+        allow_build=allow_build,
+        execution_lock=execution_lock,
+    )
     result = AgentRunResult()
     definitions = runtime.definitions()
     if provider.kind == "openai_responses":
@@ -562,9 +695,23 @@ def run_agent(
     return result
 
 
-def _run_responses(config: ProviderConfig, prompt: str, runtime: ToolRuntime, definitions: list[dict[str, Any]], result: AgentRunResult, *, language: str) -> None:
+def _run_responses(
+    config: ProviderConfig,
+    prompt: str,
+    runtime: ToolRuntime,
+    definitions: list[dict[str, Any]],
+    result: AgentRunResult,
+    *,
+    language: str,
+) -> None:
     tools = [{"type": "function", **definition} for definition in definitions]
-    body: dict[str, Any] = {"model": config.model, "instructions": _system_prompt(runtime, language=language), "input": prompt, "tools": tools, "tool_choice": "auto"}
+    body: dict[str, Any] = {
+        "model": config.model,
+        "instructions": _system_prompt(runtime, language=language),
+        "input": prompt,
+        "tools": tools,
+        "tool_choice": "auto",
+    }
     for _ in range(_MAX_AGENT_STEPS):
         response = _post_json(config, body)
         calls = []
@@ -577,37 +724,74 @@ def _run_responses(config: ProviderConfig, prompt: str, runtime: ToolRuntime, de
                 try:
                     args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                 except json.JSONDecodeError as exc:
-                    raise RuntimeError(f"AI provider emitted invalid tool arguments for {item.get('name')}") from exc
+                    raise RuntimeError(
+                        f"AI provider emitted invalid tool arguments for {item.get('name')}"
+                    ) from exc
                 calls.append((str(item.get("call_id", "")), str(item.get("name", "")), args))
             if item.get("type") == "message":
                 for content in item.get("content", []) if isinstance(item.get("content"), list) else []:
                     if isinstance(content, dict) and content.get("type") in {"output_text", "text"}:
                         text_parts.append(str(content.get("text", "")))
         if not calls:
-            result.text = "\n".join(part for part in text_parts if part).strip() or str(response.get("output_text", "")).strip()
+            result.text = (
+                "\n".join(part for part in text_parts if part).strip()
+                or str(response.get("output_text", "")).strip()
+            )
             return
         outputs = []
         for call_id, name, args in calls:
             try:
                 tool_result = runtime.call(name, args if isinstance(args, dict) else {})
-                trace = {"tool": name, "ok": True, "arguments": _redacted_args(name, args), "result": tool_result}
+                trace = {
+                    "tool": name,
+                    "ok": True,
+                    "arguments": _redacted_args(name, args),
+                    "result": tool_result,
+                }
             except (ValueError, RuntimeError) as exc:
                 tool_result = {"ok": False, "error": str(exc)}
-                trace = {"tool": name, "ok": False, "arguments": _redacted_args(name, args), "error": str(exc)}
+                trace = {
+                    "tool": name,
+                    "ok": False,
+                    "arguments": _redacted_args(name, args),
+                    "error": str(exc),
+                }
             result.trace.append(trace)
-            outputs.append({"type": "function_call_output", "call_id": call_id, "output": json.dumps(tool_result, ensure_ascii=False)})
-        body = {"model": config.model, "previous_response_id": response.get("id"), "input": outputs, "tools": tools, "tool_choice": "auto"}
+            outputs.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(tool_result, ensure_ascii=False),
+                }
+            )
+        body = {
+            "model": config.model,
+            "previous_response_id": response.get("id"),
+            "input": outputs,
+            "tools": tools,
+            "tool_choice": "auto",
+        }
     raise RuntimeError("AI agent exceeded the maximum tool-call steps")
 
 
-def _run_chat(config: ProviderConfig, prompt: str, runtime: ToolRuntime, definitions: list[dict[str, Any]], result: AgentRunResult, *, language: str) -> None:
+def _run_chat(
+    config: ProviderConfig,
+    prompt: str,
+    runtime: ToolRuntime,
+    definitions: list[dict[str, Any]],
+    result: AgentRunResult,
+    *,
+    language: str,
+) -> None:
     tools = [{"type": "function", "function": definition} for definition in definitions]
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": _system_prompt(runtime, language=language)},
         {"role": "user", "content": prompt},
     ]
     for _ in range(_MAX_AGENT_STEPS):
-        response = _post_json(config, {"model": config.model, "messages": messages, "tools": tools, "tool_choice": "auto"})
+        response = _post_json(
+            config, {"model": config.model, "messages": messages, "tools": tools, "tool_choice": "auto"}
+        )
         choices = response.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
             raise RuntimeError("AI provider returned no chat completion choice")
@@ -629,17 +813,39 @@ def _run_chat(config: ProviderConfig, prompt: str, runtime: ToolRuntime, definit
                 raise RuntimeError(f"AI provider emitted invalid tool arguments for {name}") from exc
             try:
                 tool_result = runtime.call(name, args if isinstance(args, dict) else {})
-                trace = {"tool": name, "ok": True, "arguments": _redacted_args(name, args), "result": tool_result}
+                trace = {
+                    "tool": name,
+                    "ok": True,
+                    "arguments": _redacted_args(name, args),
+                    "result": tool_result,
+                }
             except (ValueError, RuntimeError) as exc:
                 tool_result = {"ok": False, "error": str(exc)}
-                trace = {"tool": name, "ok": False, "arguments": _redacted_args(name, args), "error": str(exc)}
+                trace = {
+                    "tool": name,
+                    "ok": False,
+                    "arguments": _redacted_args(name, args),
+                    "error": str(exc),
+                }
             result.trace.append(trace)
-            messages.append({"role": "tool", "tool_call_id": str(call.get("id", "")), "content": json.dumps(tool_result, ensure_ascii=False)})
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(call.get("id", "")),
+                    "content": json.dumps(tool_result, ensure_ascii=False),
+                }
+            )
     raise RuntimeError("AI agent exceeded the maximum tool-call steps")
 
 
 def _redacted_args(name: str, args: Any) -> Any:
     # Tool arguments never contain provider credentials; cap large blueprints in traces.
     if name in {"submit_blueprint"} and isinstance(args, dict):
-        return {"model_name": args.get("model_name"), "blocks": len(args.get("blocks", [])) if isinstance(args.get("blocks"), list) else None, "connections": len(args.get("connections", [])) if isinstance(args.get("connections"), list) else None}
+        return {
+            "model_name": args.get("model_name"),
+            "blocks": len(args.get("blocks", [])) if isinstance(args.get("blocks"), list) else None,
+            "connections": len(args.get("connections", []))
+            if isinstance(args.get("connections"), list)
+            else None,
+        }
     return args

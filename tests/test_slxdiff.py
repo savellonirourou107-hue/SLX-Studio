@@ -14,22 +14,21 @@ from slxdiff.render import render_git_markdown, render_markdown
 
 def make_slx(path: Path, *, gain: str = "2", add_sink: bool = False, x_pos: int = 100) -> None:
     sink = (
-        '<Block BlockType="Outport" Name="Scope" SID="3">'
-        '<P Name="Position">[400 100 430 130]</P></Block>'
+        '<Block BlockType="Outport" Name="Scope" SID="3"><P Name="Position">[400 100 430 130]</P></Block>'
         if add_sink
         else ""
     )
     line2 = '<Line><P Name="Src">2#out:1</P><P Name="Dst">3#in:1</P></Line>' if add_sink else ""
-    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <System>
   <Block BlockType="Inport" Name="Input" SID="1"><P Name="Position">[20 100 50 130]</P></Block>
   <Block BlockType="Gain" Name="Gain" SID="2">
-    <P Name="Gain">{gain}</P><P Name="Position">[{x_pos} 100 {x_pos+40} 130]</P>
+    <P Name="Gain">{gain}</P><P Name="Position">[{x_pos} 100 {x_pos + 40} 130]</P>
   </Block>
   {sink}
   <Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line>
   {line2}
-</System>'''
+</System>"""
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
@@ -205,9 +204,9 @@ def test_studio_escapes_script_terminator(tmp_path: Path) -> None:
     from slxdiff.studio import write_studio_html
 
     model = tmp_path / "unsafe.slx"
-    xml = '''<?xml version="1.0"?><System>
+    xml = """<?xml version="1.0"?><System>
     <Block BlockType="Gain" Name="Unsafe" SID="1"><P Name="Gain">&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;</P></Block>
-    </System>'''
+    </System>"""
     with zipfile.ZipFile(model, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
     output = tmp_path / "unsafe.html"
@@ -270,8 +269,8 @@ def test_studio_contains_editable_patch_metadata(tmp_path: Path) -> None:
     write_studio_html(model_path, output=output)
     html = output.read_text(encoding="utf-8")
     model = parse_slx(model_path)
-    assert 'Download Patch' in html
-    assert 'Apply in MATLAB' in html
+    assert "Download Patch" in html
+    assert "Apply in MATLAB" in html
     assert '"patch_schema_version":"0.1"' in html
     assert model.metadata["sha256"] in html
 
@@ -445,7 +444,7 @@ def test_review_intelligence_prioritizes_sample_time_changes(tmp_path: Path) -> 
     from slxdiff.review import build_review_report
 
     def make_sample_model(path: Path, sample_time: str) -> None:
-        xml = f'''<?xml version="1.0"?>
+        xml = f"""<?xml version="1.0"?>
 <System>
   <Block BlockType="Inport" Name="Input" SID="1" />
   <Block BlockType="Gain" Name="Controller" SID="2">
@@ -454,7 +453,7 @@ def test_review_intelligence_prioritizes_sample_time_changes(tmp_path: Path) -> 
   <Block BlockType="Outport" Name="Output" SID="3" />
   <Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line>
   <Line><P Name="Src">2#out:1</P><P Name="Dst">3#in:1</P></Line>
-</System>'''
+</System>"""
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("simulink/systems/system_root.xml", xml)
 
@@ -509,18 +508,16 @@ def test_review_blast_radius_keeps_removed_signal_path(tmp_path: Path) -> None:
 
     def make_path_model(path: Path, *, connected_to_output: bool) -> None:
         final_line = (
-            '<Line><P Name="Src">2#out:1</P><P Name="Dst">3#in:1</P></Line>'
-            if connected_to_output
-            else ""
+            '<Line><P Name="Src">2#out:1</P><P Name="Dst">3#in:1</P></Line>' if connected_to_output else ""
         )
-        xml = f'''<?xml version="1.0"?>
+        xml = f"""<?xml version="1.0"?>
 <System>
   <Block BlockType="Inport" Name="Input" SID="1" />
   <Block BlockType="Gain" Name="Controller" SID="2"><P Name="Gain">2</P></Block>
   <Block BlockType="Outport" Name="Output" SID="3" />
   <Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line>
   {final_line}
-</System>'''
+</System>"""
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("simulink/systems/system_root.xml", xml)
 
@@ -543,9 +540,27 @@ def sample_blueprint() -> dict:
         "model_name": "ai_demo",
         "description": "Step through a gain to an output.",
         "blocks": [
-            {"id": "ref", "type": "step", "name": "Reference", "position": [20, 100, 70, 130], "parameters": {"Time": "0", "Before": "0", "After": "1"}},
-            {"id": "kp", "type": "gain", "name": "Kp", "position": [150, 100, 200, 130], "parameters": {"Gain": "2"}},
-            {"id": "out", "type": "outport", "name": "Output", "position": [300, 100, 330, 130], "parameters": {}},
+            {
+                "id": "ref",
+                "type": "step",
+                "name": "Reference",
+                "position": [20, 100, 70, 130],
+                "parameters": {"Time": "0", "Before": "0", "After": "1"},
+            },
+            {
+                "id": "kp",
+                "type": "gain",
+                "name": "Kp",
+                "position": [150, 100, 200, 130],
+                "parameters": {"Gain": "2"},
+            },
+            {
+                "id": "out",
+                "type": "outport",
+                "name": "Output",
+                "position": [300, 100, 330, 130],
+                "parameters": {},
+            },
         ],
         "connections": [
             {"src": "ref", "dst": "kp", "src_port": 1, "dst_port": 1},
@@ -588,7 +603,7 @@ def test_blueprint_matlab_bridge_with_fake_executable(tmp_path: Path) -> None:
 
     fake = tmp_path / "fake-matlab-blueprint"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -598,7 +613,7 @@ req = json.loads(request.read_text())
 out = pathlib.Path(req['output_model'])
 out.write_bytes(b'fake-slx')
 result.write_text(json.dumps({'ok': True, 'message': 'built', 'output_model': str(out), 'model_name': req['model_name'], 'block_count': len(req['blocks']), 'connection_count': len(req['connections'])}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -640,7 +655,11 @@ def test_v1_api_supports_blank_workspace_and_blueprint_preview(tmp_path: Path) -
             "POST",
             "/api/v1/blueprints/validate",
             body=body,
-            headers={**headers, "Content-Type": "application/json", "Content-Length": str(len(body.encode()))},
+            headers={
+                **headers,
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body.encode())),
+            },
         )
         response = conn.getresponse()
         payload = json.loads(response.read())
@@ -674,20 +693,29 @@ def test_agent_chat_openai_compatible_tool_loop(tmp_path: Path) -> None:
             requests.append(body)
             if len(requests) == 1:
                 payload = {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [{
-                                "id": "call_1",
-                                "type": "function",
-                                "function": {"name": "submit_blueprint", "arguments": json.dumps(blueprint)},
-                            }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "submit_blueprint",
+                                            "arguments": json.dumps(blueprint),
+                                        },
+                                    }
+                                ],
+                            }
                         }
-                    }]
+                    ]
                 }
             else:
-                payload = {"choices": [{"message": {"role": "assistant", "content": "Blueprint ready for review."}}]}
+                payload = {
+                    "choices": [{"message": {"role": "assistant", "content": "Blueprint ready for review."}}]
+                }
             raw = json.dumps(payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -700,12 +728,14 @@ def test_agent_chat_openai_compatible_tool_loop(tmp_path: Path) -> None:
     thread.start()
     try:
         host, port = provider_server.server_address
-        provider = provider_from_dict({
-            "kind": "openai_compatible_chat",
-            "base_url": f"http://{host}:{port}/v1",
-            "model": "fake-model",
-            "api_key": "secret-not-persisted",
-        })
+        provider = provider_from_dict(
+            {
+                "kind": "openai_compatible_chat",
+                "base_url": f"http://{host}:{port}/v1",
+                "model": "fake-model",
+                "api_key": "secret-not-persisted",
+            }
+        )
         result = run_agent(provider, "Build a tiny model", model_path=None, allow_build=False)
         assert result.text == "Blueprint ready for review."
         assert result.blueprint is not None
@@ -830,12 +860,19 @@ def test_structural_model_edit_validation_and_bridge(tmp_path: Path) -> None:
     document = build_single_edit(
         model,
         model_path,
-        {"op": "add_block", "block_type": "scope", "name": "Monitor", "parent": "", "position": [300, 180, 350, 220], "parameters": {}},
+        {
+            "op": "add_block",
+            "block_type": "scope",
+            "name": "Monitor",
+            "parent": "",
+            "position": [300, 180, 350, 220],
+            "parameters": {},
+        },
     )
 
     fake = tmp_path / "fake-matlab-edit"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -844,7 +881,7 @@ result = pathlib.Path(re.search(r"resultPath = '(.+)';", text).group(1).replace(
 req = json.loads(request.read_text())
 assert req['edit']['operations'][0]['library'] == 'simulink/Sinks/Scope'
 result.write_text(json.dumps({'ok': True, 'message': 'edited', 'output_model': req['output_model']}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -881,10 +918,20 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
 
         body = json.dumps({"path": "demo.m", "content": "x = 7;\n"})
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("POST", "/api/v1/workspace/save", body=body, headers={**headers, "Content-Type": "application/json", "Content-Length": str(len(body.encode()))})
+        conn.request(
+            "POST",
+            "/api/v1/workspace/save",
+            body=body,
+            headers={
+                **headers,
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body.encode())),
+            },
+        )
         response = conn.getresponse()
         assert response.status == 200
-        response.read(); conn.close()
+        response.read()
+        conn.close()
         assert script.read_text(encoding="utf-8") == "x = 7;\n"
 
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
@@ -897,7 +944,9 @@ def test_workbench_api_reads_saves_and_serves_slx(tmp_path: Path) -> None:
         assert "+ Block" in html
         conn.close()
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_workbench_html_is_bilingual_and_has_m_editor() -> None:
@@ -918,7 +967,7 @@ def test_create_empty_slx_with_fake_matlab(tmp_path: Path) -> None:
 
     fake = tmp_path / "fake-matlab-create"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import pathlib, re, sys
 expr = sys.argv[2]
 match = re.search(r"save_system\\('[^']+','([^']+)'\\)", expr)
@@ -927,7 +976,7 @@ if not match:
 path = pathlib.Path(match.group(1).replace("''", "'"))
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_bytes(b'fake slx')
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -1006,7 +1055,7 @@ def test_m_runner_accepts_workspace_metadata_from_matlab_wrapper(tmp_path: Path)
     script.write_text("x = 42;\nname = 'demo';\n", encoding="utf-8")
     fake = tmp_path / "fake-matlab-vars"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -1020,7 +1069,7 @@ result.write_text(json.dumps({
   'error': {}
 }))
 print('fake execution complete')
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -1072,7 +1121,7 @@ def test_v09_section_runner_preserves_source_line_offset(tmp_path: Path) -> None
     script.write_text("%% one\na = 1;\n%% two\nb = missing_name;\n", encoding="utf-8")
     fake = tmp_path / "fake-matlab-section"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -1083,7 +1132,7 @@ section = pathlib.Path(re.search(r"scriptPath = '(.+)';", text).group(1).replace
 assert 'b = missing_name;' in section.read_text()
 result = pathlib.Path(re.search(r"resultPath = '(.+)';", text).group(1).replace("''", "'"))
 result.write_text(json.dumps({'ok': True, 'variables': [], 'figures': [], 'error': {}}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -1101,7 +1150,7 @@ def test_v09_runner_captures_matlab_figure_payload(tmp_path: Path) -> None:
     script.write_text("plot(1:3)\n", encoding="utf-8")
     fake = tmp_path / "fake-matlab-figure"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -1111,7 +1160,7 @@ figure_dir.mkdir(parents=True, exist_ok=True)
 png = figure_dir / 'figure-01.png'
 png.write_bytes(b'fake-png-data')
 result.write_text(json.dumps({'ok': True, 'variables': [], 'figures': [{'name':'Response','path':str(png)}], 'error': {}}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -1242,7 +1291,7 @@ def test_v10_command_session_uses_shared_checkpoint_and_returns_variables(tmp_pa
 
     fake = tmp_path / "fake-matlab-command"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
@@ -1251,7 +1300,7 @@ workspace.parent.mkdir(parents=True, exist_ok=True)
 workspace.write_bytes(b'checkpoint')
 result = pathlib.Path(re.search(r"resultPath = '(.+)';", text).group(1).replace("''", "'"))
 result.write_text(json.dumps({'ok': True, 'stdout': 'Kp = 3\\n', 'variables': [{'name':'Kp','class':'double','size':'1x1','bytes':8,'preview':'3'}], 'figures': [], 'error': {}}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
@@ -1290,17 +1339,19 @@ def test_v10_parameter_sweep_returns_series_and_metrics(tmp_path: Path) -> None:
     make_slx(model, gain="2")
     fake = tmp_path / "fake-matlab-sweep"
     fake.write_text(
-        '''#!/usr/bin/env python3
+        """#!/usr/bin/env python3
 import json, pathlib, re, sys
 runner = pathlib.Path(re.search(r"run\\('(.+)'\\)", sys.argv[2]).group(1).replace("''", "'"))
 text = runner.read_text()
 result = pathlib.Path(re.search(r"resultPath = '(.+)';", text).group(1).replace("''", "'"))
 result.write_text(json.dumps({'ok': True, 'message':'done', 'elapsed_seconds':0.1, 'runs':[{'value':'1','elapsed_seconds':0.01,'series':[{'name':'y','time':[0,1,2],'data':[0,0.8,1]}]},{'value':'2','elapsed_seconds':0.01,'series':[{'name':'y','time':[0,1,2],'data':[0,1.1,1]}]}]}))
-''',
+""",
         encoding="utf-8",
     )
     os.chmod(fake, 0o755)
-    result = run_parameter_sweep_with_matlab(model, block_path="Gain", parameter="Gain", values="1,2", matlab=fake)
+    result = run_parameter_sweep_with_matlab(
+        model, block_path="Gain", parameter="Gain", values="1,2", matlab=fake
+    )
     assert result["ok"] is True
     assert len(result["runs"]) == 2
     assert result["runs"][0]["series"][0]["metrics"]["final"] == 1.0
@@ -1311,7 +1362,13 @@ def test_v10_workbench_has_command_window_sweep_recovery_and_command_palette() -
     from slxdiff.workbench import render_workbench_html
 
     html = render_workbench_html({"token": "x", "root": "/tmp/demo", "initial_file": None})
-    for marker in ['id="commandInput"', 'id="sweep"', 'id="sweepBackdrop"', 'id="recoveryBanner"', 'id="commandPalette"']:
+    for marker in [
+        'id="commandInput"',
+        'id="sweep"',
+        'id="sweepBackdrop"',
+        'id="recoveryBanner"',
+        'id="commandPalette"',
+    ]:
         assert marker in html
     assert "/api/v1/workspace/command" in html
     assert "/api/v1/workspace/variables/set" in html
@@ -1336,12 +1393,12 @@ def test_v10_studio_routes_workbench_simulation_through_parent_job_manager(tmp_p
 
 def test_beta2_parser_escapes_slashes_in_block_names(tmp_path: Path) -> None:
     path = tmp_path / "slash-name.slx"
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
 <System>
   <Block BlockType="Gain" Name="A/B" SID="1"><P Name="Gain">2</P></Block>
   <Block BlockType="Outport" Name="Out" SID="2" />
   <Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line>
-</System>'''
+</System>"""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
     model = parse_slx(path)
@@ -1390,7 +1447,11 @@ def test_beta2_recovery_detects_external_disk_change(tmp_path: Path, monkeypatch
 
         parsed = urlparse(url)
         body = json.dumps({"path": "controller.m"})
-        headers = {"X-SLX-Studio-Token": "beta2-token", "Content-Type": "application/json", "Content-Length": str(len(body.encode()))}
+        headers = {
+            "X-SLX-Studio-Token": "beta2-token",
+            "Content-Type": "application/json",
+            "Content-Length": str(len(body.encode())),
+        }
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
         conn.request("POST", "/api/v1/workspace/read", body=body, headers=headers)
         response = conn.getresponse()
@@ -1401,10 +1462,14 @@ def test_beta2_recovery_detects_external_disk_change(tmp_path: Path, monkeypatch
         assert payload["recovery"]["content"] == "Kp = 3;\n"
         assert payload["recovery"]["disk_conflict"] is True
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
-def test_beta2_simulation_reports_disk_change_even_when_simulation_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_beta2_simulation_reports_disk_change_even_when_simulation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import time
 
     from slxdiff.history import ModelHistory
@@ -1438,9 +1503,15 @@ def test_beta2_simulation_reports_disk_change_even_when_simulation_fails(tmp_pat
         assert status["model_changed"] is True
         assert status["history"]["can_undo"] is True
         history.undo(model)
-        assert next(block for block in parse_slx(model).blocks.values() if block.name == "Gain").parameters["Gain"] == "2"
+        assert (
+            next(block for block in parse_slx(model).blocks.values() if block.name == "Gain").parameters[
+                "Gain"
+            ]
+            == "2"
+        )
     finally:
-        manager.stop_all(); history.close()
+        manager.stop_all()
+        history.close()
 
 
 def test_beta2_installer_does_not_take_over_default_file_associations() -> None:
@@ -1455,21 +1526,27 @@ def test_beta2_agent_parameter_edit_rejects_callbacks_and_code_values(tmp_path: 
     from slxdiff.agent import ToolRuntime
 
     path = tmp_path / "agent-safe.slx"
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
 <System>
   <Block BlockType="Gain" Name="Kp" SID="1">
     <P Name="Gain">2</P><P Name="OpenFcn">disp('opened')</P><P Name="Position">[100 100 140 130]</P>
   </Block>
-</System>'''
+</System>"""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
     runtime = ToolRuntime(path)
-    good = runtime.call("stage_parameter_edit", {"block_path": "Kp", "parameter": "Gain", "after": "Kp0*2 + 0.5"})
+    good = runtime.call(
+        "stage_parameter_edit", {"block_path": "Kp", "parameter": "Gain", "after": "Kp0*2 + 0.5"}
+    )
     assert good["staged"] is True
     with pytest.raises(ValueError, match="do not allow parameter"):
-        runtime.call("stage_parameter_edit", {"block_path": "Kp", "parameter": "OpenFcn", "after": "disp('owned')"})
+        runtime.call(
+            "stage_parameter_edit", {"block_path": "Kp", "parameter": "OpenFcn", "after": "disp('owned')"}
+        )
     with pytest.raises(ValueError, match="not allowed|may not call MATLAB functions"):
-        runtime.call("stage_parameter_edit", {"block_path": "Kp", "parameter": "Gain", "after": "system('calc')"})
+        runtime.call(
+            "stage_parameter_edit", {"block_path": "Kp", "parameter": "Gain", "after": "system('calc')"}
+        )
 
 
 def test_beta2_simulink_path_helpers_preserve_escaped_slashes_and_rename(tmp_path: Path) -> None:
@@ -1477,10 +1554,10 @@ def test_beta2_simulink_path_helpers_preserve_escaped_slashes_and_rename(tmp_pat
     from slxdiff.slx_path import basename, parent_path, relative_to_system, split_path
 
     path = tmp_path / "slash-rename.slx"
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
 <System>
   <Block BlockType="Gain" Name="A/B" SID="1"><P Name="Gain">2</P><P Name="Position">[100 100 140 130]</P></Block>
-</System>'''
+</System>"""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
     model = parse_slx(path)
@@ -1491,7 +1568,9 @@ def test_beta2_simulink_path_helpers_preserve_escaped_slashes_and_rename(tmp_pat
     assert split_path("Controller/A//B") == ["Controller", "A/B"]
     assert parent_path("Controller/A//B") == "Controller"
     assert relative_to_system("Controller/A//B", "Controller") == "A//B"
-    document = build_single_edit(model, path, {"op": "rename_block", "block_path": "A//B", "sid": "1", "new_name": "Renamed"})
+    document = build_single_edit(
+        model, path, {"op": "rename_block", "block_path": "A//B", "sid": "1", "new_name": "Renamed"}
+    )
     validate_edit_document(document, model, source_path=path)
 
 
@@ -1539,26 +1618,48 @@ def test_beta2_model_edit_failure_is_transactional(tmp_path: Path, monkeypatch: 
             "schema_version": "0.1",
             "model_name": "controller",
             "source_sha256": sha256_file(model),
-            "operations": [{"op": "set_param", "block_path": "Gain", "parameter": "Gain", "before": "2", "after": "9", "sid": "2"}],
+            "operations": [
+                {
+                    "op": "set_param",
+                    "block_path": "Gain",
+                    "parameter": "Gain",
+                    "before": "2",
+                    "after": "9",
+                    "sid": "2",
+                }
+            ],
         }
         body = json.dumps({"path": "controller.slx", "edit": edit})
         parsed = urlparse(url)
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("POST", "/api/v1/workspace/model-edit", body=body, headers={"X-SLX-Studio-Token": "tx-token", "Content-Type": "application/json", "Content-Length": str(len(body.encode()))})
-        response = conn.getresponse(); payload = json.loads(response.read()); conn.close()
+        conn.request(
+            "POST",
+            "/api/v1/workspace/model-edit",
+            body=body,
+            headers={
+                "X-SLX-Studio-Token": "tx-token",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body.encode())),
+            },
+        )
+        response = conn.getresponse()
+        payload = json.loads(response.read())
+        conn.close()
         assert response.status == 400
         assert "failed after writing" in payload["error"]
         gain = next(block for block in parse_slx(model).blocks.values() if block.name == "Gain")
         assert gain.parameters["Gain"] == "2"
         assert not list(project.glob(".controller.slxstudio-*.slx"))
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_beta2_parser_preserves_canonical_newline_name_path(tmp_path: Path) -> None:
     path = tmp_path / "newline-name.slx"
-    xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<System><Block BlockType="Gain" Name="A&#10;B" SID="1"><P Name="Gain">2</P></Block></System>'''
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<System><Block BlockType="Gain" Name="A&#10;B" SID="1"><P Name="Gain">2</P></Block></System>"""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
     block = next(iter(parse_slx(path).blocks.values()))
@@ -1566,7 +1667,9 @@ def test_beta2_parser_preserves_canonical_newline_name_path(tmp_path: Path) -> N
     assert block.path == "A\nB"
 
 
-def test_beta2_shared_execution_gate_serializes_jobs_and_cancels_queued_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_beta2_shared_execution_gate_serializes_jobs_and_cancels_queued_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import threading
     import time
     from types import SimpleNamespace
@@ -1583,7 +1686,10 @@ def test_beta2_shared_execution_gate_serializes_jobs_and_cancels_queued_work(tmp
     release = threading.Event()
     sweep_called = threading.Event()
 
-    monkeypatch.setattr("slxdiff.mrunner.find_matlab", lambda _matlab=None: SimpleNamespace(available=True, executable="fake", detail="ok"))
+    monkeypatch.setattr(
+        "slxdiff.mrunner.find_matlab",
+        lambda _matlab=None: SimpleNamespace(available=True, executable="fake", detail="ok"),
+    )
 
     def fake_run_m(*_args, **_kwargs):
         entered.set()
@@ -1633,7 +1739,9 @@ def test_beta2_matlab_runners_use_base_workspace_without_internal_name_collision
     assert "assignin('base', name, state.(name))" in runner
     assert "raw = evalin('base', 'whos')" in runner
     # Loading no longer occurs into the wrapper's own workspace, where user names could overwrite internals.
-    assert "if ~isempty(workspaceFile) && exist(workspaceFile, 'file'), load(workspaceFile); end" not in runner
+    assert (
+        "if ~isempty(workspaceFile) && exist(workspaceFile, 'file'), load(workspaceFile); end" not in runner
+    )
 
     command = "resultPath = 123;\ncommandText = 'user value';\ndisp('你好')"
     command_runner = _command_runner_source(
@@ -1650,7 +1758,9 @@ def test_beta2_matlab_runners_use_base_workspace_without_internal_name_collision
     assert command not in command_runner
 
 
-def test_beta2_find_matlab_discovers_standard_desktop_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_beta2_find_matlab_discovers_standard_desktop_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import os
 
     from slxdiff.matlab_bridge import find_matlab
@@ -1667,7 +1777,9 @@ def test_beta2_find_matlab_discovers_standard_desktop_install(tmp_path: Path, mo
     assert "standard install location" in status.detail
 
 
-def test_beta2_transactional_model_edit_saves_original_name_then_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_beta2_transactional_model_edit_saves_original_name_then_rolls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import http.client
     import json
     import threading
@@ -1698,13 +1810,33 @@ def test_beta2_transactional_model_edit_saves_original_name_then_rolls_back(tmp_
             "schema_version": "0.1",
             "model_name": "controller",
             "source_sha256": sha256_file(model),
-            "operations": [{"op": "set_param", "block_path": "Gain", "parameter": "Gain", "before": "2", "after": "9", "sid": "2"}],
+            "operations": [
+                {
+                    "op": "set_param",
+                    "block_path": "Gain",
+                    "parameter": "Gain",
+                    "before": "2",
+                    "after": "9",
+                    "sid": "2",
+                }
+            ],
         }
         body = json.dumps({"path": "controller.slx", "edit": edit})
         parsed = urlparse(url)
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("POST", "/api/v1/workspace/model-edit", body=body, headers={"X-SLX-Studio-Token": "tx-original-token", "Content-Type": "application/json", "Content-Length": str(len(body.encode()))})
-        response = conn.getresponse(); payload = json.loads(response.read()); conn.close()
+        conn.request(
+            "POST",
+            "/api/v1/workspace/model-edit",
+            body=body,
+            headers={
+                "X-SLX-Studio-Token": "tx-original-token",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body.encode())),
+            },
+        )
+        response = conn.getresponse()
+        payload = json.loads(response.read())
+        conn.close()
         assert response.status == 400
         assert "save failed" in payload["error"]
         assert observed["output"].resolve() == model.resolve()
@@ -1712,10 +1844,14 @@ def test_beta2_transactional_model_edit_saves_original_name_then_rolls_back(tmp_
         assert gain.parameters["Gain"] == "2"
         assert not list(project.glob("*.restore-*.tmp"))
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
-def test_beta2_simulation_only_patch_endpoint_does_not_persist_matlab_rewrite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_beta2_simulation_only_patch_endpoint_does_not_persist_matlab_rewrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import http.client
     import json
     import threading
@@ -1735,26 +1871,46 @@ def test_beta2_simulation_only_patch_endpoint_does_not_persist_matlab_rewrite(tm
         assert Path(output_path).resolve() == model.resolve()
         # Mimic save_system rewriting the file even though no edit was requested.
         make_slx(Path(output_path), gain="999")
-        return {"ok": True, "message": "simulated", "output_model": str(output_path), "simulation": {"ran": True}}
+        return {
+            "ok": True,
+            "message": "simulated",
+            "output_model": str(output_path),
+            "simulation": {"ran": True},
+        }
 
     monkeypatch.setattr("slxdiff.workbench_server.apply_patch_with_matlab", fake_apply)
     server, url = serve_workbench(project, open_browser=False, token="sim-only-token")
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     thread.start()
     try:
-        patch = PatchDocument(schema_version="0.1", model_name="controller", source_sha256=source_sha, operations=()).to_dict()
+        patch = PatchDocument(
+            schema_version="0.1", model_name="controller", source_sha256=source_sha, operations=()
+        ).to_dict()
         body = json.dumps({"path": "controller.slx", "patch": patch, "simulate": True, "stop_time": "1"})
         parsed = urlparse(url)
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
-        conn.request("POST", "/api/v1/workspace/apply-patch", body=body, headers={"X-SLX-Studio-Token": "sim-only-token", "Content-Type": "application/json", "Content-Length": str(len(body.encode()))})
-        response = conn.getresponse(); payload = json.loads(response.read()); conn.close()
+        conn.request(
+            "POST",
+            "/api/v1/workspace/apply-patch",
+            body=body,
+            headers={
+                "X-SLX-Studio-Token": "sim-only-token",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body.encode())),
+            },
+        )
+        response = conn.getresponse()
+        payload = json.loads(response.read())
+        conn.close()
         assert response.status == 200
         assert payload["history"]["can_undo"] is False
         assert sha256_file(model) == source_sha
         gain = next(block for block in parse_slx(model).blocks.values() if block.name == "Gain")
         assert gain.parameters["Gain"] == "2"
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_beta2_simulation_stop_time_is_numeric_only() -> None:

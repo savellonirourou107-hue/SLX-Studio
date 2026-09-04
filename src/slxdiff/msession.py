@@ -208,10 +208,17 @@ class MatlabCommandSession:
                         "identifier": str(error.get("identifier", "")),
                         "line": int(error.get("line") or 0),
                         "file": str(error.get("file", "")),
-                    } if error else None,
+                    }
+                    if error
+                    else None,
                 }
                 if not result["ok"] and not result["error"]:
-                    result["error"] = {"message": (proc.stderr or proc.stdout or "MATLAB command failed").strip(), "identifier": "", "line": 0, "file": ""}
+                    result["error"] = {
+                        "message": (proc.stderr or proc.stdout or "MATLAB command failed").strip(),
+                        "identifier": "",
+                        "line": 0,
+                        "file": "",
+                    }
                 return result
 
     def set_variable(self, name: str, expression: str) -> dict[str, Any]:

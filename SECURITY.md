@@ -14,10 +14,10 @@ The core parser:
 - does not execute callbacks or scripts,
 - does not extract ZIP members to disk,
 - limits archive entry count and uncompressed XML sizes,
-- rejects XML DTD/entity declarations,
+- scans every bounded XML member in full and rejects DTD declarations and non-predefined entity references before `ElementTree` sees the bytes,
 - invokes Git without `shell=True`.
 
-These are defense-in-depth measures, not a claim that parsing arbitrary hostile files is risk-free. Please report crashes or resource-exhaustion cases with the smallest safe reproducer you can provide.
+The XML guard rejects declarations and references before the stdlib parser can expand internal entities; it is still bounded by archive entry/member/total-XML limits. These are defense-in-depth measures, not a claim that parsing arbitrary hostile files is risk-free. Please report crashes or resource-exhaustion cases with the smallest safe reproducer you can provide.
 
 ## MATLAB and script execution threat model
 
