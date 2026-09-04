@@ -6,11 +6,13 @@
 
 **Edit code. Edit block diagrams. Run both through your local MATLAB installation.**
 
-[中文](README.zh-CN.md) · [Quick start](#quick-start) · [M editor](#m-editor) · [SLX editor](#slx-editor) · [Desktop](#desktop-app) · [AI](#optional-ai-assistant)
+[中文](README.zh-CN.md) · [Installation](#installation) · [5-minute workflow](#the-5-minute-workflow) · [CLI](#cli-command-reference) · [M editor](#m-editor) · [SLX editor](#slx-editor) · [Desktop](#desktop-app) · [AI](#optional-ai-assistant)
 
 </div>
 
 ![SLX Studio v1.0 Beta](docs/assets/slx-studio-v10-beta.png)
+
+[![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 > **Status: v1.0.0 Beta 2.** SLX Studio is now a lightweight `.m` + `.slx` engineering IDE: multi-tab editing, section execution, a MATLAB Command Window with shared workspace state, editable workspace variables, cancellable script/Simulink/sweep jobs, MATLAB figures, SimulationOutput plots, parameter sweeps, crash-recovery drafts, project search and graphical SLX editing. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
 
@@ -26,27 +28,93 @@ Project folder
 
 The same lightweight workbench can move between code and block diagrams without making AI or Git tooling the primary interface.
 
-## Quick start
+## Installation
+
+### Requirements
+
+- Python 3.10 or newer.
+- MATLAB and Simulink are optional for static `.slx` viewing, diff and review.
+- A local MATLAB installation is required for running `.m`, creating or editing real `.slx` files, and simulation. MATLAB R2026a is the tested release for this beta.
+- Windows users can run the packaged EXE without installing Python; MATLAB/Simulink is still required for execution and real model writes.
+
+### Install from a clone
+
+From the repository root:
 
 ```bash
+python -m pip install --upgrade pip
 pip install -e .
+```
+
+Install the optional desktop WebView as well:
+
+```bash
+python -m pip install -e ".[desktop]"
+```
+
+Contributors can install the test and lint tools:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+### Configure MATLAB (optional)
+
+MATLAB is discovered in this order: an explicit `--matlab` argument, `SLX_DIFF_MATLAB`, then `matlab` on `PATH`.
+
+```powershell
+$env:SLX_DIFF_MATLAB = 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
+slx-diff matlab-status
+```
+
+The same setting can be supplied per launch:
+
+```powershell
+slx-studio . --matlab 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
+```
+
+Without MATLAB, `inspect`, `diff`, `review`, `context`, `view` and `html` remain available because they use the non-executing static parser.
+
+## The 5-minute workflow
+
+1. Open a project folder: `slx-studio .` (or `slx-diff studio .`).
+2. Open an `.m` tab, save with `Ctrl/Cmd+S`, then press `F5` to run the file through MATLAB.
+3. Use `Ctrl/Cmd+Enter` for the current `%%` section or selected code. Inspect the Console, Workspace Variables and Plots panels.
+4. Open an `.slx` model. Drag blocks, edit exposed parameters, or connect an output port to an input port. Click **Apply in MATLAB** to write a real model.
+5. Run a simulation or open **Sweep**. Use `Shift+F5` to stop a running script, simulation or sweep.
+
+The Workbench keeps a session-scoped MATLAB workspace checkpoint. It is temporary, project-external and removed when the Workbench closes.
+
+## CLI command reference
+
+| Command | Use it for | Needs MATLAB? |
+| --- | --- | --- |
+| `slx-studio [PATH]` | Open the editor Workbench | Only for execution/write/simulation |
+| `slx-diff studio [PATH]` | Start the Workbench from the engineering CLI | Only for execution/write/simulation |
+| `slx-diff inspect MODEL.slx` | Export the canonical model JSON | No |
+| `slx-diff diff OLD.slx NEW.slx` | Compare two models (`--format text\|markdown\|json`) | No |
+| `slx-diff review OLD.slx NEW.slx` | Rank changed areas by static signal-flow impact | No |
+| `slx-diff context OLD.slx NEW.slx` | Export compact agent context | No |
+| `slx-diff view MODEL.slx` | Open a read-only visual model view | No |
+| `slx-diff html OLD.slx NEW.slx -o report.html` | Write a standalone HTML diff report | No |
+| `slx-diff run-m SCRIPT.m` | Run a script with captured output | Yes |
+| `slx-diff apply MODEL.slx PATCH.json -o OUTPUT.slx` | Validate and apply a staged patch | Yes |
+| `slx-diff serve PATH --token TOKEN` | Start the loopback REST API | Only for requested MATLAB jobs |
+
+Run `slx-diff --help` or `slx-diff COMMAND --help` for the complete option list.
+
+The simplest launch is still:
+
+```bash
 slx-studio .
 ```
 
-Open a file directly:
+Open a file directly when you already know what to inspect:
 
 ```bash
 slx-studio controller.m
 slx-studio controller.slx
 ```
-
-If MATLAB is not on `PATH`:
-
-```bash
-slx-studio . --matlab "C:\\Program Files\\MATLAB\\R2026a\\bin\\matlab.exe"
-```
-
-or set `SLX_DIFF_MATLAB`.
 
 The engineering CLI remains available:
 
@@ -269,7 +337,17 @@ v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replace
 - Static parsing reports `metadata.unsupported_features` for Stateflow, masks, variants, library links, model references, bus/data-type metadata, dynamic/conditional ports and BlockTypes outside the conservative catalog. Such structures remain visible for review, but are not claimed to be fully editable or semantically complete.
 - When a structure is reported as unsupported or only partially parsed, return to MATLAB/Simulink for authoritative parameter, port, compile, simulation and save validation. Static graph output is never a stability, safety or robustness proof.
 - Optional real MATLAB R2026a integration tests are enabled only when `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB` is explicitly set. GitHub-hosted CI does not include MATLAB; `.github/workflows/matlab-self-hosted.yml` is a manual self-hosted template.
-- The included Windows workflow is configured for `SLXStudio.exe` plus `SLX-Studio-Setup-x64.exe`; this repository was prepared in a non-Windows build environment, so neither Windows binary is claimed as locally verified yet.
+- The included Windows workflow builds `SLXStudio.exe` plus `SLX-Studio-Setup-x64.exe`. The current `main` build has passed the GitHub Actions smoke checks; this development environment itself is not Windows, so local interactive launch is not claimed here.
+
+## Troubleshooting
+
+**The editor opens, but Run/Apply/Simulation is unavailable.** Run `slx-diff matlab-status`. If MATLAB is installed outside `PATH`, set `SLX_DIFF_MATLAB` or pass `--matlab` explicitly. The static parser and diff commands do not need MATLAB.
+
+**A model opens with an unsupported-feature warning.** Treat the canonical graph as a review view only. Confirm parameters, ports, compilation, simulation and saving in MATLAB/Simulink before relying on the result. See [`SECURITY.md`](SECURITY.md) and [`docs/architecture.md`](docs/architecture.md).
+
+**The desktop window falls back to a browser.** Install the optional `desktop` extra. If the native WebView still cannot initialize, the fallback browser is intentional and uses the same loopback server.
+
+**The API returns HTTP 400.** Check that the request body is a JSON object, the token is present, and values use the documented types. The server rejects malformed input without starting MATLAB; unexpected failures are returned as a generic HTTP 500.
 
 ## Development
 
@@ -290,6 +368,8 @@ python -m pytest -ra -m matlab_integration
 ```
 
 This check exercises `set_param`, `add_block`, `delete_block`, `add_line`, `delete_line`, `save_system`, `sim`, Figure export and the workspace checkpoint. It complements, and does not replace, the fake-MATLAB protocol tests.
+
+More focused usage notes and examples are available in [`docs/studio.md`](docs/studio.md), [`docs/agent-api.md`](docs/agent-api.md) and [`examples/README.md`](examples/README.md).
 
 ## License
 
