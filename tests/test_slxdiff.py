@@ -202,7 +202,7 @@ def test_studio_html_renders_model_and_diff(tmp_path: Path) -> None:
     assert '"status":"added"' in visual
     assert '"change_count":3' in visual
     assert '"summary":{"system_count":1,"block_count":2' in single
-    assert 'modelOverview' in single
+    assert "modelOverview" in single
 
 
 def test_studio_escapes_script_terminator(tmp_path: Path) -> None:
