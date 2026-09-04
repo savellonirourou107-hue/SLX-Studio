@@ -125,6 +125,32 @@ def test_parser_preserves_archive_entry_and_member_limits(
         parse_slx(model_path)
 
 
+def test_workbench_model_cache_reuses_unchanged_slx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from slxdiff import workbench_server
+    from slxdiff.workbench_server import serve_workbench
+
+    model_path = tmp_path / "controller.slx"
+    _write_slx(model_path, _simple_xml())
+    server, _ = serve_workbench(tmp_path, open_browser=False, token="cache-test")
+    calls: list[Path] = []
+    original = workbench_server.parse_slx
+
+    def counted(path):
+        calls.append(Path(path))
+        return original(path)
+
+    monkeypatch.setattr(workbench_server, "parse_slx", counted)
+    try:
+        first = server.load_model(model_path)
+        assert server.load_model(model_path) is first
+        assert len(calls) == 1
+        server.invalidate_model(model_path)
+        assert server.load_model(model_path) is not first
+        assert len(calls) == 2
+    finally:
+        server.server_close()
+
+
 def test_studio_api_rejects_tool_argument_types_as_json_400(tmp_path: Path) -> None:
     from slxdiff.server import serve_studio
 

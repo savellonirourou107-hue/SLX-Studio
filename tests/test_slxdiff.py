@@ -79,6 +79,11 @@ def test_parse_slx_bytes(tmp_path: Path) -> None:
     model = parse_slx_bytes(model_path.read_bytes(), name="controller.slx")
     gain = next(block for block in model.blocks.values() if block.name == "Gain")
     assert gain.parameters["Gain"] == "7"
+    assert model.metadata["file_size_bytes"] == model_path.stat().st_size
+    assert model.metadata["block_count"] == 2
+    assert model.metadata["line_count"] == 1
+    assert model.metadata["parameter_count"] >= 3
+    assert model.metadata["block_type_counts"]["Gain"] == 1
 
 
 def test_rejects_dtd_entity_xml() -> None:
@@ -196,6 +201,8 @@ def test_studio_html_renders_model_and_diff(tmp_path: Path) -> None:
     assert '"status":"changed"' in visual
     assert '"status":"added"' in visual
     assert '"change_count":3' in visual
+    assert '"summary":{"system_count":1,"block_count":2' in single
+    assert 'modelOverview' in single
 
 
 def test_studio_escapes_script_terminator(tmp_path: Path) -> None:

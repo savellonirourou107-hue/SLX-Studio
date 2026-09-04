@@ -44,6 +44,21 @@ def _model_payload(model: Model) -> dict:
     for block in model.blocks.values():
         grouped[block.system_id].append(block)
 
+    metadata = dict(model.metadata)
+    type_counts = metadata.get("block_type_counts")
+    if not isinstance(type_counts, dict):
+        type_counts = {}
+        for block in model.blocks.values():
+            type_counts[block.block_type] = int(type_counts.get(block.block_type, 0)) + 1
+        type_counts = dict(sorted(type_counts.items()))
+    summary = {
+        "system_count": len(grouped),
+        "block_count": len(model.blocks),
+        "connection_count": len(model.lines),
+        "parameter_count": sum(len(block.parameters) for block in model.blocks.values()),
+        "block_type_counts": type_counts,
+    }
+
     systems = []
     for system_id, blocks in sorted(
         grouped.items(), key=lambda item: _system_label(item[1], item[0]).lower()
@@ -58,7 +73,8 @@ def _model_payload(model: Model) -> dict:
 
     return {
         "name": model.name,
-        "metadata": dict(model.metadata),
+        "metadata": metadata,
+        "summary": summary,
         "systems": systems,
         "blocks": [
             {

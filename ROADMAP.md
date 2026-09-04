@@ -42,6 +42,7 @@
 
 - [x] Windows EXE + installer workflow with opt-in `.m` / `.slx` file associations (CI smoke-tested)
 - [x] Compatibility matrix scaffold with a real R2026a core-bridge record
+- [x] Model overview metadata, large-subsystem rendering guard and Workbench parse cache
 - [ ] Compatibility test matrix across supported MATLAB releases
 - [x] Crash recovery / autosave
 - [ ] More Simulink libraries and multi-port semantics

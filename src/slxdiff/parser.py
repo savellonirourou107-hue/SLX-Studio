@@ -344,6 +344,23 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
 
     parse_system_file(root_name, "")
     model.metadata["source"] = source
+    # Keep lightweight, model-level facts alongside the canonical graph.  The
+    # UI can use these without walking every block again, and callers can
+    # explain partial/static inspection limits without loading MATLAB.
+    model.metadata.update(
+        {
+            "archive_entries": len(infos),
+            "xml_bytes": xml_bytes,
+            "system_count": len(visited),
+            "block_count": len(model.blocks),
+            "line_count": len(model.lines),
+            "parameter_count": sum(len(block.parameters) for block in model.blocks.values()),
+            "block_type_counts": {
+                block_type: sum(1 for block in model.blocks.values() if block.block_type == block_type)
+                for block_type in sorted({block.block_type for block in model.blocks.values()})
+            },
+        }
+    )
     if unsupported_features:
         model.metadata["unsupported_features"] = sorted(unsupported_features)
     return model
@@ -363,6 +380,7 @@ def parse_slx(path: str | Path) -> Model:
     with zipfile.ZipFile(slx_path) as archive:
         model = _parse_archive(archive, model_name=slx_path.stem, source=str(slx_path))
     model.metadata["sha256"] = digest.hexdigest()
+    model.metadata["file_size_bytes"] = slx_path.stat().st_size
     return model
 
 
@@ -375,4 +393,5 @@ def parse_slx_bytes(data: bytes, *, name: str = "model") -> Model:
     with zipfile.ZipFile(stream) as archive:
         model = _parse_archive(archive, model_name=Path(name).stem, source=name)
     model.metadata["sha256"] = hashlib.sha256(data).hexdigest()
+    model.metadata["file_size_bytes"] = len(data)
     return model

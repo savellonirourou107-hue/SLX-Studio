@@ -93,6 +93,35 @@ class WorkbenchServer(StudioServer):
         )
         self.state = StudioState()
         self.state.mark_recent(root)
+        # Parsing an SLX package is intentionally strict and can be expensive
+        # for large models.  Keep a small stat-keyed cache for the live browser
+        # session; writes explicitly invalidate it, while external edits are
+        # detected by the mtime/size key.
+        self._model_cache: dict[Path, tuple[int, int, Any]] = {}
+        self._model_cache_limit = 8
+
+    def load_model(self, path: str | Path) -> Any:
+        resolved = Path(path).resolve()
+        stat = resolved.stat()
+        key = (int(stat.st_mtime_ns), int(stat.st_size))
+        cached = self._model_cache.get(resolved)
+        if cached is not None and cached[:2] == key:
+            return cached[2]
+        model = parse_slx(resolved)
+        self._model_cache[resolved] = (key[0], key[1], model)
+        while len(self._model_cache) > self._model_cache_limit:
+            self._model_cache.pop(next(iter(self._model_cache)))
+        return model
+
+    def invalidate_model(self, path: str | Path) -> None:
+        self._model_cache.pop(Path(path).resolve(), None)
+
+    def current_model(self):
+        with self.execution_lock:
+            if self.model_path is None:
+                model = super().current_model()
+                return model
+            return self.load_model(self.model_path)
 
     def server_close(self) -> None:
         try:
@@ -132,7 +161,7 @@ class WorkbenchHandler(StudioHandler):
                 if path.suffix.lower() != ".slx":
                     raise ValueError("graphical editor only opens .slx files")
                 with self.server.execution_lock:
-                    model = parse_slx(path)
+                    model = self.server.load_model(path)
                 self.server.model_path = path
                 self.server.output_path = path
                 html = render_studio_html(
@@ -454,7 +483,8 @@ class WorkbenchHandler(StudioHandler):
                     else:
                         history = self.server.model_history.redo(path)
                         action = "redo"
-                    refreshed = parse_slx(path)
+                    self.server.invalidate_model(path)
+                    refreshed = self.server.load_model(path)
                 self.server.model_path = path
                 self.server.output_path = path
                 self._send_json(
@@ -505,7 +535,8 @@ class WorkbenchHandler(StudioHandler):
                             self.server.model_history.discard_capture(before_snapshot)
                             before_snapshot = None
                             history = self.server.model_history.status(path)
-                        refreshed = parse_slx(path)
+                        self.server.invalidate_model(path)
+                        refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:
                         _restore_model_snapshot(before_snapshot, path)
@@ -538,7 +569,8 @@ class WorkbenchHandler(StudioHandler):
                         result["output_model"] = str(path)
                         history = self.server.model_history.record(path, before_snapshot)
                         before_snapshot = None
-                        refreshed = parse_slx(path)
+                        self.server.invalidate_model(path)
+                        refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:
                         _restore_model_snapshot(before_snapshot, path)

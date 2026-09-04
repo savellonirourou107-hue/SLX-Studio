@@ -179,6 +179,8 @@ SLX Studio parses a model for lightweight viewing without MATLAB. When a local M
 - double-click a Subsystem block to navigate into its child system when present,
 - plot supported numeric `SimulationOutput` timeseries/Dataset signals in the Workbench/Studio after simulation.
 
+The **Overview** panel now gives a static model inventory before you select a block: file/archive size, systems, blocks, connections, exposed parameters, block-type counts, SHA-256 and parser warnings. This is useful for quickly checking what a model contains without opening the full MATLAB desktop. The live Workbench also reuses an unchanged parsed model during one session, and applies a transparent rendering cap to very large subsystems so the browser stays responsive; use the subsystem selector or block search to inspect the complete graph.
+
 SLX undo/redo uses temporary model snapshots plus SHA-256 conflict checks. If another application changes the model on disk, SLX Studio refuses to overwrite that external change with a stale undo.
 
 ### Compatibility boundary
