@@ -334,3 +334,29 @@ def test_cli_doctor_returns_action_required_for_missing_path(monkeypatch, capsys
     )
     assert cli.main(["doctor", str(tmp_path / "missing")]) == 1
     assert "ACTION REQUIRED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("payload", [[], "not a patch", None], ids=["array", "string", "null"])
+def test_cli_apply_rejects_non_object_patch_without_traceback(
+    capsys, tmp_path: Path, payload: object
+) -> None:
+    from slxdiff import cli
+
+    patch_path = tmp_path / "invalid.json"
+    patch_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    result = cli.main(
+        [
+            "apply",
+            str(tmp_path / "model.slx"),
+            str(patch_path),
+            "-o",
+            str(tmp_path / "output.slx"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert captured.out == ""
+    assert captured.err == "slx-diff: error: patch must be a JSON object\n"
+    assert "Traceback" not in captured.err
