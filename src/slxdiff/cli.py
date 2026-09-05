@@ -382,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.fail_on_change and result.changed:
             return 1
         return 0
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (FileNotFoundError, TypeError, ValueError, RuntimeError) as exc:
         print(f"slx-diff: error: {exc}", file=sys.stderr)
         return 2
 
