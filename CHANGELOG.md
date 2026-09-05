@@ -8,6 +8,7 @@
 - Added a machine-readable MATLAB/Simulink compatibility matrix with explicit evidence classes and `NOT_EVALUATED` gaps.
 - Added model-level SLX overview metadata (archive/file size, systems, blocks, connections, parameters and block-type counts), a discoverable Overview inspector, stat-keyed Workbench parse caching, and a transparent large-subsystem rendering guard.
 - Added a session-scoped asynchronous workspace index for `.m` / `.slx` navigation, with explicit refresh and write-triggered invalidation so large projects can open without blocking on the initial tree walk.
+- Extended the workspace index to serve project search with bounded lazy caching for `.m` text and `.slx` block/signal metadata.
 
 ## 1.0.0b2 - 2026-09-02
 

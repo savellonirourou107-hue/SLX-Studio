@@ -34,7 +34,6 @@ from .workspace import (
     create_m_file,
     read_text_file,
     resolve_workspace_path,
-    search_workspace,
     workspace_root,
     write_text_file,
 )
@@ -308,7 +307,7 @@ class WorkbenchHandler(StudioHandler):
 
             if parsed.path == "/api/v1/workspace/search":
                 query = self._string_field(body, "query", required=True)
-                payload = search_workspace(self.server.workspace_root, query)
+                payload = self.server.workspace_index.search(query)
                 self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                 return
 

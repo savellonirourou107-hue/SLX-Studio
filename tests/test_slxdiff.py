@@ -868,6 +868,44 @@ def test_workspace_index_builds_in_background_and_invalidates(tmp_path: Path) ->
     assert "new_model.slx" in str(snapshot["items"])
 
 
+def test_workspace_index_reuses_slx_search_documents_and_invalidates(tmp_path: Path, monkeypatch) -> None:
+    import time
+
+    from slxdiff import parser
+    from slxdiff.workspace import WorkspaceIndex
+
+    model = tmp_path / "plant.slx"
+    make_slx(model, gain="2")
+    calls: list[Path] = []
+    original_parse = parser.parse_slx
+
+    def tracked_parse(path: Path):
+        calls.append(Path(path))
+        return original_parse(path)
+
+    monkeypatch.setattr(parser, "parse_slx", tracked_parse)
+    index = WorkspaceIndex(tmp_path)
+    deadline = time.monotonic() + 2
+    while index.snapshot()["indexing"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert any(item["type"] == "block" for item in index.search("Gain")["results"])
+    assert any(item["type"] == "block" for item in index.search("2")["results"])
+    assert calls == [model]
+
+    make_slx(model, gain="9")
+    previous_generation = index.snapshot()["index_generation"]
+    index.invalidate()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        snapshot = index.snapshot()
+        if snapshot["index_state"] == "ready" and snapshot["index_generation"] > previous_generation:
+            break
+        time.sleep(0.01)
+    assert any(item["type"] == "block" for item in index.search("9")["results"])
+    assert calls == [model, model]
+
+
 def test_matlab_m_runner_with_fake_executable(tmp_path: Path) -> None:
     import os
 
