@@ -250,12 +250,22 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
     if xml_bytes > _MAX_ARCHIVE_XML_BYTES:
         raise ValueError("SLX package contains too much uncompressed XML to inspect safely")
 
+    # Validate and read each XML member at most once per parse.  The safety
+    # pass below covers every member, while graph extraction may need to read
+    # root and referenced system members again.
+    xml_cache: dict[str, bytes] = {}
+
+    def safe_xml(member: str) -> bytes:
+        if member not in xml_cache:
+            xml_cache[member] = _safe_xml(archive, member)
+        return xml_cache[member]
+
     # Inspect every XML member, including metadata/stateflow members that are
     # not part of the graph extraction path, so no archive member is a blind
     # spot for DTD/entity declarations.
     for info in infos:
         if info.filename.lower().endswith(".xml"):
-            _safe_xml(archive, info.filename)
+            safe_xml(info.filename)
 
     names = {info.filename for info in infos}
     root_name = next((candidate for candidate in _ROOT_CANDIDATES if candidate in names), None)
@@ -282,7 +292,7 @@ def _parse_archive(archive: zipfile.ZipFile, *, model_name: str, source: str) ->
             system = inline
         else:
             try:
-                root = ET.fromstring(_safe_xml(archive, member))
+                root = ET.fromstring(safe_xml(member))
             except ET.ParseError as exc:
                 raise ValueError(f"invalid XML in SLX member {member}: {exc}") from exc
             system = _system_element(root)
