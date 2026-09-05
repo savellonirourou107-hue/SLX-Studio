@@ -215,7 +215,7 @@ Ctrl+Shift+S     Save As
 
 MATLAB Figures are captured after script execution and shown beside Workspace Variables. Supported numeric Simulink `timeseries` and `Simulink.SimulationData.Dataset` outputs are reduced to bounded plot payloads and rendered locally.
 
-The project tree uses a small session-scoped background index for visible `.m` and `.slx` files. The Workbench can render immediately while the first walk completes, refreshes the index after file writes, and the toolbar **Refresh** button forces a rebuild. No database or extra runtime dependency is added; the existing project-search command remains on-demand.
+The project tree uses a small session-scoped background index for visible `.m` and `.slx` files. The Workbench can render immediately while the first walk completes, refreshes the index after file writes, and the toolbar **Refresh** button forces a rebuild. Project search reuses the same index and lazily caches searchable model metadata, so repeated queries do not reparse unchanged `.slx` files. No database or extra runtime dependency is added.
 
 ### Command Window and shared workspace
 
