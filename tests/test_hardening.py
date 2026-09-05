@@ -80,6 +80,25 @@ def test_parser_rejects_delayed_and_nested_entities_and_scans_all_members() -> N
         payload.unlink(missing_ok=True)
 
 
+def test_parser_reads_each_xml_member_once_per_parse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from slxdiff import parser as parser_module
+
+    model_path = tmp_path / "cached.slx"
+    _write_slx(model_path, _simple_xml(), extra_xml="<metadata />")
+    calls: list[str] = []
+    original_safe_xml = parser_module._safe_xml
+
+    def tracked_safe_xml(archive, member: str) -> bytes:
+        calls.append(member)
+        return original_safe_xml(archive, member)
+
+    monkeypatch.setattr(parser_module, "_safe_xml", tracked_safe_xml)
+    parse_slx(model_path)
+
+    assert calls.count("simulink/systems/system_root.xml") == 1
+    assert calls.count("metadata/extra.xml") == 1
+
+
 def test_parser_accepts_unicode_and_nested_subsystem_xml(tmp_path: Path) -> None:
     model_path = tmp_path / "nested.slx"
     _write_slx(
