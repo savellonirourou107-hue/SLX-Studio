@@ -1520,6 +1520,8 @@ def test_v10_workbench_has_command_window_sweep_recovery_and_command_palette() -
     assert "/api/v1/workspace/command/start" in html
     assert "/api/v1/workspace/command/status" in html
     assert "/api/v1/workspace/command/stop" in html
+    assert "/api/v1/workspace/debug/breakpoints" in html
+    assert "data-line" in html
     assert "/api/v1/workspace/variables/set" in html
     assert "/api/v1/workspace/sweep/start" in html
     assert "/api/v1/workspace/sim/stop" in html

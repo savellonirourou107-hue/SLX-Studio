@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .debugger import BreakpointRegistry
 from .history import ModelHistory
 from .matlab_bridge import (
     apply_model_edit_with_matlab,
@@ -88,6 +89,7 @@ class WorkbenchServer(StudioServer):
             execution_lock=self.execution_lock,
         )
         self.command_manager = MatlabCommandManager(self.command_session)
+        self.breakpoints = BreakpointRegistry(root)
         self.sweep_manager = SweepRunManager(matlab=matlab, execution_lock=self.execution_lock)
         self.simulation_manager = SimulationRunManager(
             matlab=matlab, history=self.model_history, execution_lock=self.execution_lock
@@ -216,6 +218,7 @@ class WorkbenchHandler(StudioHandler):
             "/api/v1/workspace/run/start",
             "/api/v1/workspace/run/status",
             "/api/v1/workspace/run/stop",
+            "/api/v1/workspace/debug/breakpoints",
             "/api/v1/workspace/command",
             "/api/v1/workspace/command/start",
             "/api/v1/workspace/command/status",
@@ -350,8 +353,27 @@ class WorkbenchHandler(StudioHandler):
                 ):
                     raise ValueError("start_line must be a positive integer")
                 start_line = raw_start_line
-                job = self.server.run_manager.start(path, code=code, start_line=start_line)
+                tracepoints = [] if code is not None else self.server.breakpoints.lines_for(path)
+                job = self.server.run_manager.start(
+                    path, code=code, start_line=start_line, tracepoints=tracepoints
+                )
                 self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/debug/breakpoints":
+                action = self._string_field(body, "action", default="list").strip().lower()
+                if action == "set":
+                    payload = self.server.breakpoints.set(relative, body.get("line"))
+                elif action == "clear":
+                    line = body.get("line")
+                    if line is not None and not isinstance(line, int):
+                        raise ValueError("breakpoint line must be an integer")
+                    payload = self.server.breakpoints.clear(relative, line)
+                elif action == "list":
+                    payload = self.server.breakpoints.list(relative or None)
+                else:
+                    raise ValueError("debug breakpoint action must be set, clear or list")
+                self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                 return
 
             if parsed.path == "/api/v1/workspace/run/status":

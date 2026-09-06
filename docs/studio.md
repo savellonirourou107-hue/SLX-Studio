@@ -87,6 +87,10 @@ These commands parse bounded SLX ZIP/XML packages and do not execute callbacks, 
 
 Select a supported block, open **Sweep**, enter bounded numeric values such as `1:0.5:5` or `1,2,3`, and start the run. The original parameter is restored after the sweep. `Shift+F5` stops the active script, simulation, sweep or Command Window job. Command Window output is polled incrementally while MATLAB is running; the legacy synchronous endpoint remains available for compatibility.
 
+## Lightweight MATLAB debug probes
+
+Click a line number in an open `.m` file to register a session-scoped probe. A normal script run inserts a temporary, non-pausing probe before that complete source line and returns `debug_events` with the source file, line number and visible base-workspace variable names. Probes reject comments, blank lines and continuation lines so they cannot silently change MATLAB statement structure. This is intentionally a diagnostic foundation, not a replacement for MATLAB's interactive `dbstop`/`dbstep`/`dbstack` debugger; no-pausing behavior keeps Workbench jobs safe in batch and no-desktop MATLAB sessions.
+
 ## AI and REST API
 
 AI providers are optional BYOK helpers. They receive constrained inspection, review and validated edit tools, not an unrestricted MATLAB shell. Start the loopback API with:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slx-studio"
-version = "1.0.0b2"
+version = "1.0.0b3"
 description = "Lightweight MATLAB/Simulink engineering IDE for editing and running .m scripts and .slx models."
 readme = "README.md"
 requires-python = ">=3.10"

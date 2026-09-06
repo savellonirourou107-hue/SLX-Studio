@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.0.0b3 - 2026-09-06
+
+- Added session-scoped, non-pausing MATLAB debug probes for `.m` runs. Click source line numbers to register probes and receive source-line plus visible-workspace snapshots in `debug_events`.
+- Added breakpoint validation for workspace boundaries, complete statements, comments, blank lines and continuation lines.
+- Added real MATLAB R2026a coverage for tracepoint execution and documented the intentional boundary: this is a lightweight diagnostic foundation, not an interactive `dbstop`/`dbstep` debugger.
+- Added live Command Window/cancellation and debug-probe capabilities to the bilingual Workbench documentation.
+
 - Added a dependency-free, read-only `slx-diff doctor` command for quick Python, workspace, static-SLX and optional MATLAB diagnostics.
 - Reworked the bilingual README and Workbench guide with installation prerequisites, a five-minute workflow, CLI reference and troubleshooting notes.
 - Added a maintainer guide, pull-request checklist, research citation metadata and focused OSS contribution surfaces without adding runtime dependencies.
