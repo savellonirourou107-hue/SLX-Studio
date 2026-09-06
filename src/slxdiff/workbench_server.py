@@ -19,7 +19,7 @@ from .matlab_bridge import (
 )
 from .model_edit import edit_document_from_dict
 from .mrunner import MatlabRunManager, run_m_file
-from .msession import MatlabCommandSession
+from .msession import MatlabCommandManager, MatlabCommandSession
 from .parser import parse_slx
 from .patching import patch_from_dict
 from .server import StudioHandler, StudioServer
@@ -87,6 +87,7 @@ class WorkbenchServer(StudioServer):
             matlab=matlab,
             execution_lock=self.execution_lock,
         )
+        self.command_manager = MatlabCommandManager(self.command_session)
         self.sweep_manager = SweepRunManager(matlab=matlab, execution_lock=self.execution_lock)
         self.simulation_manager = SimulationRunManager(
             matlab=matlab, history=self.model_history, execution_lock=self.execution_lock
@@ -126,6 +127,7 @@ class WorkbenchServer(StudioServer):
     def server_close(self) -> None:
         try:
             self.run_manager.stop_all()
+            self.command_manager.stop_all()
             self.sweep_manager.stop_all()
             self.simulation_manager.stop_all()
             self.model_history.close()
@@ -215,6 +217,9 @@ class WorkbenchHandler(StudioHandler):
             "/api/v1/workspace/run/status",
             "/api/v1/workspace/run/stop",
             "/api/v1/workspace/command",
+            "/api/v1/workspace/command/start",
+            "/api/v1/workspace/command/status",
+            "/api/v1/workspace/command/stop",
             "/api/v1/workspace/variables/set",
             "/api/v1/workspace/recovery/save",
             "/api/v1/workspace/recovery/clear",
@@ -369,6 +374,41 @@ class WorkbenchHandler(StudioHandler):
                 code = self._string_field(body, "code", required=True)
                 result = self.server.command_session.execute(code)
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/start":
+                code = self._string_field(body, "code", required=True)
+                job = self.server.command_manager.start(code)
+                self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/status":
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                stdout_offset = body.get("stdout_offset", 0)
+                stderr_offset = body.get("stderr_offset", 0)
+                if (
+                    isinstance(stdout_offset, bool)
+                    or not isinstance(stdout_offset, int)
+                    or stdout_offset < 0
+                    or isinstance(stderr_offset, bool)
+                    or not isinstance(stderr_offset, int)
+                    or stderr_offset < 0
+                ):
+                    raise ValueError("output offsets must be non-negative integers")
+                job = self.server.command_manager.status(
+                    job_id, stdout_offset=stdout_offset, stderr_offset=stderr_offset
+                )
+                self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/stop":
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.command_manager.stop(job_id)
+                self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/variables/set":

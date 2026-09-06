@@ -8,6 +8,7 @@ the normal Python tests cover that protocol separately.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -68,3 +69,43 @@ close_system(modelName, 0);
     assert any(item["name"] == "checkpoint_value" for item in result["variables"])
     assert result["figures"], result
     assert (tmp_path / "slxstudio_r2026a_smoke.slx").exists()
+
+
+def test_matlab_r2026a_command_stream_and_cancel(tmp_path: Path) -> None:
+    matlab = _configured_matlab()
+    from slxdiff.msession import MatlabCommandManager, MatlabCommandSession
+
+    session = MatlabCommandSession(
+        work_dir=tmp_path,
+        workspace_file=tmp_path / "workspace.mat",
+        matlab=matlab,
+        timeout=60,
+    )
+    manager = MatlabCommandManager(session)
+    job = manager.start("fprintf(1, 'stream-one\\n'); pause(0.4); fprintf(1, 'stream-two\\n'); value = 42;")
+    output = ""
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        status = manager.status(job["id"], stdout_offset=len(output))
+        output += status["stdout_delta"]
+        if status["state"] != "running":
+            break
+        time.sleep(0.05)
+    final = manager.status(job["id"], stdout_offset=len(output))
+    output += final["stdout_delta"]
+    assert final["state"] == "finished", final
+    assert final["result"]["ok"] is True, final
+    assert "stream-one" in output
+    assert "stream-two" in output
+    assert any(item["name"] == "value" and item["preview"] == "42" for item in final["result"]["variables"])
+
+    cancel_job = manager.start("pause(30);")
+    time.sleep(0.5)
+    manager.stop(cancel_job["id"])
+    deadline = time.monotonic() + 30
+    cancelled = manager.status(cancel_job["id"])
+    while cancelled["state"] == "running" and time.monotonic() < deadline:
+        time.sleep(0.05)
+        cancelled = manager.status(cancel_job["id"])
+    assert cancelled["state"] == "cancelled", cancelled
+    assert cancelled["result"]["cancelled"] is True, cancelled

@@ -1319,6 +1319,145 @@ result.write_text(json.dumps({'ok': True, 'stdout': 'Kp = 3\\n', 'variables': [{
     assert checkpoint.exists()
 
 
+def test_v10_command_manager_exposes_incremental_output_and_final_result(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from slxdiff.msession import MatlabCommandManager, MatlabCommandSession
+
+    fake = tmp_path / "fake-matlab-command-stream"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, re, sys, time\n"
+        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        "text = runner.read_text()\n"
+        "result = pathlib.Path(re.search(r\"resultPath = '(.+)';\", text).group(1).replace(\"''\", \"'\"))\n"
+        "print('stream-one', flush=True)\n"
+        "time.sleep(0.15)\n"
+        "print('stream-two', flush=True)\n"
+        "result.write_text(json.dumps({'ok': True, 'variables': [], 'figures': [], 'error': {}}))\n",
+        encoding="utf-8",
+    )
+    os.chmod(fake, 0o755)
+    session = MatlabCommandSession(work_dir=tmp_path, workspace_file=tmp_path / "workspace.mat", matlab=fake)
+    manager = MatlabCommandManager(session)
+    job = manager.start("disp('hello')")
+    stdout = ""
+    stderr = ""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        status = manager.status(job["id"], stdout_offset=len(stdout), stderr_offset=len(stderr))
+        stdout += status["stdout_delta"]
+        stderr += status["stderr_delta"]
+        if status["state"] != "running":
+            break
+        time.sleep(0.03)
+    final = manager.status(job["id"], stdout_offset=len(stdout), stderr_offset=len(stderr))
+    stdout += final["stdout_delta"]
+    assert final["state"] == "finished"
+    assert final["result"]["ok"] is True
+    assert "stream-one" in stdout
+    assert "stream-two" in stdout
+    assert stderr == ""
+
+
+def test_v10_command_manager_can_cancel_a_running_command(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from slxdiff.msession import MatlabCommandManager, MatlabCommandSession
+
+    fake = tmp_path / "fake-matlab-command-cancel"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, re, sys, time\n"
+        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        "print('before-stop', flush=True)\n"
+        "time.sleep(10)\n",
+        encoding="utf-8",
+    )
+    os.chmod(fake, 0o755)
+    session = MatlabCommandSession(work_dir=tmp_path, workspace_file=tmp_path / "workspace.mat", matlab=fake)
+    manager = MatlabCommandManager(session)
+    job = manager.start("pause(10)")
+    time.sleep(0.1)
+    manager.stop(job["id"])
+    deadline = time.monotonic() + 5
+    status = manager.status(job["id"])
+    while status["state"] == "running" and time.monotonic() < deadline:
+        time.sleep(0.03)
+        status = manager.status(job["id"])
+    assert status["state"] == "cancelled"
+    assert status["result"]["cancelled"] is True
+
+
+def test_v10_command_job_http_routes_stream_and_stop(tmp_path: Path) -> None:
+    import http.client
+    import json
+    import os
+    import threading
+    import time
+    from urllib.parse import urlparse
+
+    from slxdiff.workbench_server import serve_workbench
+
+    fake = tmp_path / "fake-matlab-command-http"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, re, sys, time\n"
+        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        "print('http-stream', flush=True)\n"
+        "time.sleep(0.4)\n",
+        encoding="utf-8",
+    )
+    os.chmod(fake, 0o755)
+    project = tmp_path / "project"
+    project.mkdir()
+    server, url = serve_workbench(project, matlab=str(fake), open_browser=False, token="command-token")
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
+    parsed = urlparse(url)
+    headers = {"X-SLX-Studio-Token": "command-token", "Content-Type": "application/json"}
+
+    def post(path: str, payload: dict) -> tuple[int, dict]:
+        body = json.dumps(payload).encode()
+        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        request_headers = {**headers, "Content-Length": str(len(body))}
+        conn.request("POST", path, body=body, headers=request_headers)
+        response = conn.getresponse()
+        result = json.loads(response.read())
+        conn.close()
+        return response.status, result
+
+    try:
+        status_code, started = post("/api/v1/workspace/command/start", {"code": "disp('hello')"})
+        assert status_code == 202
+        job_id = started["job"]["id"]
+        offset = 0
+        output = ""
+        deadline = time.monotonic() + 5
+        state = "running"
+        while state == "running" and time.monotonic() < deadline:
+            status_code, payload = post(
+                "/api/v1/workspace/command/status",
+                {"job_id": job_id, "stdout_offset": offset, "stderr_offset": 0},
+            )
+            assert status_code == 200
+            job = payload["job"]
+            output += job["stdout_delta"]
+            offset = job["stdout_offset"]
+            state = job["state"]
+            if state == "running":
+                time.sleep(0.03)
+        assert state == "finished"
+        assert "http-stream" in output
+        assert post("/api/v1/workspace/command/stop", {"job_id": job_id})[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_v10_sweep_value_parser_and_validation(tmp_path: Path) -> None:
     from slxdiff.sweep import parse_sweep_values, validate_sweep
 
@@ -1378,6 +1517,9 @@ def test_v10_workbench_has_command_window_sweep_recovery_and_command_palette() -
     ]:
         assert marker in html
     assert "/api/v1/workspace/command" in html
+    assert "/api/v1/workspace/command/start" in html
+    assert "/api/v1/workspace/command/status" in html
+    assert "/api/v1/workspace/command/stop" in html
     assert "/api/v1/workspace/variables/set" in html
     assert "/api/v1/workspace/sweep/start" in html
     assert "/api/v1/workspace/sim/stop" in html
@@ -1758,7 +1900,8 @@ def test_beta2_matlab_runners_use_base_workspace_without_internal_name_collision
         command=command,
         work_dir=tmp_path,
     )
-    assert "evalc('evalin(''base'', commandText)')" in command_runner
+    assert "evalin('base', commandText)" in command_runner
+    assert "Execute directly so MATLAB flushes command output" in command_runner
     assert "assignin('base', name, state.(name))" in command_runner
     assert "native2unicode(uint8([" in command_runner
     # The raw multi-line command is byte-encoded, not interpolated as MATLAB source in the wrapper.

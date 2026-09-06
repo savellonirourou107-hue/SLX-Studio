@@ -85,7 +85,7 @@ These commands parse bounded SLX ZIP/XML packages and do not execute callbacks, 
 
 ## Parameter sweeps and stopping jobs
 
-Select a supported block, open **Sweep**, enter bounded numeric values such as `1:0.5:5` or `1,2,3`, and start the run. The original parameter is restored after the sweep. `Shift+F5` stops the active script, simulation or sweep job. Command Window requests are synchronous and cannot currently be stopped independently.
+Select a supported block, open **Sweep**, enter bounded numeric values such as `1:0.5:5` or `1,2,3`, and start the run. The original parameter is restored after the sweep. `Shift+F5` stops the active script, simulation, sweep or Command Window job. Command Window output is polled incrementally while MATLAB is running; the legacy synchronous endpoint remains available for compatibility.
 
 ## AI and REST API
 

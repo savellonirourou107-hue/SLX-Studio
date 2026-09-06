@@ -334,8 +334,8 @@ v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replace
 
 - No full MATLAB language server, debugger, breakpoints or profiler yet.
 - Workspace Variables supports explicit expression-based editing, but it is not yet a full spreadsheet-style array editor.
-- Script, SLX simulation and parameter-sweep jobs are cancellable; Command Window commands are currently synchronous requests and are not independently stoppable.
-- MATLAB stdout/stderr is collected when a job completes rather than streamed live.
+- Script, SLX simulation, parameter-sweep and Command Window jobs are cancellable. Command Window output is exposed through a lightweight incremental polling API while MATLAB is running.
+- The legacy `/api/v1/workspace/command` endpoint remains synchronous for compatibility; the Workbench uses `/command/start`, `/command/status` and `/command/stop` for live console interaction.
 - SLX editing now renders explicit ports found in the model, but dynamic/conditional port semantics and advanced Simulink object types need broader adapters.
 - Static parsing reports `metadata.unsupported_features` for Stateflow, masks, variants, library links, model references, bus/data-type metadata, dynamic/conditional ports and BlockTypes outside the conservative catalog. Such structures remain visible for review, but are not claimed to be fully editable or semantically complete.
 - When a structure is reported as unsupported or only partially parsed, return to MATLAB/Simulink for authoritative parameter, port, compile, simulation and save validation. Static graph output is never a stability, safety or robustness proof.

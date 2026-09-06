@@ -319,8 +319,8 @@ v1.0 Beta 仍然是“小型工程编辑器”，不是 MATLAB 替代品：
 
 - 暂无完整 MATLAB Language Server、Debugger、Breakpoint、Profiler；
 - Workspace Variables 已支持显式表达式修改，但还不是完整的表格式数组编辑器；
-- `.m`、SLX Simulation 和 Parameter Sweep 都支持 Stop；Command Window 命令目前仍是同步请求，尚不能单独中途停止；
-- stdout / stderr 目前在 MATLAB Job 完成后回收，还不是实时流式 Console；
+- `.m`、SLX Simulation、Parameter Sweep 和 Command Window Job 都支持 Stop；Workbench 中的 Command Window 通过轻量增量轮询在 MATLAB 运行期间显示输出；
+- 为兼容旧客户端，`/api/v1/workspace/command` 仍保留同步接口；新界面使用 `/command/start`、`/command/status` 和 `/command/stop`；
 - SLX 已能按已有连接显示明确多端口，但动态/条件端口语义和高级 Simulink 对象还需要继续适配；
 - 静态解析会在 `metadata.unsupported_features` 中显式报告 Stateflow、Mask、Variant、Library Link、Model Reference、Bus/Data Type 元数据、动态/条件端口，以及安全目录之外的 BlockType。它们仍可用于查看/Review，但不宣称可完整编辑或语义完整；
 - 一旦出现这些提示，参数、端口、编译、仿真和保存必须回到 MATLAB/Simulink 做权威验证。静态图结果不是稳定性、安全性或鲁棒性证明；
