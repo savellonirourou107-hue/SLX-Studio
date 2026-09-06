@@ -1329,9 +1329,9 @@ def test_v10_command_manager_exposes_incremental_output_and_final_result(tmp_pat
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "import json, pathlib, re, sys, time\n"
-        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        'runner = pathlib.Path(re.search(r"run\\(\'(.+)\'\\)", sys.argv[2]).group(1).replace("\'\'", "\'"))\n'
         "text = runner.read_text()\n"
-        "result = pathlib.Path(re.search(r\"resultPath = '(.+)';\", text).group(1).replace(\"''\", \"'\"))\n"
+        'result = pathlib.Path(re.search(r"resultPath = \'(.+)\';", text).group(1).replace("\'\'", "\'"))\n'
         "print('stream-one', flush=True)\n"
         "time.sleep(0.15)\n"
         "print('stream-two', flush=True)\n"
@@ -1371,7 +1371,7 @@ def test_v10_command_manager_can_cancel_a_running_command(tmp_path: Path) -> Non
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "import pathlib, re, sys, time\n"
-        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        'runner = pathlib.Path(re.search(r"run\\(\'(.+)\'\\)", sys.argv[2]).group(1).replace("\'\'", "\'"))\n'
         "print('before-stop', flush=True)\n"
         "time.sleep(10)\n",
         encoding="utf-8",
@@ -1405,7 +1405,7 @@ def test_v10_command_job_http_routes_stream_and_stop(tmp_path: Path) -> None:
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "import pathlib, re, sys, time\n"
-        "runner = pathlib.Path(re.search(r\"run\\('(.+)'\\)\", sys.argv[2]).group(1).replace(\"''\", \"'\"))\n"
+        'runner = pathlib.Path(re.search(r"run\\(\'(.+)\'\\)", sys.argv[2]).group(1).replace("\'\'", "\'"))\n'
         "print('http-stream', flush=True)\n"
         "time.sleep(0.4)\n",
         encoding="utf-8",

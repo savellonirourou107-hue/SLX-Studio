@@ -215,12 +215,8 @@ class MatlabCommandSession:
                     stream.close()
 
                 readers = [
-                    threading.Thread(
-                        target=drain, args=(proc.stdout, stdout_chunks, "stdout"), daemon=True
-                    ),
-                    threading.Thread(
-                        target=drain, args=(proc.stderr, stderr_chunks, "stderr"), daemon=True
-                    ),
+                    threading.Thread(target=drain, args=(proc.stdout, stdout_chunks, "stdout"), daemon=True),
+                    threading.Thread(target=drain, args=(proc.stderr, stderr_chunks, "stderr"), daemon=True),
                 ]
                 for reader in readers:
                     reader.start()
@@ -280,7 +276,9 @@ class MatlabCommandSession:
                 }
                 if not result["ok"] and not result["error"]:
                     result["error"] = {
-                        "message": ("".join(stderr_chunks) or "".join(stdout_chunks) or "MATLAB command failed").strip(),
+                        "message": (
+                            "".join(stderr_chunks) or "".join(stdout_chunks) or "MATLAB command failed"
+                        ).strip(),
                         "identifier": "",
                         "line": 0,
                         "file": "",
@@ -302,7 +300,9 @@ class MatlabCommandSession:
 class MatlabCommandManager:
     """Cancellable command jobs with bounded incremental stdout/stderr polling."""
 
-    def __init__(self, session: MatlabCommandSession, *, max_retained: int = 24, retention_seconds: float = 900):
+    def __init__(
+        self, session: MatlabCommandSession, *, max_retained: int = 24, retention_seconds: float = 900
+    ):
         self.session = session
         self.max_retained = max(1, int(max_retained))
         self.retention_seconds = max(1.0, float(retention_seconds))
