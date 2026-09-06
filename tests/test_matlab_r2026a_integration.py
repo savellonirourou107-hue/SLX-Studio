@@ -109,3 +109,21 @@ def test_matlab_r2026a_command_stream_and_cancel(tmp_path: Path) -> None:
         cancelled = manager.status(cancel_job["id"])
     assert cancelled["state"] == "cancelled", cancelled
     assert cancelled["result"]["cancelled"] is True, cancelled
+
+
+def test_matlab_r2026a_debug_tracepoints_capture_line_and_workspace(tmp_path: Path) -> None:
+    matlab = _configured_matlab()
+    script = tmp_path / "tracepoints.m"
+    script.write_text("a = 1;\na = a + 1;\nfprintf(1, 'trace\\n');\n", encoding="utf-8")
+    from slxdiff.mrunner import run_m_file
+
+    result = run_m_file(
+        script,
+        matlab=matlab,
+        workspace_file=tmp_path / "workspace.mat",
+        tracepoints=[2, 3],
+        timeout=60,
+    )
+    assert result["ok"], result
+    assert [event["line"] for event in result["debug_events"]] == [2, 3], result
+    assert all("a" in event["variables"] for event in result["debug_events"])

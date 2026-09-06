@@ -74,6 +74,8 @@ matlab -batch "cd(...); run(...)"
 
 stdout and stderr are captured into the Workbench Console. Script, simulation and sweep jobs return their final output, while Command Window jobs additionally expose bounded incremental stdout/stderr deltas through the status endpoint. The runner also writes a structured result envelope containing safe workspace-variable metadata and MATLAB error file/line information when available.
 
+For `.m` runs, the session-scoped breakpoint registry can request non-pausing tracepoints. The runner creates a temporary instrumented copy, records line/workspace-name events, and deletes it with the job directory. It never leaves `dbstop` state in a user MATLAB session and does not claim interactive debugger semantics.
+
 Running `.m` code is arbitrary code execution by definition and is not treated as a sandboxed action.
 
 ## Desktop shell

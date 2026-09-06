@@ -14,7 +14,7 @@
 
 [![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-> **Status: v1.0.0 Beta 2.** SLX Studio is now a lightweight `.m` + `.slx` engineering IDE: multi-tab editing, section execution, a MATLAB Command Window with shared workspace state, editable workspace variables, cancellable script/Simulink/sweep jobs, MATLAB figures, SimulationOutput plots, parameter sweeps, crash-recovery drafts, project search and graphical SLX editing. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
+> **Status: v1.0.0 Beta 3.** SLX Studio is now a lightweight `.m` + `.slx` engineering IDE: multi-tab editing, section execution, a MATLAB Command Window with shared workspace state and live output, editable workspace variables, cancellable script/Command Window/Simulink/sweep jobs, non-pausing MATLAB debug probes, MATLAB figures, SimulationOutput plots, parameter sweeps, crash-recovery drafts, project search and graphical SLX editing. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
 
 ## Why SLX Studio
 
@@ -332,7 +332,7 @@ See [`SECURITY.md`](SECURITY.md).
 
 v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replacement.
 
-- No full MATLAB language server, debugger, breakpoints or profiler yet.
+- No full MATLAB language server, pausing debugger, interactive step/stack UI or profiler yet. Workbench `.m` files now support lightweight non-pausing breakpoint probes: click a line number, run the script, and inspect recorded source lines plus visible workspace variable names.
 - Workspace Variables supports explicit expression-based editing, but it is not yet a full spreadsheet-style array editor.
 - Script, SLX simulation, parameter-sweep and Command Window jobs are cancellable. Command Window output is exposed through a lightweight incremental polling API while MATLAB is running.
 - The legacy `/api/v1/workspace/command` endpoint remains synchronous for compatibility; the Workbench uses `/command/start`, `/command/status` and `/command/stop` for live console interaction.

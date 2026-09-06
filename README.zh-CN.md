@@ -14,7 +14,7 @@
 
 [![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-> **状态：v1.0.0 Beta 2。** 现在是一个轻量 `.m + .slx` 工程 IDE：支持多标签编辑、按 `%%` 节运行、共享 Workspace 的 MATLAB Command Window、变量编辑、可停止的脚本/SLX 仿真/参数扫描 Job、MATLAB Figure、SimulationOutput 曲线、崩溃恢复草稿、工程搜索和 SLX 图形编辑。执行 `.m`、创建/修改/仿真真实 `.slx` 仍需要本机 MATLAB/Simulink。
+> **状态：v1.0.0 Beta 3。** 现在是一个轻量 `.m + .slx` 工程 IDE：支持多标签编辑、按 `%%` 节运行、共享 Workspace 且可实时输出的 MATLAB Command Window、变量编辑、可停止的脚本/Command Window/SLX 仿真/参数扫描 Job、非暂停 MATLAB 调试探针、MATLAB Figure、SimulationOutput 曲线、崩溃恢复草稿、工程搜索和 SLX 图形编辑。执行 `.m`、创建/修改/仿真真实 `.slx` 仍需要本机 MATLAB/Simulink。
 
 ## 产品定位
 
@@ -317,7 +317,7 @@ slx-diff git-diff --base main --head HEAD
 
 v1.0 Beta 仍然是“小型工程编辑器”，不是 MATLAB 替代品：
 
-- 暂无完整 MATLAB Language Server、Debugger、Breakpoint、Profiler；
+- 暂无完整 MATLAB Language Server、可暂停 Debugger、交互式单步/调用栈 UI 和 Profiler；Workbench 已支持轻量非暂停断点探针：点击 `.m` 行号，运行脚本后查看命中的源行及当时可见的 Workspace 变量名；
 - Workspace Variables 已支持显式表达式修改，但还不是完整的表格式数组编辑器；
 - `.m`、SLX Simulation、Parameter Sweep 和 Command Window Job 都支持 Stop；Workbench 中的 Command Window 通过轻量增量轮询在 MATLAB 运行期间显示输出；
 - 为兼容旧客户端，`/api/v1/workspace/command` 仍保留同步接口；新界面使用 `/command/start`、`/command/status` 和 `/command/stop`；
