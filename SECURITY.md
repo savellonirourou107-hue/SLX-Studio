@@ -43,7 +43,7 @@ The Workbench intentionally has stronger powers than the read-only parser.
 - Workspace file APIs are constrained to the selected root and reject path traversal.
 - The text editor currently writes only `.m` files and uses atomic replacement.
 - Running an `.m` file executes arbitrary code contained in that file. This is a user-triggered editor action, not a sandbox.
-- The Command Window executes the exact MATLAB command entered by the user. Its temporary workspace checkpoint is session-scoped and stored outside the project tree.
+- The Command Window executes the exact MATLAB command entered by the user. In default batch mode, its checkpoint is session-scoped and outside the project. Opt-in persistent mode keeps live state in a private worker instead; Stop/timeout discards it and commands are never automatically replayed. Worker transport uses private temporary files, not a MATLAB network listener. It is not a sandbox; arbitrary user code can access files and spawn child processes. Cancellation terminates that worker's owned process tree/group, not MATLAB sessions discovered by name. Unexpected host-process termination recovery is not yet implemented.
 - Workspace variable edits evaluate the explicit MATLAB expression entered by the user; they are not a restricted numeric parser.
 - Parameter Sweep and SLX Simulation jobs load and simulate the selected model and therefore have the same callback/code-execution risks as normal Simulink execution. Stop terminates the spawned MATLAB process but is not a security sandbox.
 - Dirty `.m` recovery drafts are stored under the SLX Studio user-state directory (or `SLX_STUDIO_STATE_DIR`), not in the project, and may contain unsaved source code. Protect the user profile accordingly.

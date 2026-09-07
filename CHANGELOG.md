@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added opt-in persistent MATLAB execution for commands, `.m` runs/sections and
+  variable edits, with explicit reset reporting, bounded live output, Windows
+  console encoding support and owned process-tree cleanup; batch stays default.
+
 ## 1.0.0b3 - 2026-09-06
 
 - Added session-scoped, non-pausing MATLAB debug probes for `.m` runs. Click source line numbers to register probes and receive source-line plus visible-workspace snapshots in `debug_events`.

@@ -83,7 +83,7 @@ slx-studio . --matlab 'C:\Program Files\MATLAB\R2026a\bin\matlab.exe'
 4. 打开 `.slx`，拖动 Block、修改公开参数，或从输出端口拖到输入端口创建连接。点击 **Apply in MATLAB** 才会写入真实模型。
 5. 运行仿真或打开 **Sweep**；使用 `Shift+F5` 停止运行中的脚本、仿真或扫描。
 
-Workbench 使用会话级 MATLAB Workspace checkpoint。它位于项目目录之外，关闭 Workbench 后会清理。
+Workbench 默认使用项目目录之外的临时 MATLAB Workspace checkpoint，关闭后清理。也可通过 `--matlab-session persistent` 启用常驻共享会话，详见[配置与限制](docs/persistent-matlab.md)。
 
 ## CLI 命令速查
 
@@ -135,7 +135,7 @@ v1.0 Beta 的 `.m` 编辑器已经形成“编辑 → 运行 → 检查 → 再�
 - `.m` 使用真实后台 MATLAB Job，可通过 Stop 终止；
 - 编辑器 Undo / Redo 与 MATLAB 报错行自动定位；
 - stdout / stderr Console 与 **Workspace Variables**；
-- MATLAB 风格 **Command Window (`>>`)**，通过临时会话 checkpoint 在多次后台运行之间继承变量；
+- MATLAB 风格 **Command Window (`>>`)**，支持默认 checkpoint 模式和可选常驻 MATLAB worker；
 - Workspace 变量可双击，用明确 MATLAB 表达式修改；
 - 未保存 `.m` 会自动写入项目外的恢复草稿，异常退出后可恢复；
 - MATLAB Figure 运行后直接回传并显示在 Plots 面板；
@@ -215,7 +215,7 @@ Ctrl+Shift+S     另存为
 
 ### Command Window 与共享 Workspace
 
-脚本、Section、Command Window 命令和变量编辑共享一个会话级 MATLAB Workspace checkpoint。SLX Studio **不会**把完整 MATLAB Desktop 常驻嵌进程序；每次用户主动运行时继承临时 checkpoint，并把新的用户变量写回。Workbench 关闭后，这个临时会话随之清理。
+默认 batch 模式下，脚本、Section、Command Window 命令和变量编辑共享临时 Workspace checkpoint。使用 `slx-studio . --matlab-session persistent` 后，它们改为复用同一个独立 MATLAB worker，无需每次保存/恢复 MAT 文件。停止或超时会丢失内存状态；图形化 SLX 仿真和扫描仍是独立 batch 操作。这是可选的开发中功能，不增加运行时依赖；详见[配置、验证与限制](docs/persistent-matlab.md)。
 
 ```text
 运行 controller.m       → Kp = 2.5
@@ -346,7 +346,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-v1.0 Beta 当前收集到 **85 项测试**（其中 1 项真实 MATLAB 集成测试默认跳过，只有显式配置 MATLAB 路径才运行），覆盖 XML/归档安全、REST 输入错误、SLX Parser/Diff/Review、Patch、AI Blueprint/Provider、Workspace 隔离、Section 运行、可停止 MATLAB Job、共享 Command Session checkpoint、恢复草稿、Parameter Sweep 与指标、Figure 回传、SimulationOutput 曲线提取、工程搜索、Save As、模型历史、多端口 UI 契约、Workbench HTTP API、只读 `doctor` 诊断和兼容性矩阵 schema。
+请运行 `python -m pytest -ra` 查看当前测试总数；真实 MATLAB 验收需显式配置路径，Windows 进程树测试仅在对应平台运行。覆盖范围包括 XML/归档安全、REST 输入校验、SLX Parser/Diff/Review、Patch、AI Provider、Workspace 隔离、分节运行、可停止任务、checkpoint、常驻 worker 生命周期及 Workbench HTTP 执行链、恢复草稿、扫描、Figure、工程搜索、历史记录、UI 契约和诊断。
 
 在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
 

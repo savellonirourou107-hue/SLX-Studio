@@ -53,12 +53,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("path", nargs="?", type=Path, help="Workspace folder, .m file, or .slx file")
     parser.add_argument("--matlab", help="MATLAB executable path")
     parser.add_argument(
+        "--matlab-session",
+        choices=("batch", "persistent"),
+        default="batch",
+        help="MATLAB execution mode (persistent is opt-in; Stop discards live state)",
+    )
+    parser.add_argument(
         "--browser", action="store_true", help="Use the system browser instead of an embedded WebView"
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     path = args.path or _choose_path()
 
-    server, url = serve_workbench(path, matlab=args.matlab, open_browser=False)
+    server, url = serve_workbench(
+        path, matlab=args.matlab, matlab_session=args.matlab_session, open_browser=False
+    )
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.15}, daemon=True)
     thread.start()
     try:

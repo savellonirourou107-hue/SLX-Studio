@@ -50,6 +50,18 @@
 - [ ] Model references and library links
 - [ ] Stable plugin interfaces for block catalogs, AI providers and analysis tools
 
+## Engineering iteration foundations
+
+- [x] Opt-in persistent MATLAB worker for Command Window, `.m` and variable edits
+- [ ] Extend the persistent backend to graphical SLX simulation and sweeps
+- [ ] Recovery/ownership after unexpected host process termination
+- [ ] Native ES-module frontend separation without a framework dependency
+- [ ] Packaged Windows UI end-to-end acceptance (beyond EXE artifact checks)
+- [ ] Control Lab built around explicit experiments and control metrics
+
+The initial persistent mode and its tested boundaries are described in
+[the session guide](docs/persistent-matlab.md).
+
 ## Optional AI layer
 
 - [x] OpenAI / DeepSeek / Kimi / MiniMax / GLM / Qwen / custom endpoints

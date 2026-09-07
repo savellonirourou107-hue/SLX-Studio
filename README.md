@@ -83,7 +83,7 @@ Without MATLAB, `inspect`, `diff`, `review`, `context`, `view` and `html` remain
 4. Open an `.slx` model. Drag blocks, edit exposed parameters, or connect an output port to an input port. Click **Apply in MATLAB** to write a real model.
 5. Run a simulation or open **Sweep**. Use `Shift+F5` to stop a running script, simulation or sweep.
 
-The Workbench keeps a session-scoped MATLAB workspace checkpoint. It is temporary, project-external and removed when the Workbench closes.
+By default, the Workbench keeps a temporary, project-external MATLAB workspace checkpoint, removed on close. Opt in to a live shared worker with `--matlab-session persistent`; see the [session guide](docs/persistent-matlab.md).
 
 ## CLI command reference
 
@@ -135,7 +135,7 @@ The v1.0 Beta script editor supports a lightweight edit → run → inspect → 
 - real cancellable background MATLAB jobs for `.m` execution,
 - editor undo/redo and structured MATLAB error-line navigation,
 - captured stdout/stderr plus a **Workspace Variables** panel,
-- a MATLAB-style **Command Window** (`>>`) whose variables persist across background runs through a temporary session checkpoint,
+- a MATLAB-style **Command Window** (`>>`) with checkpoint-backed batch execution or an optional live persistent worker,
 - double-click editing for workspace variables using explicit MATLAB expressions,
 - autosaved recovery drafts for dirty `.m` tabs, stored outside the project tree,
 - embedded MATLAB Figure previews exported after execution,
@@ -217,7 +217,7 @@ MATLAB Figures are captured after script execution and shown beside Workspace Va
 
 ### Command Window and shared workspace
 
-Scripts, sections, Command Window commands and variable edits share a session-scoped MATLAB workspace checkpoint. SLX Studio does **not** keep a heavyweight MATLAB desktop session embedded; instead, each explicit run inherits the checkpoint and writes the resulting user variables back. The checkpoint lives in a temporary session directory and is discarded when the Workbench closes.
+Scripts, sections, Command Window commands and variable edits share a temporary workspace checkpoint in the default batch mode. With `slx-studio . --matlab-session persistent`, they instead share one private, long-running MATLAB worker without per-command MAT save/load. Stop or timeout discards its in-memory state; graphical SLX simulation/sweep jobs remain independent batch operations. This opt-in development feature adds no runtime dependency. See [setup, limitations and validation](docs/persistent-matlab.md).
 
 ```text
 Run controller.m       -> Kp = 2.5
@@ -361,7 +361,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-The v1.0 Beta regression suite currently contains 85 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts, Workbench HTTP APIs, the read-only `doctor` diagnostics and compatibility-matrix schema.
+Run `python -m pytest -ra` for current test totals; licensed MATLAB tests are opt-in and Windows process-tree tests are platform-specific. The suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, project search, history, UI contracts and diagnostics.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 

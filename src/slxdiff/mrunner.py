@@ -508,11 +508,13 @@ class MatlabRunManager:
         timeout: float = 300.0,
         workspace_file: str | Path | None = None,
         execution_lock: threading.RLock | None = None,
+        run_executor: Callable[..., dict[str, Any]] | None = None,
     ):
         self.matlab = matlab
         self.timeout = timeout
         self.workspace_file = Path(workspace_file).resolve() if workspace_file is not None else None
         self.execution_lock = execution_lock or threading.RLock()
+        self.run_executor = run_executor
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active_job: str | None = None
@@ -591,6 +593,15 @@ class MatlabRunManager:
                             "variables": [],
                             "figures": [],
                         }
+                    elif self.run_executor is not None:
+                        result = self.run_executor(
+                            script,
+                            code=code,
+                            start_line=start_line,
+                            on_process=set_process,
+                            cancelled=lambda: bool(job.get("cancel_requested")),
+                            tracepoints=job["tracepoints"],
+                        )
                     else:
                         result = _run_m(
                             script,
