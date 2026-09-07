@@ -144,11 +144,13 @@ class WorkspaceIndex:
         self._state = "idle"
         self._error = ""
         self._generation = 0
+        self._refresh_pending = False
         self._thread: threading.Thread | None = None
         self._schedule_locked()
 
     def _schedule_locked(self) -> None:
         if self._state == "indexing":
+            self._refresh_pending = True
             return
         self._state = "indexing"
         self._error = ""
@@ -167,6 +169,9 @@ class WorkspaceIndex:
                 if generation == self._generation:
                     self._state = "error"
                     self._error = str(exc)
+                    if self._refresh_pending:
+                        self._refresh_pending = False
+                        self._schedule_locked()
             return
         with self._lock:
             if generation != self._generation:
@@ -175,6 +180,9 @@ class WorkspaceIndex:
             self._files = files
             self._state = "ready"
             self._error = ""
+            if self._refresh_pending:
+                self._refresh_pending = False
+                self._schedule_locked()
 
     def invalidate(self) -> None:
         """Schedule a fresh index after a write or an explicit user refresh."""
@@ -185,10 +193,16 @@ class WorkspaceIndex:
 
     def _search_document(self, record: dict[str, Any], *, max_file_bytes: int) -> dict[str, Any] | None:
         relative = str(record["path"])
-        path = self.root / relative
         try:
+            path = resolve_workspace_path(self.root, relative)
+            if (self.root / relative).is_symlink():
+                return None
             stat = path.stat()
-        except OSError:
+        except (OSError, ValueError):
+            return None
+        # Apply each request's limit before looking up a shared document. A small
+        # request must neither reuse oversized text nor poison a later large one.
+        if str(record.get("kind")) == "matlab" and stat.st_size > max_file_bytes:
             return None
         signature = (int(stat.st_mtime_ns), int(stat.st_size))
         with self._lock:
@@ -197,13 +211,10 @@ class WorkspaceIndex:
                 return cached[1]
 
         if str(record.get("kind")) == "matlab":
-            if stat.st_size > max_file_bytes:
-                document: dict[str, Any] = {"text": None}
-            else:
-                try:
-                    document = {"text": read_text_file(self.root, relative)}
-                except (OSError, UnicodeError, ValueError):
-                    return None
+            try:
+                document: dict[str, Any] = {"text": read_text_file(self.root, relative)}
+            except (OSError, UnicodeError, ValueError):
+                return None
         else:
             try:
                 from .parser import parse_slx
