@@ -42,12 +42,17 @@ result = slxstudio_execute_command('{figure_q}', '{workspace_q}', '{work_q}', {c
 fid = fopen('{result_q}', 'w');
 if fid ~= -1, fprintf(fid, '%s', jsonencode(result)); fclose(fid); end
 if ~result.ok, error('slxstudio:CommandFailed', '%s', char(result.error.message)); end
+""" + _command_helpers_source()
 
+
+def _command_helpers_source() -> str:
+    """Shared execution/inspection code; an empty checkpoint keeps live state."""
+    return """
 function result = slxstudio_execute_command(figureDir, workspaceFile, workDir, commandText)
 result = struct('ok', false, 'stdout', '', 'variables', [], 'figures', [], 'error', struct());
 try
-    cd(workDir);
-    slxstudio_restore_base_workspace(workspaceFile);
+    if ~isempty(workDir), cd(workDir); end
+    if ~isempty(workspaceFile), slxstudio_restore_base_workspace(workspaceFile); end
     % Execute directly so MATLAB flushes command output while the process runs.
     % The Python runner captures this stream and exposes it through the command Job API.
     evalin('base', commandText);
@@ -64,7 +69,7 @@ catch ME
     end
 end
 raw = evalin('base', 'whos');
-vars = struct('name', {{}}, 'class', {{}}, 'size', {{}}, 'bytes', {{}}, 'preview', {{}});
+vars = struct('name', {}, 'class', {}, 'size', {}, 'bytes', {}, 'preview', {});
 idx = 0;
 for k = 1:numel(raw)
     if ~isvarname(raw(k).name), continue; end
@@ -88,7 +93,7 @@ result.variables = vars;
 try
     if ~exist(figureDir, 'dir'), mkdir(figureDir); end
     handles = flipud(findall(groot, 'Type', 'figure'));
-    figs = struct('name', {{}}, 'path', {{}});
+    figs = struct('name', {}, 'path', {});
     for k = 1:min(numel(handles), 6)
         filePath = fullfile(figureDir, sprintf('figure-%02d.png', k));
         try
@@ -103,7 +108,9 @@ try
     result.figures = figs;
 catch
 end
-try, slxstudio_save_base_workspace(workspaceFile, raw); catch, end
+if ~isempty(workspaceFile)
+    try, slxstudio_save_base_workspace(workspaceFile, raw); catch, end
+end
 end
 
 function slxstudio_restore_base_workspace(workspaceFile)
@@ -113,7 +120,7 @@ try
     state = load(workspaceFile);
     names = fieldnames(state);
     for k = 1:numel(names)
-        name = names{{k}};
+        name = names{k};
         if isvarname(name), assignin('base', name, state.(name)); end
     end
 catch
@@ -160,6 +167,9 @@ class MatlabCommandSession:
             raise ValueError("MATLAB command must be non-empty")
         if len(command.encode("utf-8")) > _MAX_COMMAND_BYTES:
             raise ValueError("MATLAB command is too large")
+
+    def close(self) -> None:
+        """Batch jobs own their processes; no idle worker needs closing."""
 
     def execute(
         self,

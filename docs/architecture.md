@@ -78,6 +78,16 @@ For `.m` runs, the session-scoped breakpoint registry can request non-pausing tr
 
 Running `.m` code is arbitrary code execution by definition and is not treated as a sandboxed action.
 
+### Optional persistent worker
+
+`--matlab-session persistent` replaces the Command Window and `.m` execution
+backend with one lazy, private, long-running MATLAB worker. A shared execution
+lock serializes commands, file/section runs and variable edits. Atomic JSON
+requests/results and bounded pipe output reuse the current Job API; live state
+is kept in MATLAB instead of restored from a MAT checkpoint. The batch backend
+remains the default. Graphical SLX bridges remain independent batch operations.
+See [persistent session lifecycle and limitations](persistent-matlab.md).
+
 ## Desktop shell
 
 `slx-studio` starts the loopback Workbench server. With pywebview installed it opens inside a desktop WebView; otherwise it opens the system browser.

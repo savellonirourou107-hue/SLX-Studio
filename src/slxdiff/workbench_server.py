@@ -23,6 +23,7 @@ from .mrunner import MatlabRunManager, run_m_file
 from .msession import MatlabCommandManager, MatlabCommandSession
 from .parser import parse_slx
 from .patching import patch_from_dict
+from .persistent import PersistentMatlabSession
 from .server import StudioHandler, StudioServer
 from .simrunner import SimulationRunManager
 from .state import StudioState
@@ -58,8 +59,19 @@ def _restore_model_snapshot(snapshot: Path, target: Path) -> None:
 
 class WorkbenchServer(StudioServer):
     def __init__(
-        self, address, handler, *, root: Path, initial_file: str | None, matlab: str | None, token: str
+        self,
+        address,
+        handler,
+        *,
+        root: Path,
+        initial_file: str | None,
+        matlab: str | None,
+        token: str,
+        matlab_session: str = "batch",
     ):
+        if matlab_session not in {"batch", "persistent"}:
+            raise ValueError("matlab_session must be batch or persistent")
+        self.matlab_session = matlab_session
         initial_model = None
         if initial_file and initial_file.lower().endswith(".slx"):
             initial_model = resolve_workspace_path(root, initial_file)
@@ -79,14 +91,20 @@ class WorkbenchServer(StudioServer):
         self.session_temp = tempfile.TemporaryDirectory(prefix="slx-studio-session-")
         self.session_root = Path(self.session_temp.name)
         self.workspace_checkpoint = self.session_root / "workspace.mat"
-        self.run_manager = MatlabRunManager(
-            matlab=matlab, workspace_file=self.workspace_checkpoint, execution_lock=self.execution_lock
-        )
-        self.command_session = MatlabCommandSession(
+        session_class = PersistentMatlabSession if matlab_session == "persistent" else MatlabCommandSession
+        session_options = {"temp_parent": self.session_root} if matlab_session == "persistent" else {}
+        self.command_session = session_class(
             work_dir=root,
             workspace_file=self.workspace_checkpoint,
             matlab=matlab,
             execution_lock=self.execution_lock,
+            **session_options,
+        )
+        self.run_manager = MatlabRunManager(
+            matlab=matlab,
+            workspace_file=self.workspace_checkpoint,
+            execution_lock=self.execution_lock,
+            run_executor=self.command_session.run_file if matlab_session == "persistent" else None,
         )
         self.command_manager = MatlabCommandManager(self.command_session)
         self.breakpoints = BreakpointRegistry(root)
@@ -130,6 +148,7 @@ class WorkbenchServer(StudioServer):
         try:
             self.run_manager.stop_all()
             self.command_manager.stop_all()
+            self.command_session.close()
             self.sweep_manager.stop_all()
             self.simulation_manager.stop_all()
             self.model_history.close()
@@ -153,6 +172,7 @@ class WorkbenchHandler(StudioHandler):
                     "root": str(self.server.workspace_root),
                     "initial_file": self.server.initial_file,
                     "api_version": "v1",
+                    "matlab_session": self.server.matlab_session,
                 }
             )
             self._send(HTTPStatus.OK, html.encode("utf-8"), "text/html; charset=utf-8")
@@ -183,6 +203,17 @@ class WorkbenchHandler(StudioHandler):
                 self._send(HTTPStatus.OK, html.encode("utf-8"), "text/html; charset=utf-8")
             except (FileNotFoundError, ValueError) as exc:
                 self._send(HTTPStatus.BAD_REQUEST, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
+            return
+
+        if parsed.path == "/api/v1/workspace/session":
+            if not self._authorized():
+                self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
+                return
+            session = self.server.command_session
+            status = (
+                session.status() if isinstance(session, PersistentMatlabSession) else {"backend": "batch"}
+            )
+            self._send_json(HTTPStatus.OK, {"ok": True, **status})
             return
 
         if parsed.path == "/api/v1/workspace":
@@ -334,9 +365,12 @@ class WorkbenchHandler(StudioHandler):
             if parsed.path == "/api/v1/workspace/run-m":
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 with self.server.execution_lock:
-                    result = run_m_file(
-                        path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint
-                    )
+                    if isinstance(self.server.command_session, PersistentMatlabSession):
+                        result = self.server.command_session.run_file(path)
+                    else:
+                        result = run_m_file(
+                            path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint
+                        )
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
                 return
 
@@ -661,6 +695,7 @@ def serve_workbench(
     path: str | Path | None = None,
     *,
     matlab: str | None = None,
+    matlab_session: str = "batch",
     host: str = "127.0.0.1",
     port: int = 0,
     open_browser: bool = True,
@@ -671,7 +706,13 @@ def serve_workbench(
     root, initial = workspace_root(path)
     session_token = token or secrets.token_urlsafe(24)
     server = WorkbenchServer(
-        (host, port), WorkbenchHandler, root=root, initial_file=initial, matlab=matlab, token=session_token
+        (host, port),
+        WorkbenchHandler,
+        root=root,
+        initial_file=initial,
+        matlab=matlab,
+        token=session_token,
+        matlab_session=matlab_session,
     )
     actual_host, actual_port = server.server_address[:2]
     display_host = f"[{actual_host}]" if ":" in actual_host else actual_host
