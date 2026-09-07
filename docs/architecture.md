@@ -1,5 +1,10 @@
 # Architecture
 
+This document describes the existing beta implementation. The planned
+Electron/Monaco architecture and migration gates are in the
+[2.0 migration charter](slx-studio-2-migration.md); they have not replaced this
+runtime yet. The [project goal](../SLX_STUDIO_2_GOAL.md) is the refactor scope.
+
 SLX Studio is split into a lightweight editor shell and explicit execution bridges.
 
 ## Workbench

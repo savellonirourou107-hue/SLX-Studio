@@ -1,5 +1,24 @@
 # Roadmap
 
+## Current direction — SLX Studio 2.0 (planned)
+
+The next major direction is a **Model + Code + Simulation-first IDE** built on
+an Electron/TypeScript/Monaco desktop, retaining the Python engineering core.
+See the [project goal](SLX_STUDIO_2_GOAL.md) and
+[migration charter](docs/slx-studio-2-migration.md) for scope, resource budgets,
+branch dependencies and executable acceptance criteria. This is not a released
+2.0 implementation; the beta below remains the compatibility baseline.
+
+- [x] M0a: record the goal, verified starting point and migration gates
+- [ ] M0b: review/integrate required open-branch fixes and validate the combined baseline
+- [ ] M1: real Electron + Monaco file-edit/save workflow with Commands and Services
+- [ ] M2: modular Workbench, configuration and Python JSON-RPC adapter
+- [ ] M3: SLX Custom Editor and shared MATLAB/model/simulation workflow
+- [ ] M4: lazy Extension Host, first-party extensions and Windows install acceptance
+
+Full LSP, a pausing debugger/profiler, remote execution, Marketplace and
+additional Terminal/Control/Git/AI extensions follow the core migration.
+
 ## v0.8 — Make it feel like a small real IDE ✅
 
 - [x] Multi-file `.m` / `.slx` tabs
@@ -55,7 +74,7 @@
 - [x] Opt-in persistent MATLAB worker for Command Window, `.m` and variable edits
 - [ ] Extend the persistent backend to graphical SLX simulation and sweeps
 - [ ] Recovery/ownership after unexpected host process termination
-- [ ] Native ES-module frontend separation without a framework dependency
+- [ ] Modular frontend separation (carried into the 2.0 TypeScript migration)
 - [ ] Packaged Windows UI end-to-end acceptance (beyond EXE artifact checks)
 - [ ] Control Lab built around explicit experiments and control metrics
 
