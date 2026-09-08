@@ -2,9 +2,9 @@
 
 This is a separately launched Electron preview on the
 `codex/slx-studio-2-foundation` branch. It does not replace the Python CLI or
-legacy Workbench. The current real workflow is `.m` editing plus a read-only
-`.slx` structural summary; a graphical model viewport, MATLAB execution and
-extensions are still migration work.
+legacy Workbench. The current real workflow is `.m` editing plus a bounded,
+read-only `.slx` model viewport. MATLAB execution, model writes, simulation
+panels and extensions are still migration work.
 
 ## Run from source
 
@@ -41,10 +41,14 @@ size and minimap settings through the typed service. User settings live in the
 desktop state directory; workspace settings live in `.slx-studio/settings.json`.
 Only registered, non-sensitive keys can be written, and saves use a file hash
 to reject external changes. Selecting an `.slx` file invokes the Python parser via
-the typed service boundary and reports its block/connection counts in Output;
-the parser does not start MATLAB or execute model callbacks. `model/diff` is
-also available to the desktop API for typed structural comparisons. This is a
-read-only summary, not a working model viewport or `.slx` writer.
+the typed service boundary and opens the static model viewport. The viewport
+supports subsystem selection, bounded block search, block parameter inspection,
+zoom/pan and page navigation. It renders at most 160 blocks and 512 connections
+per request, pins follow-up pages to the source SHA-256, and marks fallback
+positions or omitted connections. Wires are intentionally approximate and the
+view is read-only: the parser does not start MATLAB, execute callbacks or
+rewrite private SLX XML. `model/diff` remains available to the desktop API for
+typed structural comparisons.
 
 Both settings files use this versioned JSON format (maximum 64 KiB):
 
@@ -74,6 +78,14 @@ python -m ruff format --check .
 npm run measure:desktop
 ```
 
+To run the optional real MATLAB gate on this machine, set the executable
+explicitly before invoking pytest:
+
+```powershell
+$env:SLX_STUDIO_MATLAB = 'E:\matlab2026\bin\matlab.exe'
+python -m pytest tests/test_matlab_r2026a_integration.py -o addopts= -ra
+```
+
 `check:desktop` stops at the first failing gate. It includes actual Electron
 launch and interaction, not a browser mock. The test and measurement fixtures
 are generated under the configured temporary directory. Measurements and
@@ -82,6 +94,7 @@ screenshots live under ignored `output/` subdirectories. See
 
 ## Rollback and boundaries
 
-Continue using `slx-studio` / `slx-diff studio` for the legacy Workbench and
-existing MATLAB/Simulink workflows. No release tag, main-branch replacement,
-Windows installer or VS Code extension compatibility is implied by this preview.
+Continue using `slx-studio` / `slx-diff studio` for model writes, simulation and
+the legacy Workbench. No release tag, main-branch replacement, Windows installer
+or VS Code extension compatibility is implied by this preview. The new viewport
+is static and approximate; it is not evidence of Simulink rendering parity.

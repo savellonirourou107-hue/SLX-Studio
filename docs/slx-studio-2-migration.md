@@ -300,6 +300,13 @@ Rollback: switch the transport adapter/desktop entry, without reverting file for
 
 ### M3 — Model + code + simulation workflow
 
+The first M3 slice is now implemented locally: the typed `model/viewport`
+service and Electron custom editor provide bounded static SLX viewing with
+subsystem selection, search, parameter inspection and page navigation. This is
+an incremental read-only viewport, not the full M3 acceptance: MATLAB-backed
+editing/simulation, exact Simulink rendering and shared-session panels remain
+open.
+
 Deliver: SLX Custom Editor split into viewport/selection/rendering/outline/inspector
 components; MATLAB service and panels backed by the existing persistent worker;
 diagnostic navigation, variables, figures and simulation provenance.

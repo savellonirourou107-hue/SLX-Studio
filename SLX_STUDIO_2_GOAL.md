@@ -92,8 +92,10 @@ Monaco 的语言着色不等于 MATLAB 语义补全；现有 tracepoints 不等�
 
 ## 当前接力点
 
-当前分支已完成 M0b 基线整合、M1 编辑闭环和 M2 平台基础；证据见
+当前分支已完成 M0b 基线整合、M1 编辑闭环和 M2 平台基础，正在推进 M3
+只读模型视口；证据见
 [M1 验收记录](docs/slx-studio-2-m1-evidence.md)与
 [M2 基础验收记录](docs/slx-studio-2-m2-foundation.md)。下一实施项是 **M3
-SLX Custom Editor 与 MATLAB 常驻能力接入**。保留 Python 源码位置和现有启动
-命令，再逐步迁移 SLX 与运行面板。
+SLX Custom Editor 与 MATLAB 常驻能力接入**。当前 M3 视口仍只读、静态且不
+宣称 Simulink 绘制等价；保留 Python 源码位置和现有启动命令，再逐步迁移
+运行面板。
