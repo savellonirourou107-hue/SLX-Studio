@@ -94,3 +94,20 @@ Windows run `34258530344` found an Electron 44 lazy-install packaging bug:
 Electron entry point before copying; a lazy-runtime regression and an actual
 installer lifecycle test cover that failure path. The failed run is not
 installation-success evidence.
+
+The packaging fix at `5fd9076` passed [Windows run 34259962084](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/34259962084).
+Both Electron and legacy PyInstaller jobs succeeded. The Electron job actually
+installed to an isolated runner directory, launched the installed application,
+saved and reopened a file, executed the packaged extension, then uninstalled
+and checked installed-file and uninstall-registry cleanup. This result applies
+to that candidate only; subsequent changes must repeat the gate.
+
+Extension lifecycle hardening additionally covers per-host pending requests,
+concurrent activation coalescing, discovery preserving running/failure state,
+parent-link rejection, bounded protocol output, timeout termination, explicit
+restart and manifest-removal cleanup. `npm run test:extensions` opens a real
+Electron workbench while a trusted test extension loops forever, saves a file
+before the host timeout, verifies failure disposal, then explicitly restarts
+the corrected extension. `SLX_STUDIO_EXTENSION_ROOT` is an optional launcher
+environment override for an explicitly trusted directory; workspace settings
+cannot set it and discovery never activates code.

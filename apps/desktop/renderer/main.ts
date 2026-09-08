@@ -144,9 +144,9 @@ function renderExtensionViews(): void {
 async function listExtensions(): Promise<readonly ExtensionRecord[]> {
   return unwrap(await window.slx.extensionsList());
 }
-async function activateExtension(id: string): Promise<void> {
+async function activateExtension(id: string, restart = false): Promise<void> {
   if (activeExtensions.has(id)) return;
-  const record = unwrap(await window.slx.extensionsActivate(id));
+  const record = unwrap(await (restart ? window.slx.extensionsRestart(id) : window.slx.extensionsActivate(id)));
   const contributionId = `extension.${id}`;
   const remove = contributions.register({
     id: contributionId,
@@ -409,6 +409,12 @@ commands.register({ id: 'extensions.deactivate', title: 'Extensions: Deactivate 
   const id = activeExtensions.keys().next().value as string | undefined;
   if (id) await deactivateExtension(id);
 } });
+commands.register({ id: 'extensions.restart', title: 'Extensions: Restart Failed Extension…', run: async () => {
+  const records = (await listExtensions()).filter(record => record.state === 'failed');
+  if (!records.length) { log('No failed extension needs restarting.'); return; }
+  const id = records.length === 1 ? records[0].id : await decide('Restart trusted extension', 'Restarting executes its trusted local entry point again. Previous commands are never replayed.', ['Cancel', ...records.map(record => record.id)]);
+  if (id !== 'Cancel') await activateExtension(id, true);
+} });
 commands.register({ id: 'workbench.reloadContributions', title: 'Workbench: Reload Built-in Contributions', run: async () => {
   await builtInActivation;
   contributions.deactivate('builtin.core');
@@ -430,6 +436,12 @@ element('command-search').addEventListener('input', commandResults);
 element('command-search').addEventListener('keydown', event => { if (event.key === 'Enter') element('command-results').querySelector<HTMLButtonElement>('button:not(:disabled)')?.click(); });
 document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button => button.onclick = () => void commands.execute(button.dataset.command!).catch(report));
 window.slx.onCommand(id => void commands.execute(id).catch(report));
+window.slx.onExtensionState(state => {
+  if (state.state === 'inactive' && activeExtensions.has(state.id)) { void deactivateExtension(state.id).catch(report); return; }
+  if (state.state !== 'failed') return;
+  log(`Extension failed: ${state.id} · ${state.error || 'host stopped'}. Use Restart Failed Extension to retry explicitly.`);
+  if (activeExtensions.has(state.id)) void deactivateExtension(state.id).catch(report);
+});
 window.slx.onClose(() => {
   if (closing) return;
   closing = true;

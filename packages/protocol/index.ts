@@ -98,8 +98,10 @@ export interface DesktopAPI {
   matlabStopRun(jobId: string): Promise<Result<MatlabJobStatus>>;
   extensionsList(): Promise<Result<readonly ExtensionRecord[]>>;
   extensionsActivate(id: string): Promise<Result<ExtensionRecord>>;
+  extensionsRestart(id: string): Promise<Result<ExtensionRecord>>;
   extensionsExecute(id: string, command: string, args?: Readonly<Record<string, unknown>>): Promise<Result<unknown>>;
   extensionsDeactivate(id: string): Promise<Result<null>>;
+  onExtensionState(callback: (state: { id: string; state: ExtensionRecord['state']; error?: string }) => void): () => void;
   onCommand(callback: (command: string) => void): () => void;
   onClose(callback: () => void): () => void;
   confirmClose(): void;

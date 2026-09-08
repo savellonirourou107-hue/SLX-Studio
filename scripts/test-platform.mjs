@@ -248,9 +248,48 @@ test('trusted extension host is lazy, validates manifests, and releases its proc
     assert.equal(manager.list().find(item => item.id === 'throw.ext')?.state, 'failed');
     const active = await manager.activate('trusted.ext');
     assert.equal(active.state, 'active');
+    const concurrent = await Promise.all([manager.activate('trusted.ext'), manager.activate('trusted.ext')]);
+    assert.ok(concurrent.every(item => item.state === 'active'));
+    assert.equal(manager.children.size, 1);
+    assert.equal((await manager.discover()).find(item => item.id === 'trusted.ext').state, 'active', 'listing cannot reset a live extension');
     assert.deepEqual(await manager.execute('trusted.ext', 'trusted.hello', { value: 3 }), { command: 'trusted.hello', args: { value: 3 } });
     await manager.deactivate('trusted.ext');
     assert.equal(manager.list().find(item => item.id === 'trusted.ext')?.state, 'inactive');
+  } finally { await manager.close(); await fs.rm(fixture, { recursive: true, force: true }); }
+});
+
+test('extension failures are isolated, hangs terminate, and restart is explicit', { timeout: 20_000 }, async () => {
+  const fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'slx-extension-faults-'));
+  const states = [];
+  async function extension(id, source, main = 'extension.mjs') {
+    await fs.mkdir(path.join(fixture, id), { recursive: true });
+    await fs.writeFile(path.join(fixture, id, 'slx-extension.json'), JSON.stringify({ id, apiVersion: 1, version: '1.0.0', main, contributes: { commands: [{ command: `${id}.run`, title: id }] } }));
+    await fs.writeFile(path.join(fixture, id, 'extension.mjs'), source);
+  }
+  await extension('good.ext', 'export async function execute(){await new Promise(r=>setTimeout(r,250));return "good"}');
+  await extension('crash.ext', 'export function execute(){setTimeout(()=>process.exit(23),30);return new Promise(()=>{})}');
+  await extension('hung.ext', 'export function execute(){while(true){}}');
+  await extension('escape.ext', 'export function execute(){}', '../good.ext/extension.mjs');
+  await extension('link.ext', 'export function execute(){}', 'nested/extension.mjs');
+  await fs.symlink(path.join(fixture, 'good.ext'), path.join(fixture, 'link.ext/nested'), process.platform === 'win32' ? 'junction' : 'dir');
+  const manager = new ExtensionHostManager(fixture, state => states.push(state));
+  try {
+    await manager.discover();
+    await assert.rejects(manager.activate('escape.ext'), /relative path|escapes/);
+    await assert.rejects(manager.activate('link.ext'), /link|reparse/);
+    await Promise.all([manager.activate('good.ext'), manager.activate('good.ext'), manager.activate('crash.ext'), manager.activate('hung.ext')]);
+    assert.equal(manager.children.size, 3, 'concurrent activation owns one child per extension');
+    const good = manager.execute('good.ext', 'good.ext.run');
+    await assert.rejects(manager.execute('crash.ext', 'crash.ext.run'), /exited/);
+    assert.equal(await good, 'good', 'one child exiting cannot reject another child\'s request');
+    await assert.rejects(manager.execute('hung.ext', 'hung.ext.run'), /timed out/);
+    assert.equal(manager.list().find(item => item.id === 'hung.ext').state, 'failed');
+    assert.equal((await manager.discover()).find(item => item.id === 'hung.ext').state, 'failed');
+    await fs.writeFile(path.join(fixture, 'hung.ext/extension.mjs'), 'export function execute(){return "restarted"}');
+    await manager.restart('hung.ext');
+    assert.equal(await manager.execute('hung.ext', 'hung.ext.run'), 'restarted');
+    assert.ok(states.some(item => item.id === 'hung.ext' && item.state === 'failed'));
+    assert.equal(await manager.execute('good.ext', 'good.ext.run'), 'good');
   } finally { await manager.close(); await fs.rm(fixture, { recursive: true, force: true }); }
 });
 

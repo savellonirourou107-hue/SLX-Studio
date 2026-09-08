@@ -59,14 +59,25 @@ function arrayOf<T>(value: unknown, label: string, parser: (item: unknown) => T,
   return value.map(parser);
 }
 function safePath(root: string, relative: string): string {
-  if (path.isAbsolute(relative) || relative.includes('\0') || relative.includes('\\') || relative.split('/').some(part => !part || part === '.' || part === '..')) throw new Error('extension manifest path must be a simple relative path');
+  if (path.isAbsolute(relative) || relative.includes('\0') || relative.includes('\\') || relative.includes(':') || relative.split('/').some(part => !part || part === '.' || part === '..' || part !== part.trim() || part.endsWith('.'))) throw new Error('extension manifest path must be a simple relative path');
   const resolved = path.resolve(root, relative);
   if (!resolved.startsWith(`${path.resolve(root)}${path.sep}`)) throw new Error('extension path escapes trusted root');
   return resolved;
 }
-async function regularFile(filename: string): Promise<void> {
-  const info = await fs.lstat(filename);
-  if (!info.isFile()) throw new Error('extension target must be a regular file');
+async function regularFile(filename: string, root: string): Promise<void> {
+  const relative = path.relative(root, filename);
+  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('extension target escapes trusted root');
+  let current = root;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    const info = await fs.lstat(current);
+    if (info.isSymbolicLink()) throw new Error('extension links and reparse targets are not allowed');
+    if (current === filename ? !info.isFile() : !info.isDirectory()) throw new Error('extension target must be a regular file');
+  }
+  const expected = path.resolve(await fs.realpath(root), relative);
+  const actual = path.resolve(await fs.realpath(filename));
+  const normalize = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value;
+  if (normalize(actual) !== normalize(expected)) throw new Error('extension target resolves through a link');
 }
 function parseCommand(value: unknown): ExtensionCommand {
   const item = object(value, 'command');
@@ -99,19 +110,39 @@ function parseEditor(value: unknown): ExtensionEditor {
 export class ExtensionHostManager {
   private readonly records = new Map<string, ExtensionRecord>();
   private readonly children = new Map<string, ChildProcessWithoutNullStreams>();
-  private readonly pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly pending = new Map<string, { owner: string; resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly activations = new Map<string, Promise<ExtensionRecord>>();
+  private readonly deactivations = new Map<string, Promise<void>>();
   private readonly buffers = new Map<string, string>();
-  constructor(private readonly trustedRoot: string) {}
+  constructor(private readonly trustedRoot: string, private readonly changed?: (state: { id: string; state: ExtensionRecord['state']; error?: string }) => void) {}
+  private emit(record: ExtensionRecord): void { this.changed?.({ id: record.id, state: record.state, error: record.error }); }
 
   async discover(): Promise<readonly ExtensionRecord[]> {
     const root = path.resolve(this.trustedRoot);
     const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [] as fsSync.Dirent[]);
+    const present = new Set(entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.')).map(entry => entry.name));
+    for (const id of [...this.records.keys()]) {
+      if (present.has(id)) continue;
+      await this.deactivate(id);
+      this.records.delete(id);
+    }
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
       const directory = safePath(root, entry.name);
+      if (!await fs.lstat(safePath(directory, 'slx-extension.json')).catch(() => null)) {
+        await this.deactivate(entry.name); this.records.delete(entry.name); continue;
+      }
+      // Discovery is read-only for known manifests: it must not reset a live or
+      // failed host to inactive, spawn a duplicate, or erase failure attribution.
+      if (this.records.get(entry.name)?.main) {
+        try { await regularFile(safePath(directory, 'slx-extension.json'), root); }
+        catch { await this.deactivate(entry.name); this.records.delete(entry.name); }
+        continue;
+      }
       let record: ExtensionRecord;
       try {
         const manifestPath = safePath(directory, 'slx-extension.json');
+        await regularFile(manifestPath, root);
         const info = await fs.stat(manifestPath);
         if (info.size > MAX_MANIFEST_BYTES) throw new Error('manifest exceeds 64 KiB');
         const raw = object(JSON.parse(await fs.readFile(manifestPath, 'utf8')), 'manifest');
@@ -120,7 +151,7 @@ export class ExtensionHostManager {
         if (!ID.test(id) || id !== entry.name) throw new Error('extension directory must match manifest id');
         const main = boundedText(raw.main, 'extension main', 128);
         const mainPath = safePath(directory, main);
-        await regularFile(mainPath);
+        await regularFile(mainPath, root);
         const contributes = object(raw.contributes ?? {}, 'contributes');
         record = {
           id, apiVersion: 1, version: boundedText(raw.version, 'extension version', 64), main,
@@ -153,18 +184,28 @@ export class ExtensionHostManager {
     const payload = JSON.stringify({ id: requestId, ...operation });
     if (Buffer.byteLength(payload, 'utf8') > MAX_MESSAGE_BYTES) return Promise.reject(new Error('extension request exceeds size limit'));
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('extension host request timed out')); }, REQUEST_TIMEOUT_MS);
-      this.pending.set(requestId, { resolve, reject, timer });
-      child.stdin.write(`${payload}\n`);
+      const timer = setTimeout(() => this.fail(id, new Error('extension host request timed out'), true), REQUEST_TIMEOUT_MS);
+      this.pending.set(requestId, { owner: id, resolve, reject, timer });
+      child.stdin.write(`${payload}\n`, error => { if (error) this.fail(id, error, true); });
     });
   }
   async activate(id: string): Promise<ExtensionRecord> {
+    const pending = this.activations.get(id);
+    if (pending) return pending;
+    const activation = this.activateOnce(id);
+    this.activations.set(id, activation);
+    try { return await activation; } finally { if (this.activations.get(id) === activation) this.activations.delete(id); }
+  }
+  private async activateOnce(id: string): Promise<ExtensionRecord> {
     const record = this.record(id);
     if (record.state === 'active') return { ...record };
+    if ([...this.records.values()].filter(item => item.state === 'active' || item.state === 'activating').length >= 8) throw new Error('At most 8 trusted extension hosts may be active');
     record.state = 'activating';
+    this.emit(record);
     try {
       const mainPath = safePath(record.path, record.main);
-      await regularFile(mainPath);
+      await regularFile(mainPath, path.resolve(this.trustedRoot));
+      if (record.state !== 'activating') throw new Error('Extension activation was cancelled');
       const child = spawn(process.execPath, ['--disallow-code-generation-from-strings', '-e', WORKER_SOURCE], {
         cwd: record.path, windowsHide: true, shell: false,
         // Electron's binary only behaves as a Node child when this flag is
@@ -177,14 +218,22 @@ export class ExtensionHostManager {
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => this.handleOutput(id, chunk));
       child.stderr.on('data', () => { /* extension diagnostics are intentionally not surfaced as executable output */ });
-      child.on('error', error => this.fail(id, error));
-      child.on('exit', (_code, signal) => { if (this.children.get(id) === child) { this.children.delete(id); if (record.state === 'active') { record.state = 'failed'; record.error = `extension host exited${signal ? ` (${signal})` : ''}`; } this.fail(id, new Error(record.error || 'extension host exited')); } });
+      child.stdin.on('error', error => { if (this.children.get(id) === child) this.fail(id, error, record.state !== 'inactive'); });
+      child.on('error', error => this.fail(id, error, true));
+      child.on('exit', (_code, signal) => {
+        if (this.children.get(id) !== child) return;
+        this.children.delete(id); this.buffers.delete(id);
+        this.fail(id, new Error(`extension host exited${signal ? ` (${signal})` : ''}`), record.state === 'active' || record.state === 'activating');
+      });
       const response = await this.request(id, { op: 'activate', extensionId: id, main: mainPath });
       if (!response?.ok) throw new Error(String(response?.error || 'extension activation failed'));
+      if (this.children.get(id) !== child || record.state !== 'activating') throw new Error('Extension activation was cancelled');
       record.state = 'active';
+      this.emit(record);
       return { ...record };
     } catch (error) {
       record.state = 'failed'; record.error = String((error as Error).message || error);
+      this.emit(record);
       await this.deactivate(id);
       throw error;
     }
@@ -198,33 +247,60 @@ export class ExtensionHostManager {
     return response.value;
   }
   async deactivate(id: string): Promise<void> {
+    const pending = this.deactivations.get(id);
+    if (pending) return pending;
+    const operation = this.deactivateOnce(id);
+    this.deactivations.set(id, operation);
+    try { await operation; } finally { if (this.deactivations.get(id) === operation) this.deactivations.delete(id); }
+  }
+  private async deactivateOnce(id: string): Promise<void> {
     const record = this.records.get(id);
     const child = this.children.get(id);
     if (record && record.state !== 'failed') record.state = 'inactive';
+    if (record) this.emit(record);
     if (child) {
       const exited = child.exitCode !== null ? Promise.resolve() : new Promise<void>(resolve => child.once('exit', () => resolve()));
-      try { await this.request(id, { op: 'shutdown' }); } catch { /* kill below */ }
+      // A failed/hung host is killed directly; never queue another five-second
+      // request behind a non-responsive command during disable or shutdown.
+      if (record?.state !== 'failed') { try { await this.request(id, { op: 'shutdown' }); } catch { /* kill below */ } }
       if (child.exitCode === null) child.kill();
       await Promise.race([exited, new Promise<void>(resolve => setTimeout(resolve, 1000))]);
       this.children.delete(id);
     }
     this.fail(id, new Error('extension host stopped'));
+    this.buffers.delete(id);
   }
-  async close(): Promise<void> { for (const id of [...this.records.keys()]) await this.deactivate(id); }
+  async restart(id: string): Promise<ExtensionRecord> {
+    if (!this.records.has(id)) throw new Error(`Unknown extension: ${id}`);
+    await this.deactivate(id);
+    await this.activations.get(id)?.catch(() => {});
+    this.records.delete(id);
+    await this.discover();
+    return this.activate(id);
+  }
+  async close(): Promise<void> { await Promise.all([...this.records.keys()].map(id => this.deactivate(id))); }
   private handleOutput(id: string, chunk: string): void {
     let buffer = (this.buffers.get(id) || '') + chunk;
-    if (buffer.length > MAX_MESSAGE_BYTES * 2) { this.fail(id, new Error('extension host output exceeded limit')); this.children.get(id)?.kill(); return; }
+    if (Buffer.byteLength(buffer, 'utf8') > MAX_MESSAGE_BYTES) { this.fail(id, new Error('extension host output exceeded limit'), true); return; }
     const lines = buffer.split('\n'); buffer = lines.pop() || ''; this.buffers.set(id, buffer);
     for (const line of lines) {
       if (!line) continue;
       try {
         const response = JSON.parse(line); const request = this.pending.get(response.id);
-        if (!request) continue;
+        if (!request || request.owner !== id) continue;
         this.pending.delete(response.id); clearTimeout(request.timer); request.resolve(response);
       } catch { /* malformed host output is ignored until a request times out */ }
     }
   }
-  private fail(id: string, error: Error): void {
-    for (const [requestId, request] of this.pending) { clearTimeout(request.timer); request.reject(error); this.pending.delete(requestId); }
+  private fail(id: string, error: Error, fatal = false): void {
+    if (fatal) {
+      const record = this.records.get(id);
+      if (record) { record.state = 'failed'; record.error = error.message; this.emit(record); }
+      this.children.get(id)?.kill();
+    }
+    for (const [requestId, request] of this.pending) {
+      if (request.owner !== id) continue;
+      clearTimeout(request.timer); request.reject(error); this.pending.delete(requestId);
+    }
   }
 }

@@ -24,7 +24,7 @@ jobs:
       - name: Install desktop dependencies
         run: npm ci
       - name: Platform and packaging regressions
-        run: npm run test:platform
+        run: npm run check:desktop
       - name: Build and package Electron desktop
         run: npm run package:electron
       - name: Launch, save and reopen portable Electron package

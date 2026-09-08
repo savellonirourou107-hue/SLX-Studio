@@ -11,9 +11,10 @@
     "typecheck": "tsc --noEmit",
     "desktop": "node scripts/launch-desktop.mjs",
     "test:desktop": "node scripts/test-desktop.mjs",
+    "test:extensions": "node scripts/test-extension-desktop.mjs",
     "test:platform": "node --test scripts/test-platform.mjs scripts/test-package.mjs",
     "measure:desktop": "node scripts/measure-desktop.mjs",
-    "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop",
+    "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop && npm run test:extensions",
     "package:electron": "npm run build && node scripts/package-electron.mjs",
     "test:package": "node scripts/test-packaged-electron.mjs",
     "test:installer": "pwsh -NoProfile -File scripts/test-installer.ps1"

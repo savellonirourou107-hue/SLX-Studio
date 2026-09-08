@@ -25,7 +25,9 @@ let workspace: WorkspaceInfo | null = null;
 let closing = false;
 const draftQueues = new Map<string, Promise<unknown>>();
 const configurationFiles = new ConfigurationFiles(stateRoot);
-const extensions = new ExtensionHostManager(path.join(sourceRoot, 'extensions'));
+const extensions = new ExtensionHostManager(path.resolve(process.env.SLX_STUDIO_EXTENSION_ROOT || path.join(sourceRoot, 'extensions')), state => {
+  if (window && !window.isDestroyed()) window.webContents.send('slx:extensionState', state);
+});
 
 function validate(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== `${origin}/index.html`) throw new Error('Untrusted IPC sender');
@@ -206,6 +208,10 @@ async function start(): Promise<void> {
   handle('slx:extensionsActivate', async payload => {
     const args = object(payload);
     return extensions.activate(text(args.id, 128));
+  });
+  handle('slx:extensionsRestart', async payload => {
+    const args = object(payload);
+    return extensions.restart(text(args.id, 128));
   });
   handle('slx:extensionsExecute', async payload => {
     const args = object(payload);
