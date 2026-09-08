@@ -1,13 +1,16 @@
 # SLX Studio 2.0 migration charter
 
-Status: **accepted direction; preparation only**. Updated: 2026-09-07.
+Status: **M0b integration and M1 editing slice accepted locally; M2 in progress**. Updated: 2026-09-08.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document defines future implementation, not features available in the beta.
 
 ## 1. Verified starting point
 
-The preparation branch is `codex/slx-studio-2-plan`, based on
+The initial preparation branch was `codex/slx-studio-2-plan`, based on
 `484fd69e96dd9dc4fbcba18d5bdac34836a42453` (`codex/persistent-matlab-session`).
+The accepted integration and M1 branch is now
+`codex/slx-studio-2-foundation`, with the required fixes cherry-picked and no
+existing GitHub PR merged.
 The Python package is still `1.0.0b3`; no version bump or release is part of this charter.
 
 On 2026-09-07, GitHub `main` still points to
@@ -29,7 +32,7 @@ creation, not an interactive installed desktop workflow.
 | Graphical SLX write/simulation/sweep bridges | Still batch-based; shared-session migration is unfinished |
 | Existing MATLAB debug probes | Non-pausing only; no interactive debugger claim |
 
-Preparation validation on this branch's code baseline:
+The historical preparation validation before integration was:
 
 ```text
 python -m pytest -m "not matlab_integration" -ra
@@ -208,7 +211,7 @@ Deliverables: objective, current-state evidence, retained functionality, branch
 dependency map, architecture boundaries and acceptance gates. No desktop
 replacement or new runtime dependency is introduced by this documentation step.
 
-### M0b — Integration baseline (next)
+### M0b — Integration baseline (accepted)
 
 - Review the open branch chains and integrate required fixes in a dedicated branch.
 - Preserve provenance and existing release/PR branches; do not force-push them.
@@ -216,7 +219,12 @@ replacement or new runtime dependency is introduced by this documentation step.
 - If integration changes MATLAB execution, rerun the real R2026a suite.
 - Inventory security behavior and old-UI workflows to prevent silent migration losses.
 
-### M1 — Real Electron / Monaco editing slice
+The integration branch is `codex/slx-studio-2-foundation`. It retains the
+provenance of the indexing, cache, CLI validation and persistent-worker changes
+without merging their GitHub PRs into `main`. The combined lightweight gate is
+131 passed and 8 deselected optional MATLAB tests.
+
+### M1 — Real Electron / Monaco editing slice (accepted locally)
 
 Deliver: an opt-in Electron app, offline Monaco assets/workers, Explorer,
 multi-file tabs, a simple status area, Commands and minimal typed services.
@@ -236,6 +244,11 @@ Acceptance:
 - Electron actually launches and these actions execute in automation; a browser
   mockup or successful build is not enough. No MATLAB process is launched.
 - Record initial startup/memory/package measurements using the protocol below.
+
+The implementation and actual Electron evidence are recorded in
+[docs/slx-studio-2-m1-evidence.md](slx-studio-2-m1-evidence.md), from commit
+`438efe7`. The evidence is local development coverage, not Windows installer or
+real MATLAB coverage.
 
 Rollback: continue using existing `slx-studio` / `slx-diff studio` commands.
 Keep the new launch command separately named until the migration is accepted.
