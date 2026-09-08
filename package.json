@@ -3,7 +3,9 @@
   "version": "2.0.0-dev.0",
   "private": true,
   "description": "Opt-in SLX Studio desktop migration; Python CLI remains independent",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "build": "node scripts/build-desktop.mjs",
     "typecheck": "tsc --noEmit",
@@ -11,10 +13,16 @@
     "test:desktop": "node scripts/test-desktop.mjs",
     "test:platform": "node --test scripts/test-platform.mjs",
     "measure:desktop": "node scripts/measure-desktop.mjs",
-    "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop"
+    "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop",
+    "package:electron": "npm run build && node scripts/package-electron.mjs",
+    "test:package": "node scripts/test-packaged-electron.mjs"
   },
-  "dependencies": { "monaco-editor": "0.56.0" },
-  "overrides": { "dompurify": "3.4.15" },
+  "dependencies": {
+    "monaco-editor": "0.56.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.15"
+  },
   "devDependencies": {
     "@types/node": "24.10.1",
     "electron": "44.2.0",

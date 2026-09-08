@@ -228,6 +228,10 @@ export class ModelEditors {
     const snapshot = view.snapshot(); if (snapshot) this.inspected(path, snapshot);
     this.changed();
   }
+  async reload(path: string): Promise<void> {
+    const view = this.documents.get(path);
+    if (view) await view.reload();
+  }
   close(path: string): void {
     const view = this.documents.get(path); if (!view) return;
     view.dispose(); this.documents.delete(path);

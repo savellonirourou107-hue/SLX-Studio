@@ -44,6 +44,35 @@ export interface Draft {
   content: string;
   base: DocumentSnapshot;
 }
+export interface MatlabVariable { name: string; class: string; size: string; bytes: number; preview: string; }
+export interface MatlabFigure { name: string; mime: string; bytes: number; data_base64: string; }
+export interface MatlabResult {
+  ok: boolean; cancelled?: boolean; command?: string; path?: string; elapsed_seconds?: number;
+  stdout?: string; stderr?: string; output_truncated?: boolean;
+  variables?: readonly MatlabVariable[]; figures?: readonly MatlabFigure[];
+  debug_events?: readonly { file: string; line: number; variables: readonly string[] }[];
+  error?: { message: string; identifier?: string; line?: number; file?: string } | null;
+  backend?: string; session_id?: string; session_generation?: number; session_reset?: boolean; state_lost?: boolean;
+}
+export interface MatlabJobStatus {
+  id: string; state: 'running' | 'finished' | 'failed' | 'cancelled'; started_at: number; finished_at?: number;
+  path?: string; command?: string; tracepoints?: readonly number[];
+  stdout_delta: string; stderr_delta: string; stdout_offset: number; stderr_offset: number;
+  result?: MatlabResult; error?: string;
+}
+export interface MatlabRuntimeStatus {
+  backend: 'persistent'; state: 'stopped' | 'ready' | 'closed'; available: boolean; detail: string;
+  executable: string | null; session_id: string | null; generation: number;
+  active: { command: string | null; run: string | null };
+}
+export interface ExtensionCommand { command: string; title: string; }
+export interface ExtensionView { id: string; title: string; location: 'activity' | 'sidebar' | 'panel'; }
+export interface ExtensionEditor { id: string; label: string; extensions: readonly string[]; }
+export interface ExtensionRecord {
+  id: string; version: string; main: string; activationEvents: readonly string[];
+  contributes: { commands: readonly ExtensionCommand[]; views: readonly ExtensionView[]; editors: readonly ExtensionEditor[] };
+  path: string; state: 'inactive' | 'activating' | 'active' | 'failed'; error?: string;
+}
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string; kind: string };
 export interface DesktopAPI {
   workspace(): Promise<Result<WorkspaceInfo | null>>;
@@ -54,11 +83,23 @@ export interface DesktopAPI {
   inspectModel(path: string, options?: ModelInspectOptions): Promise<Result<ModelSnapshot>>;
   modelViewport(path: string, options?: ModelViewportOptions): Promise<Result<ModelViewport>>;
   diffModels(oldPath: string, newPath: string, includeLayout: boolean, options?: ModelDiffOptions): Promise<Result<ModelDiff>>;
+  applyModelEdit(path: string, edit: Readonly<Record<string, unknown>>, outputPath?: string): Promise<Result<Record<string, unknown>>>;
   configuration(): Promise<Result<ConfigurationState>>;
   updateConfiguration(scope: 'user' | 'workspace', values: Readonly<Record<string, ConfigurationValue>>, expectedSha256: string | null): Promise<Result<ConfigurationState>>;
   restartBackend(): Promise<Result<WorkspaceInfo>>;
   loadDraft(path: string): Promise<Result<Draft | null>>;
   storeDraft(draft: Draft | { path: string; clear: true }): Promise<Result<null>>;
+  matlabStatus(): Promise<Result<MatlabRuntimeStatus>>;
+  matlabStartCommand(command: string): Promise<Result<MatlabJobStatus>>;
+  matlabCommandStatus(jobId: string, stdoutOffset?: number, stderrOffset?: number): Promise<Result<MatlabJobStatus>>;
+  matlabStopCommand(jobId: string): Promise<Result<MatlabJobStatus>>;
+  matlabStartRun(path: string, options?: { code?: string; startLine?: number; tracepoints?: readonly number[] }): Promise<Result<MatlabJobStatus>>;
+  matlabRunStatus(jobId: string, stdoutOffset?: number, stderrOffset?: number): Promise<Result<MatlabJobStatus>>;
+  matlabStopRun(jobId: string): Promise<Result<MatlabJobStatus>>;
+  extensionsList(): Promise<Result<readonly ExtensionRecord[]>>;
+  extensionsActivate(id: string): Promise<Result<ExtensionRecord>>;
+  extensionsExecute(id: string, command: string, args?: Readonly<Record<string, unknown>>): Promise<Result<unknown>>;
+  extensionsDeactivate(id: string): Promise<Result<null>>;
   onCommand(callback: (command: string) => void): () => void;
   onClose(callback: () => void): () => void;
   confirmClose(): void;

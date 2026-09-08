@@ -25,10 +25,11 @@ an already available 2.0 release or a promise of VS Code extension compatibility
 See the [2.0 project goal](SLX_STUDIO_2_GOAL.md) and
 [migration/acceptance plan](docs/slx-studio-2-migration.md).
 The separate [2.0 development desktop](docs/slx-studio-2-desktop.md) now has a
-locally validated Electron/Monaco editing slice and a bounded static SLX model
-viewport (subsystems, search, inspector and paging). MATLAB-backed model writes,
-simulation and shared runtime panels remain in progress; see the
-[M3 viewport evidence](docs/slx-studio-2-m3-viewer.md).
+locally validated Electron/Monaco editing slice, bounded static SLX model
+viewport, persistent MATLAB Command Window/script jobs, validated in-place
+model edits and a trusted first-party extension host. Exact graphical Simulink
+editing remains in the legacy Workbench; see the
+[M3/M4 core acceptance](docs/slx-studio-2-m3-m4.md).
 
 SLX Studio is not trying to reproduce the full MATLAB desktop. It targets the small, frequent loop around a MATLAB/Simulink project:
 

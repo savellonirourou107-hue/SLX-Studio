@@ -2,9 +2,10 @@
 
 This is a separately launched Electron preview on the
 `codex/slx-studio-2-foundation` branch. It does not replace the Python CLI or
-legacy Workbench. The current real workflow is `.m` editing plus a bounded,
-read-only `.slx` model viewport. MATLAB execution, model writes, simulation
-panels and extensions are still migration work.
+legacy Workbench. The current real workflow is `.m` editing, a bounded
+read-only `.slx` model viewport, explicit persistent MATLAB jobs and validated
+in-place model edits. Exact graphical Simulink editing remains in the legacy
+Workbench.
 
 ## Run from source
 
@@ -67,6 +68,22 @@ overwrite invalid files, so unknown or damaged content is not silently removed.
 `Backend: Restart Python Service` explicitly creates a fresh owned backend for
 the current workspace while retaining open text models. Failed or pending
 operations are never replayed automatically. This does not start MATLAB.
+`MATLAB: Run Command Window Input…` and `MATLAB: Run Active Script` start the
+shared worker only after explicit user action. Output is polled incrementally;
+variables, figures, tracepoints, diagnostics and session-loss state are
+summarized in Output/Problems. The `Simulink: Apply Validated Model Edit…`
+command accepts the existing JSON edit contract and routes it through MATLAB;
+it saves in place and reloads the static viewport.
+
+`Extensions: List/Activate/Deactivate…` manages trusted application
+extensions. The sample extension contributes a command, sidebar view and
+custom editor. Nothing under a workspace is auto-activated. Node extensions
+are trusted code, not a sandbox.
+
+For a portable Windows package run `npm run package:electron`; then
+`npm run test:package` launches the generated `SLXStudio.exe`. The Inno Setup
+installer is built by the `electron-windows` job in
+`.github/workflows/build-windows.yml` and does not bundle MATLAB.
 
 ## Developer gates
 
@@ -94,7 +111,8 @@ screenshots live under ignored `output/` subdirectories. See
 
 ## Rollback and boundaries
 
-Continue using `slx-studio` / `slx-diff studio` for model writes, simulation and
-the legacy Workbench. No release tag, main-branch replacement, Windows installer
-or VS Code extension compatibility is implied by this preview. The new viewport
-is static and approximate; it is not evidence of Simulink rendering parity.
+Continue using `slx-studio` / `slx-diff studio` for exact graphical model writes,
+simulation and the legacy Workbench. The Electron core now has a portable
+Windows package, but no release tag or main-branch replacement is implied by
+this development branch. The new viewport is static and approximate; it is not
+evidence of Simulink rendering parity.

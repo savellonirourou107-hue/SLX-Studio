@@ -11,6 +11,8 @@ from typing import Any, BinaryIO
 
 from .diff import compare_models
 from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
+from .matlab_bridge import apply_model_edit_with_matlab
+from .matlab_runtime import MatlabRuntime
 from .model_view import model_viewport
 from .parser import parse_slx
 from .workspace import workspace_root
@@ -159,6 +161,26 @@ def diff_models(
     }
 
 
+def apply_model_edit(
+    root: Path, relative: str, edit: dict[str, Any], output_relative: str | None = None
+) -> dict[str, Any]:
+    """Apply a validated edit through MATLAB/Simulink, never by ZIP rewriting."""
+    source = _slx_path(root, relative)
+    if not isinstance(edit, dict):
+        raise TypeError("model edit must be an object")
+    output = source
+    if output_relative is not None:
+        output = _slx_path(root, output_relative)
+        if output != source:
+            raise ValueError(
+                "desktop model edits currently save in place; use Save As from the legacy Workbench"
+            )
+    result = apply_model_edit_with_matlab(source, edit, output_path=output)
+    if not isinstance(result, dict):
+        raise TypeError("MATLAB model edit returned an invalid result")
+    return {**result, "model_path": relative.replace("\\", "/"), "backend": "matlab_batch"}
+
+
 def read_frame(stream: BinaryIO) -> bytes | None:
     length = None
     total = 0
@@ -210,6 +232,16 @@ def error(identifier: Any, code: int, message: str, kind: str = "") -> dict:
 class Backend:
     def __init__(self, root: str) -> None:
         self.root, self.initial_file = workspace_root(root)
+        self._matlab = MatlabRuntime(self.root)
+
+    def close(self) -> None:
+        self._matlab.close()
+
+    @staticmethod
+    def _offset(value: Any, name: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 1_048_576:
+            raise ValueError(f"{name} must be a bounded non-negative integer")
+        return value
 
     def dispatch(self, message: Any) -> dict | list | None:
         if isinstance(message, list):
@@ -235,6 +267,29 @@ class Backend:
             "model/inspect": lambda **params: inspect_model(self.root, **params),
             "model/viewport": lambda **params: model_viewport(self.root, **params),
             "model/diff": lambda **params: diff_models(self.root, **params),
+            "model/applyEdit": lambda **params: apply_model_edit(self.root, **params),
+            "matlab/status": lambda **params: self._matlab.status(),
+            "matlab/command/start": lambda **params: self._matlab.start_command(params.get("command")),
+            "matlab/command/status": lambda **params: self._matlab.status_job(
+                "command",
+                params.get("job_id"),
+                stdout_offset=self._offset(params.get("stdout_offset", 0), "stdout_offset"),
+                stderr_offset=self._offset(params.get("stderr_offset", 0), "stderr_offset"),
+            ),
+            "matlab/command/stop": lambda **params: self._matlab.stop("command", params.get("job_id")),
+            "matlab/run/start": lambda **params: self._matlab.start_run(
+                params.get("relative"),
+                code=params.get("code"),
+                start_line=params.get("start_line", 1),
+                tracepoints=params.get("tracepoints"),
+            ),
+            "matlab/run/status": lambda **params: self._matlab.status_job(
+                "run",
+                params.get("job_id"),
+                stdout_offset=self._offset(params.get("stdout_offset", 0), "stdout_offset"),
+                stderr_offset=self._offset(params.get("stderr_offset", 0), "stderr_offset"),
+            ),
+            "matlab/run/stop": lambda **params: self._matlab.stop("run", params.get("job_id")),
         }
         try:
             method = methods.get(message["method"])
@@ -251,6 +306,8 @@ class Backend:
             reply = error(identifier, -32602, str(exc), "invalid_params")
         except OSError as exc:
             reply = error(identifier, -32010, str(exc), "io")
+        except RuntimeError as exc:
+            reply = error(identifier, -32020, str(exc), "matlab_runtime")
         except Exception:  # noqa: BLE001 - isolate unexpected faults at the RPC boundary.
             reply = error(identifier, -32603, "internal backend error")
         return reply if "id" in message else None
@@ -267,8 +324,16 @@ class Backend:
                 "model/inspect",
                 "model/viewport",
                 "model/diff",
+                "model/applyEdit",
+                "matlab/status",
+                "matlab/command/start",
+                "matlab/command/status",
+                "matlab/command/stop",
+                "matlab/run/start",
+                "matlab/run/status",
+                "matlab/run/stop",
             ],
-            "matlab_started": False,
+            "matlab_started": self._matlab.status()["state"] == "ready",
         }
 
 
@@ -286,27 +351,32 @@ def _invalid_constant(value: str) -> None:
 
 
 def serve(backend: Backend, source: BinaryIO, sink: BinaryIO) -> None:
-    while True:
-        try:
-            payload = read_frame(source)
-        except FrameError:
-            # Framing cannot be resynchronized safely: one error, then terminate.
-            write_frame(sink, error(None, -32700, "invalid frame"))
-            return
-        if payload is None:
-            return
-        try:
-            message = json.loads(payload, object_pairs_hook=_strict_object, parse_constant=_invalid_constant)
-        except (ValueError, UnicodeError, RecursionError):
-            reply = error(None, -32700, "invalid JSON")
-        else:
-            reply = backend.dispatch(message)
-        if reply is not None:
+    try:
+        while True:
             try:
-                write_frame(sink, reply)
+                payload = read_frame(source)
             except FrameError:
-                identifier = message.get("id") if isinstance(message, dict) else None
-                write_frame(sink, error(identifier, -32011, "response exceeds size limit"))
+                # Framing cannot be resynchronized safely: one error, then terminate.
+                write_frame(sink, error(None, -32700, "invalid frame"))
+                return
+            if payload is None:
+                return
+            try:
+                message = json.loads(
+                    payload, object_pairs_hook=_strict_object, parse_constant=_invalid_constant
+                )
+            except (ValueError, UnicodeError, RecursionError):
+                reply = error(None, -32700, "invalid JSON")
+            else:
+                reply = backend.dispatch(message)
+            if reply is not None:
+                try:
+                    write_frame(sink, reply)
+                except FrameError:
+                    identifier = message.get("id") if isinstance(message, dict) else None
+                    write_frame(sink, error(identifier, -32011, "response exceeds size limit"))
+    finally:
+        backend.close()
 
 
 def main() -> None:

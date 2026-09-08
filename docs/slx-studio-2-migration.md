@@ -1,6 +1,6 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b, M1 and the M2 platform foundation accepted locally; M3 is next**. Updated: 2026-09-08.
+Status: **M0b–M4 core implemented on the development branch; local and CI gates are recorded separately**. Updated: 2026-09-09.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document defines future implementation, not features available in the beta.
 
@@ -28,7 +28,7 @@ creation, not an interactive installed desktop workflow.
 | Workspace root guards, atomic writes, source hashes, history | Preserve; add new transport and UI regression coverage |
 | `studio.html` (105,929 bytes), `workbench.html` (72,084 bytes) | Legacy compatibility UI; stop adding new platform architecture here |
 | `desktop.py`, Workbench HTTP server, PyInstaller workflow | Remain runnable until a replacement passes its acceptance gate |
-| `persistent.py`, `msession.py`, job managers, process-tree cleanup | Reuse; do not implement a second independent MATLAB session system |
+| `persistent.py`, `msession.py`, job managers, process-tree cleanup | Reuse through the Electron MATLAB runtime; do not implement a second independent session system |
 | Graphical SLX write/simulation/sweep bridges | Still batch-based; shared-session migration is unfinished |
 | Existing MATLAB debug probes | Non-pausing only; no interactive debugger claim |
 
@@ -298,14 +298,15 @@ The foundation's exact test and resource record is
 
 Rollback: switch the transport adapter/desktop entry, without reverting file formats.
 
-### M3 — Model + code + simulation workflow
+### M3 — Model + code + simulation workflow (core accepted locally)
 
-The first M3 slice is now implemented locally: the typed `model/viewport`
-service and Electron custom editor provide bounded static SLX viewing with
-subsystem selection, search, parameter inspection and page navigation. This is
-an incremental read-only viewport, not the full M3 acceptance: MATLAB-backed
-editing/simulation, exact Simulink rendering and shared-session panels remain
-open.
+The M3 core is implemented: the typed `model/viewport` service and Electron
+custom editor provide bounded static SLX viewing with subsystem selection,
+search, parameter inspection and page navigation; the same workbench now owns
+the persistent MATLAB Command Window and `.m` run jobs. Validated in-place model
+edits are routed through the existing MATLAB bridge and reload the viewport.
+Exact Simulink rendering, Save As and graphical routing remain explicitly in
+the legacy Workbench.
 
 Deliver: SLX Custom Editor split into viewport/selection/rendering/outline/inspector
 components; MATLAB service and panels backed by the existing persistent worker;
@@ -329,9 +330,11 @@ Acceptance:
   broad Simulink compatibility evidence. If no permissible real model is
   available, report that coverage gap instead of substituting a synthetic claim.
 
-Rollback: expose an explicit legacy/batch choice, retaining lifecycle warnings.
+Evidence and test commands are recorded in
+[M3/M4 core acceptance](slx-studio-2-m3-m4.md). Rollback remains the explicit
+legacy/batch Workbench choice, retaining lifecycle warnings.
 
-### M4 — Extension platform and first installable 2.0 core
+### M4 — Extension platform and first installable 2.0 core (accepted with CI installer gate)
 
 Deliver: small versioned Extension API, private Node host protocol, local trusted
 extension loading and first-party MATLAB/Simulink contributions. Extend built-in
@@ -351,6 +354,11 @@ Acceptance:
   EXE launch, installation, close/reopen and clean uninstall are tested.
 - Re-run legacy Python, protocol, Electron UI and real-MATLAB gates on the exact
   candidate commit. Publish measured limits and known gaps, not parity claims.
+
+The trusted local host, first-party sample extension and portable Electron
+package are implemented. Inno Setup compilation is intentionally a Windows
+Actions gate because Inno is not installed on the development machine. The
+full acceptance record is [M3/M4 core acceptance](slx-studio-2-m3-m4.md).
 
 Only completion of M0b–M4 closes the core migration goal. Marketplace, full LSP,
 interactive pausing debugger/profiler, remote execution, a general PTY terminal,

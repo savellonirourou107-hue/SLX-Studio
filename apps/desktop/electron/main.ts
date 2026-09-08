@@ -4,11 +4,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { PythonBackend } from './backend';
+import { ExtensionHostManager } from './extensions';
 import { ConfigurationFiles } from './configuration';
 import type { Draft, Result, WorkspaceInfo } from '../../../packages/protocol';
 
 const origin = 'slx-app://workbench';
-const sourceRoot = path.resolve(__dirname, '../../..');
+const sourceRoot = app.isPackaged ? path.resolve(__dirname, '..') : path.resolve(__dirname, '../../..');
 const assets = path.resolve(__dirname, '../renderer');
 const stateRoot = path.resolve(process.env.SLX_DESKTOP_STATE_DIR || path.join(app.getPath('userData'), 'slx-studio-2'));
 app.setPath('userData', stateRoot);
@@ -24,6 +25,7 @@ let workspace: WorkspaceInfo | null = null;
 let closing = false;
 const draftQueues = new Map<string, Promise<unknown>>();
 const configurationFiles = new ConfigurationFiles(stateRoot);
+const extensions = new ExtensionHostManager(path.join(sourceRoot, 'extensions'));
 
 function validate(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== `${origin}/index.html`) throw new Error('Untrusted IPC sender');
@@ -119,7 +121,7 @@ async function start(): Promise<void> {
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.on('close', event => { if (!closing) { event.preventDefault(); window.webContents.send('slx:closeRequested'); } });
-  window.on('closed', () => { closing = true; backend?.close(); startingBackend?.close(); });
+  window.on('closed', () => { closing = true; backend?.close(); startingBackend?.close(); void extensions.close(); });
   window.once('ready-to-show', () => { if (process.env.SLX_DESKTOP_TEST_HIDE !== '1') window.show(); });
   const sendCommand = (id: string) => () => window.webContents.send('slx:command', id);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -152,6 +154,11 @@ async function start(): Promise<void> {
     if (typeof args.includeLayout !== 'boolean') throw new Error('Invalid diff options');
     return backendRequired().request('model/diff', { old: text(args.oldPath), new: text(args.newPath), include_layout: args.includeLayout, added_block_cursor: integer(args.addedBlockCursor, 'added block cursor'), removed_block_cursor: integer(args.removedBlockCursor, 'removed block cursor'), changed_block_cursor: integer(args.changedBlockCursor, 'changed block cursor'), added_line_cursor: integer(args.addedLineCursor, 'added line cursor'), removed_line_cursor: integer(args.removedLineCursor, 'removed line cursor'), page_size: pageSize(args.pageSize) });
   });
+  handle('slx:modelApplyEdit', async payload => {
+    const args = object(payload);
+    const edit = object(args.edit);
+    return backendRequired().request('model/applyEdit', { relative: text(args.path), edit, output_relative: args.outputPath === undefined ? undefined : text(args.outputPath) });
+  });
   handle('slx:viewport', async payload => {
     const args = object(payload);
     if (args.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(text(args.expectedSha256, 64))) throw new Error('Invalid model version');
@@ -160,6 +167,55 @@ async function start(): Promise<void> {
       query: args.query === undefined ? '' : text(args.query, 200),
       cursor: integer(args.cursor, 'viewport cursor', 0, 1_000_000), expected_sha256: args.expectedSha256,
     });
+  });
+  handle('slx:matlabStatus', async () => backendRequired().request('matlab/status'));
+  handle('slx:matlabCommandStart', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/command/start', { command: text(args.command, 256 * 1024) });
+  });
+  handle('slx:matlabCommandStatus', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/command/status', {
+      job_id: text(args.jobId, 64), stdout_offset: integer(args.stdoutOffset, 'stdout offset', 0, 1_048_576), stderr_offset: integer(args.stderrOffset, 'stderr offset', 0, 1_048_576),
+    });
+  });
+  handle('slx:matlabCommandStop', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/command/stop', { job_id: text(args.jobId, 64) });
+  });
+  handle('slx:matlabRunStart', async payload => {
+    const args = object(payload);
+    const tracepoints = args.tracepoints === undefined ? [] : args.tracepoints;
+    if (!Array.isArray(tracepoints) || tracepoints.length > 256 || tracepoints.some(value => typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 1_000_000)) throw new Error('Invalid tracepoints');
+    return backendRequired().request('matlab/run/start', {
+      relative: text(args.path), code: args.code === undefined ? undefined : text(args.code, 4 * 1024 * 1024),
+      start_line: integer(args.startLine, 'start line', 1, 1_000_000), tracepoints,
+    });
+  });
+  handle('slx:matlabRunStatus', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/run/status', {
+      job_id: text(args.jobId, 64), stdout_offset: integer(args.stdoutOffset, 'stdout offset', 0, 1_048_576), stderr_offset: integer(args.stderrOffset, 'stderr offset', 0, 1_048_576),
+    });
+  });
+  handle('slx:matlabRunStop', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/run/stop', { job_id: text(args.jobId, 64) });
+  });
+  handle('slx:extensionsList', async () => extensions.discover());
+  handle('slx:extensionsActivate', async payload => {
+    const args = object(payload);
+    return extensions.activate(text(args.id, 128));
+  });
+  handle('slx:extensionsExecute', async payload => {
+    const args = object(payload);
+    const parameters = args.args === undefined ? {} : object(args.args);
+    return extensions.execute(text(args.id, 128), text(args.command, 128), parameters);
+  });
+  handle('slx:extensionsDeactivate', async payload => {
+    const args = object(payload);
+    await extensions.deactivate(text(args.id, 128));
+    return null;
   });
   handle('slx:configuration', async () => configurationFiles.read(workspace?.root || null));
   handle('slx:updateConfiguration', async payload => {
@@ -215,5 +271,5 @@ async function start(): Promise<void> {
   await window.loadURL(`${origin}/index.html`);
 }
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { closing = true; backend?.close(); startingBackend?.close(); });
+app.on('before-quit', () => { closing = true; backend?.close(); startingBackend?.close(); void extensions.close(); });
 void start().catch(error => { process.stderr.write(`SLX desktop startup failed: ${String(error)}\n`); app.exit(1); });

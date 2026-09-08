@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdir, copyFile } from 'node:fs/promises';
+import { mkdir, copyFile, cp } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -8,4 +8,7 @@ await mkdir('dist/desktop/renderer', { recursive: true });
 await build({ entryPoints: ['apps/desktop/electron/main.ts', 'apps/desktop/electron/preload.ts'], outdir: 'dist/desktop/electron', outExtension: { '.js': '.cjs' }, bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], sourcemap: true });
 await build({ entryPoints: { app: 'apps/desktop/renderer/main.ts', 'editor.worker': 'node_modules/monaco-editor/esm/vs/editor/editor.worker.js' }, outdir: 'dist/desktop/renderer', bundle: true, format: 'esm', splitting: true, target: 'chrome130', minify: true, loader: { '.ttf': 'file' }, entryNames: '[name]', assetNames: 'assets/[name]-[hash]' });
 await copyFile('apps/desktop/renderer/index.html', 'dist/desktop/renderer/index.html');
+await copyFile('apps/desktop/electron/package.json', 'dist/desktop/package.json');
+await cp('extensions', 'dist/desktop/extensions', { recursive: true });
+await cp('src', 'dist/desktop/src', { recursive: true });
 console.log('Desktop built; legacy Python package unchanged.');

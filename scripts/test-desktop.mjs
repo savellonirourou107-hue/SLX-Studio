@@ -84,6 +84,13 @@ try {
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'SLX static model view is exposed through the custom editor contribution');
   assert.match(await page.getByRole('log').textContent(), /2 blocks, 1 connections/);
+  await command('Extensions: Activate Trusted Extension…');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('Extension activated: sample.hello'), 'trusted extension activation is explicit and contributes a view');
+  assert.match(await page.locator('#extension-views').textContent(), /Sample Inspector/);
+  await command('Sample: Hello SLX Studio');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('Hello from the trusted SLX Studio extension host.'), 'extension command executes in the private host');
+  await command('Extensions: Deactivate Active Extension');
+  await waitFor(async () => !(await page.locator('#extension-views').textContent()).includes('Sample Inspector'), 'extension deactivation releases contributed views');
   await page.getByRole('group', { name: 'Static model canvas' }).waitFor();
   await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button', { name: 'Block Gain (Gain)' }).click();
   assert.match(await page.getByRole('complementary').last().textContent(), /Gain/);

@@ -7,7 +7,8 @@ import { CustomEditorRegistry } from '../../../packages/editor/registry';
 import { ModelEditors } from '../../../packages/model/view';
 import { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } from '../../../packages/workbench';
 import type { Problem } from '../../../packages/workbench';
-import type { ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
+import { unwrap } from '../../../packages/protocol';
+import type { ExtensionRecord, MatlabJobStatus, MatlabRuntimeStatus, ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -24,12 +25,168 @@ let activeKind: 'text' | 'model' = 'text';
 const modelProblems = new Map<string, Problem[]>();
 let closing = false;
 let explorerGeneration = 0;
+let matlabJob: { kind: 'command' | 'run'; id: string; stdoutOffset: number; stderrOffset: number } | null = null;
+const activeExtensions = new Map<string, { record: ExtensionRecord; remove: () => void }>();
 function log(message: string): void {
   outputService.append(message);
   output.textContent = outputService.snapshot().map(entry => entry.text).join('\n').slice(-65_536);
   output.scrollTop = output.scrollHeight;
 }
 function report(error: unknown): void { log((error as Error).message || String(error)); }
+function renderMatlabStatus(status: MatlabRuntimeStatus): void {
+  const label = status.state === 'ready' ? 'MATLAB ready · persistent session' : status.available ? 'MATLAB stopped · opt-in' : 'MATLAB unavailable';
+  document.querySelector<HTMLElement>('.session-state')!.textContent = matlabJob ? `MATLAB ${matlabJob.kind} running` : label;
+  element('document-status').textContent = matlabJob ? `MATLAB ${matlabJob.kind} running` : status.state === 'ready' ? 'MATLAB session ready' : 'Ready';
+}
+async function refreshMatlabStatus(): Promise<MatlabRuntimeStatus | null> {
+  if (!workspace) return null;
+  const status = unwrap(await window.slx.matlabStatus());
+  renderMatlabStatus(status);
+  return status;
+}
+function matlabResultSummary(kind: 'command' | 'run', status: MatlabJobStatus): void {
+  const result = status.result;
+  if (!result) return;
+  if (result.error?.message) {
+    const problemPath = result.error.file || result.path || result.command || 'MATLAB';
+    const problem: Problem = { path: problemPath, message: result.error.message, severity: 'error', line: result.error.line || undefined, source: 'MATLAB' };
+    modelProblems.set(`matlab:${kind}:${status.id}`, [problem]);
+    problemsService.replace([...modelProblems.values()].flat());
+    log(`MATLAB ${kind} failed: ${result.error.message}`);
+  } else {
+    const variables = result.variables?.length || 0;
+    const figures = result.figures?.length || 0;
+    log(`MATLAB ${kind} finished${result.elapsed_seconds ? ` in ${result.elapsed_seconds.toFixed(2)}s` : ''} · ${variables} variables · ${figures} figures${result.state_lost ? ' · session state discarded' : ''}.`);
+  }
+  if (result.debug_events?.length) log(`MATLAB tracepoints: ${result.debug_events.map(event => `${event.file}:${event.line}`).join(', ')}`);
+}
+async function pollMatlabJob(): Promise<void> {
+  const current = matlabJob;
+  if (!current) return;
+  try {
+    const status = current.kind === 'command'
+      ? unwrap(await window.slx.matlabCommandStatus(current.id, current.stdoutOffset, current.stderrOffset))
+      : unwrap(await window.slx.matlabRunStatus(current.id, current.stdoutOffset, current.stderrOffset));
+    current.stdoutOffset = status.stdout_offset;
+    current.stderrOffset = status.stderr_offset;
+    if (status.stdout_delta) log(status.stdout_delta.replace(/\n$/, ''));
+    if (status.stderr_delta) log(`[stderr] ${status.stderr_delta.replace(/\n$/, '')}`);
+    if (status.state === 'running') { window.setTimeout(() => void pollMatlabJob(), 90); return; }
+    matlabJob = null;
+    matlabResultSummary(current.kind, status);
+    await refreshMatlabStatus();
+  } catch (error) { matlabJob = null; report(error); }
+}
+async function startMatlabCommand(command: string): Promise<void> {
+  if (matlabJob) throw new Error('A MATLAB job is already active');
+  const status = unwrap(await window.slx.matlabStartCommand(command));
+  matlabJob = { kind: 'command', id: status.id, stdoutOffset: status.stdout_offset, stderrOffset: status.stderr_offset };
+  log(`MATLAB command started: ${command}`);
+  await refreshMatlabStatus();
+  void pollMatlabJob();
+}
+async function startMatlabRun(path: string): Promise<void> {
+  if (matlabJob) throw new Error('A MATLAB job is already active');
+  const status = unwrap(await window.slx.matlabStartRun(path));
+  matlabJob = { kind: 'run', id: status.id, stdoutOffset: status.stdout_offset, stderrOffset: status.stderr_offset };
+  log(`MATLAB script started: ${path}`);
+  const runtime = await refreshMatlabStatus(); if (runtime) renderMatlabStatus(runtime);
+  void pollMatlabJob();
+}
+function requestMatlabCommand(): Promise<string | null> {
+  const dialog = element<HTMLDialogElement>('matlab-command');
+  const input = element<HTMLInputElement>('matlab-command-input');
+  const run = element<HTMLButtonElement>('matlab-command-run');
+  const cancel = element<HTMLButtonElement>('matlab-command-cancel');
+  return new Promise(resolve => {
+    const finish = (value: string | null) => { dialog.close(); run.onclick = null; cancel.onclick = null; dialog.oncancel = null; input.onkeydown = null; resolve(value); };
+    run.onclick = () => finish(input.value.trim() || null);
+    cancel.onclick = () => finish(null);
+    dialog.oncancel = event => { event.preventDefault(); finish(null); };
+    input.onkeydown = event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(input.value.trim() || null); } };
+    input.value = ''; dialog.showModal(); input.focus();
+  });
+}
+function requestModelEdit(): Promise<Readonly<Record<string, unknown>> | null> {
+  const dialog = element<HTMLDialogElement>('matlab-command');
+  const title = element('matlab-command-title');
+  const help = dialog.querySelector<HTMLElement>('.dialog-help')!;
+  const input = element<HTMLInputElement>('matlab-command-input');
+  const run = element<HTMLButtonElement>('matlab-command-run');
+  const cancel = element<HTMLButtonElement>('matlab-command-cancel');
+  const previousTitle = title.textContent || '';
+  const previousHelp = help.textContent || '';
+  return new Promise(resolve => {
+    const finish = (value: Readonly<Record<string, unknown>> | null) => { dialog.close(); title.textContent = previousTitle; help.textContent = previousHelp; run.onclick = null; cancel.onclick = null; dialog.oncancel = null; input.onkeydown = null; resolve(value); };
+    run.onclick = () => {
+      try {
+        const value = JSON.parse(input.value);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Edit must be a JSON object');
+        finish(value as Readonly<Record<string, unknown>>);
+      } catch (error) { log(`Invalid model edit JSON: ${(error as Error).message}`); }
+    };
+    cancel.onclick = () => finish(null);
+    dialog.oncancel = event => { event.preventDefault(); finish(null); };
+    input.onkeydown = event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run.click(); } };
+    title.textContent = 'Apply Simulink model edit';
+    help.textContent = 'Validated JSON is applied in MATLAB/Simulink and saved in place. The source SHA-256 is required.';
+    input.value = '{"schema_version":"0.1","model_name":"","source_sha256":"…","operations":[]}'; dialog.showModal(); input.focus(); input.select();
+  });
+}
+function renderExtensionViews(): void {
+  const target = element('extension-views');
+  const views = [...activeExtensions.values()].flatMap(item => item.record.contributes.views.map(view => ({ ...view, extension: item.record.id })));
+  target.replaceChildren(...(views.length ? [Object.assign(document.createElement('div'), { className: 'extension-view-heading', textContent: 'EXTENSIONS' })] : []), ...views.map(view => {
+    const panel = document.createElement('div'); panel.className = 'extension-view'; panel.textContent = view.title;
+    panel.append(Object.assign(document.createElement('small'), { textContent: `${view.extension} · ${view.location}` })); return panel;
+  }));
+}
+async function listExtensions(): Promise<readonly ExtensionRecord[]> {
+  return unwrap(await window.slx.extensionsList());
+}
+async function activateExtension(id: string): Promise<void> {
+  if (activeExtensions.has(id)) return;
+  const record = unwrap(await window.slx.extensionsActivate(id));
+  const contributionId = `extension.${id}`;
+  const remove = contributions.register({
+    id: contributionId,
+    activate(context) {
+      for (const command of record.contributes.commands) {
+        context.add(commands.register({ id: command.command, title: command.title, run: async () => {
+          try {
+            const result = unwrap(await window.slx.extensionsExecute(id, command.command, {}));
+            log(`${command.title}: ${typeof result === 'string' ? result : JSON.stringify(result)}`);
+          } catch (error) {
+            // A dead/timed-out host must not leave stale UI contributions active.
+            await deactivateExtension(id).catch(() => {});
+            throw error;
+          }
+        } }));
+      }
+      for (const view of record.contributes.views) context.add(views.register(view));
+      for (const editor of record.contributes.editors) context.add(editorRegistry.register({ id: editor.id, label: editor.label, extensions: editor.extensions, open: async path => {
+        try {
+          const result = unwrap(await window.slx.extensionsExecute(id, record.contributes.commands[0]?.command || '', { path }));
+          log(`${editor.label}: ${typeof result === 'string' ? result : JSON.stringify(result)}`);
+        } catch (error) {
+          await deactivateExtension(id).catch(() => {});
+          throw error;
+        }
+      } }));
+    },
+  });
+  try {
+    await contributions.activate(contributionId);
+    activeExtensions.set(id, { record: { ...record, state: 'active' }, remove });
+    renderExtensionViews();
+    log(`Extension activated: ${id}`);
+  } catch (error) { remove(); await window.slx.extensionsDeactivate(id); throw error; }
+}
+async function deactivateExtension(id: string): Promise<void> {
+  const active = activeExtensions.get(id); if (!active) return;
+  contributions.deactivate(`extension.${id}`); active.remove(); activeExtensions.delete(id); renderExtensionViews();
+  await window.slx.extensionsDeactivate(id); log(`Extension deactivated: ${id}`);
+}
 function inspectedModel(path: string, data: ModelViewport): void {
   const unsupported = Array.isArray(data.metadata.unsupported_features) ? data.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : [];
   modelProblems.set(path, unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' })));
@@ -188,6 +345,7 @@ async function setWorkspace(info: WorkspaceInfo): Promise<void> {
   element('workspace-name').title = info.root;
   element('workspace-status').textContent = info.root;
   await settings.reload();
+  await refreshMatlabStatus();
   await refresh();
   if (info.initial_file?.endsWith('.m')) await editors.open(info.initial_file);
 }
@@ -211,6 +369,46 @@ commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeK
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
 commands.register({ id: 'settings.edit', title: 'Settings: Edit Configuration', run: () => settings.show() });
+commands.register({ id: 'matlab.status', title: 'MATLAB: Show Runtime Status', enabled: () => !!workspace, run: async () => {
+  const status = await refreshMatlabStatus();
+  if (status) log(`${status.detail}. Session: ${status.state}${status.session_id ? ` (${status.session_id.slice(0, 8)})` : ''}.`);
+} });
+commands.register({ id: 'matlab.command', title: 'MATLAB: Run Command Window Input…', enabled: () => !!workspace && !matlabJob, run: async () => {
+  const command = await requestMatlabCommand();
+  if (command) await startMatlabCommand(command);
+} });
+commands.register({ id: 'matlab.runActive', title: 'MATLAB: Run Active Script', enabled: () => !!workspace && !matlabJob && activeKind === 'text' && !!editors.active?.path.endsWith('.m'), run: async () => {
+  if (editors.active) await startMatlabRun(editors.active.path);
+} });
+commands.register({ id: 'model.applyEdit', title: 'Simulink: Apply Validated Model Edit…', enabled: () => !!workspace && !matlabJob && activeKind === 'model' && !!modelEditors.active, run: async () => {
+  const active = modelEditors.active;
+  if (!active) return;
+  const edit = await requestModelEdit();
+  if (!edit) return;
+  const result = unwrap(await window.slx.applyModelEdit(active.path, edit));
+  log(`Simulink model edit applied: ${result.message || 'saved in place'} (MATLAB/Simulink).`);
+  await modelEditors.reload(active.path);
+} });
+commands.register({ id: 'matlab.stop', title: 'MATLAB: Stop Active Job', enabled: () => !!matlabJob, run: async () => {
+  const current = matlabJob;
+  if (!current) return;
+  const result = current.kind === 'command' ? await window.slx.matlabStopCommand(current.id) : await window.slx.matlabStopRun(current.id);
+  log(`MATLAB ${current.kind} stop requested (${unwrap(result).state}).`);
+} });
+commands.register({ id: 'extensions.list', title: 'Extensions: List Trusted Extensions', run: async () => {
+  const records = await listExtensions();
+  log(records.length ? records.map(record => `${record.id} · ${record.state}${record.error ? ` · ${record.error}` : ''}`).join('\n') : 'No trusted extensions discovered.');
+} });
+commands.register({ id: 'extensions.activate', title: 'Extensions: Activate Trusted Extension…', run: async () => {
+  const records = await listExtensions();
+  const candidate = records.find(record => record.state === 'inactive');
+  if (!candidate) { log('No inactive trusted extension is available.'); return; }
+  await activateExtension(candidate.id);
+} });
+commands.register({ id: 'extensions.deactivate', title: 'Extensions: Deactivate Active Extension', enabled: () => activeExtensions.size > 0, run: async () => {
+  const id = activeExtensions.keys().next().value as string | undefined;
+  if (id) await deactivateExtension(id);
+} });
 commands.register({ id: 'workbench.reloadContributions', title: 'Workbench: Reload Built-in Contributions', run: async () => {
   await builtInActivation;
   contributions.deactivate('builtin.core');

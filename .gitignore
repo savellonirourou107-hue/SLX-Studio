@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 dist/
+release/
+dist-installer/
 build/
 *.egg-info/
 .DS_Store

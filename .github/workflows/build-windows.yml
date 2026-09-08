@@ -10,6 +10,36 @@ permissions:
   contents: read
 
 jobs:
+  electron-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install desktop dependencies
+        run: npm ci
+      - name: Build and package Electron desktop
+        run: npm run package:electron
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build Electron installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\SLXStudio2.iss'
+      - name: Smoke test Electron package and installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path release/SLXStudio-win32-x64/SLXStudio.exe)) { throw "Electron SLXStudio.exe was not created" }
+          if (-not (Test-Path dist-installer/SLX-Studio-2-Setup-x64.exe)) { throw "Electron installer was not created" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SLXStudio-2-Windows-x64
+          path: |
+            release/SLXStudio-win32-x64
+            dist-installer/SLX-Studio-2-Setup-x64.exe
+
   windows-exe:
     runs-on: windows-latest
     steps:

@@ -13,8 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from slxdiff import rpc
 from slxdiff.matlab_bridge import find_matlab
+from slxdiff.model_edit import build_single_edit
 from slxdiff.mrunner import run_m_file
+from slxdiff.parser import parse_slx
 
 pytestmark = pytest.mark.matlab_integration
 
@@ -127,3 +130,55 @@ def test_matlab_r2026a_debug_tracepoints_capture_line_and_workspace(tmp_path: Pa
     assert result["ok"], result
     assert [event["line"] for event in result["debug_events"]] == [2, 3], result
     assert all("a" in event["variables"] for event in result["debug_events"])
+
+
+def test_matlab_r2026a_desktop_rpc_applies_validated_model_edit(tmp_path: Path, monkeypatch) -> None:
+    matlab = _configured_matlab()
+    monkeypatch.setenv("SLX_STUDIO_MATLAB", matlab)
+    script = tmp_path / "make_rpc_model.m"
+    script.write_text(
+        """
+modelName = 'rpc_model';
+modelPath = fullfile(pwd, [modelName '.slx']);
+if bdIsLoaded(modelName), close_system(modelName, 0); end
+new_system(modelName);
+add_block('simulink/Sources/Constant', [modelName '/Input'], 'Value', '1', 'Position', [30 80 60 110]);
+add_block('simulink/Math Operations/Gain', [modelName '/Gain'], 'Gain', '2', 'Position', [110 80 170 110]);
+add_block('simulink/Sinks/Out1', [modelName '/Output'], 'Position', [220 80 250 110]);
+add_line(modelName, 'Input/1', 'Gain/1'); add_line(modelName, 'Gain/1', 'Output/1');
+save_system(modelName, modelPath); close_system(modelName, 0);
+""",
+        encoding="utf-8",
+    )
+    created = run_m_file(script, matlab=matlab, timeout=120)
+    assert created["ok"], created
+    model_path = tmp_path / "rpc_model.slx"
+    model = parse_slx(model_path)
+    gain = next(block for block in model.blocks.values() if block.name == "Gain")
+    edit = build_single_edit(
+        model,
+        model_path,
+        {
+            "op": "set_param",
+            "block_path": gain.path,
+            "parameter": "Gain",
+            "before": gain.parameters["Gain"],
+            "after": "3",
+            "sid": gain.sid,
+        },
+    )
+    backend = rpc.Backend(str(tmp_path))
+    try:
+        response = backend.dispatch(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "model/applyEdit",
+                "params": {"relative": "rpc_model.slx", "edit": edit.to_dict()},
+            }
+        )
+        assert response.get("result", {}).get("ok") is True, response
+    finally:
+        backend.close()
+    changed = parse_slx(model_path)
+    assert changed.blocks[(gain.system_id, gain.sid)].parameters["Gain"] == "3"

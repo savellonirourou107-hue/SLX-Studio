@@ -19,6 +19,7 @@ const { CustomEditorRegistry } = await loadTypeScript('packages/editor/registry.
 const { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } = await loadTypeScript('packages/workbench/index.ts');
 const { endpoint, position, scene } = await loadTypeScript('packages/model/geometry.ts');
 const { ConfigurationFiles } = await loadTypeScript('apps/desktop/electron/configuration.ts');
+const { ExtensionHostManager } = await loadTypeScript('apps/desktop/electron/extensions.ts');
 const frame = value => {
   const payload = Buffer.from(JSON.stringify(value));
   return Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]);
@@ -217,6 +218,40 @@ test('configuration updates are bounded and concurrent versions cannot silently 
     assert.equal(bounded.effective['editor.fontSize'], 14);
     assert.deepEqual((await fs.readdir(path.join(fixture, 'state'))).filter(name => name.endsWith('.tmp')), []);
   } finally { await fs.rm(fixture, { recursive: true, force: true }); }
+});
+
+test('trusted extension host is lazy, validates manifests, and releases its process', async () => {
+  const fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'slx-extensions-'));
+  const trusted = path.join(fixture, 'trusted.ext');
+  await fs.mkdir(trusted);
+  await fs.writeFile(path.join(trusted, 'slx-extension.json'), JSON.stringify({
+    id: 'trusted.ext', apiVersion: 1, version: '1.0.0', main: 'extension.mjs', activationEvents: ['onCommand:trusted.hello'],
+    contributes: { commands: [{ command: 'trusted.hello', title: 'Trusted Hello' }], views: [{ id: 'trusted.view', title: 'Trusted View', location: 'sidebar' }], editors: [{ id: 'trusted.editor', label: 'Trusted Editor', extensions: ['.trusted'] }] },
+  }));
+  await fs.writeFile(path.join(trusted, 'extension.mjs'), "export function activate(){return {}}; export function execute(command,args){return {command,args}}; export function deactivate(){};");
+  const incompatible = path.join(fixture, 'bad.ext');
+  await fs.mkdir(incompatible);
+  await fs.writeFile(path.join(incompatible, 'slx-extension.json'), JSON.stringify({ id: 'bad.ext', apiVersion: 99, version: '1.0.0', main: 'extension.mjs' }));
+  await fs.writeFile(path.join(incompatible, 'extension.mjs'), 'export function activate(){};');
+  const throwing = path.join(fixture, 'throw.ext');
+  await fs.mkdir(throwing);
+  await fs.writeFile(path.join(throwing, 'slx-extension.json'), JSON.stringify({ id: 'throw.ext', apiVersion: 1, version: '1.0.0', main: 'extension.mjs', contributes: {} }));
+  await fs.writeFile(path.join(throwing, 'extension.mjs'), "export function activate(){throw new Error('extension boom')};");
+  const manager = new ExtensionHostManager(fixture);
+  try {
+    const discovered = await manager.discover();
+    assert.equal(discovered.find(item => item.id === 'trusted.ext')?.state, 'inactive');
+    assert.equal(discovered.find(item => item.id === 'bad.ext')?.state, 'failed');
+    assert.equal(manager.list().find(item => item.id === 'trusted.ext')?.state, 'inactive');
+    await assert.rejects(manager.activate('bad.ext'), /unsupported extension API version/);
+    await assert.rejects(manager.activate('throw.ext'), /extension boom/);
+    assert.equal(manager.list().find(item => item.id === 'throw.ext')?.state, 'failed');
+    const active = await manager.activate('trusted.ext');
+    assert.equal(active.state, 'active');
+    assert.deepEqual(await manager.execute('trusted.ext', 'trusted.hello', { value: 3 }), { command: 'trusted.hello', args: { value: 3 } });
+    await manager.deactivate('trusted.ext');
+    assert.equal(manager.list().find(item => item.id === 'trusted.ext')?.state, 'inactive');
+  } finally { await manager.close(); await fs.rm(fixture, { recursive: true, force: true }); }
 });
 
 test('real Python supervisor correlates requests, bounds pending work and never replays after close/crash', async () => {

@@ -412,6 +412,7 @@ def _run_m(
     code: str | None = None,
     start_line: int = 1,
     on_process: Callable[[subprocess.Popen[str]], None] | None = None,
+    on_output: Callable[[str, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
     workspace_file: str | Path | None = None,
     tracepoints: list[int] | None = None,
@@ -454,6 +455,11 @@ def _run_m(
             proc.kill()
             stdout, stderr = proc.communicate()
             raise RuntimeError(f"MATLAB run timed out after {timeout:g} seconds") from exc
+        if on_output:
+            if stdout:
+                on_output("stdout", stdout)
+            if stderr:
+                on_output("stderr", stderr)
         if cancelled:
             was_cancelled = bool(cancelled())
         return _result_from_process(
@@ -569,6 +575,8 @@ class MatlabRunManager:
                 "process": None,
                 "cancel_requested": False,
                 "tracepoints": sorted({int(line) for line in (tracepoints or []) if int(line) > 0}),
+                "stdout": "",
+                "stderr": "",
                 "result": None,
                 "error": None,
             }
@@ -580,6 +588,14 @@ class MatlabRunManager:
                 job["process"] = proc
                 if job.get("cancel_requested") and proc.poll() is None:
                     proc.terminate()
+
+        def append_output(kind: str, text: str) -> None:
+            # Keep the desktop polling contract bounded. PersistentMatlabSession
+            # already caps each stream at 1 MiB; mirror that cap here so a job
+            # manager cannot retain an unbounded copy.
+            with self._lock:
+                current = str(job.get(kind) or "")
+                job[kind] = (current + text)[: 1024 * 1024]
 
         def worker() -> None:
             try:
@@ -599,6 +615,7 @@ class MatlabRunManager:
                             code=code,
                             start_line=start_line,
                             on_process=set_process,
+                            on_output=append_output,
                             cancelled=lambda: bool(job.get("cancel_requested")),
                             tracepoints=job["tracepoints"],
                         )
@@ -610,6 +627,7 @@ class MatlabRunManager:
                             code=code,
                             start_line=start_line,
                             on_process=set_process,
+                            on_output=append_output,
                             cancelled=lambda: bool(job.get("cancel_requested")),
                             workspace_file=self.workspace_file,
                             tracepoints=job["tracepoints"],
@@ -631,7 +649,7 @@ class MatlabRunManager:
         threading.Thread(target=worker, name=f"slxstudio-matlab-{job_id[:8]}", daemon=True).start()
         return self.status(job_id)
 
-    def status(self, job_id: str) -> dict[str, Any]:
+    def status(self, job_id: str, *, stdout_offset: int = 0, stderr_offset: int = 0) -> dict[str, Any]:
         with self._lock:
             self._prune_jobs_locked()
             job = self._jobs.get(str(job_id))
@@ -644,6 +662,26 @@ class MatlabRunManager:
                 "started_at": job["started_at"],
                 "tracepoints": list(job.get("tracepoints") or []),
             }
+            stdout = str(job.get("stdout") or "")
+            stderr = str(job.get("stderr") or "")
+            stdout_offset = (
+                max(0, min(int(stdout_offset), len(stdout)))
+                if isinstance(stdout_offset, int) and not isinstance(stdout_offset, bool)
+                else 0
+            )
+            stderr_offset = (
+                max(0, min(int(stderr_offset), len(stderr)))
+                if isinstance(stderr_offset, int) and not isinstance(stderr_offset, bool)
+                else 0
+            )
+            payload.update(
+                {
+                    "stdout_delta": stdout[stdout_offset:],
+                    "stderr_delta": stderr[stderr_offset:],
+                    "stdout_offset": len(stdout),
+                    "stderr_offset": len(stderr),
+                }
+            )
             if job.get("finished_at"):
                 payload["finished_at"] = job["finished_at"]
             if job.get("result") is not None:

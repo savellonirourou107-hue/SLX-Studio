@@ -1,6 +1,8 @@
 # SLX Studio 2.0 M3 static model viewport
 
-Status: **first M3 slice implemented locally; full M3 remains open.** This
+Status: **historical first M3 slice.** The bounded viewer described here was
+the starting point for the completed runtime integration; current acceptance
+is recorded in [M3/M4 core acceptance](slx-studio-2-m3-m4.md). This
 record describes the bounded viewer in commit `c6f31eb` on
 `codex/slx-studio-2-foundation`.
 
