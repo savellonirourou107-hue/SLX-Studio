@@ -1,9 +1,9 @@
 # SLX Studio 2.0 M3/M4 core acceptance
 
-Status: **implementation and acceptance in progress on `codex/slx-studio-2-foundation`.**
-Passing narrow local gates does not close the complete M3/M4 acceptance list.
-This is a development-branch evidence record, not a
-`main` merge or release claim.
+Status: **M3/M4 accepted on `codex/slx-studio-2-foundation` at commit `3c97ba4`.**
+All candidate-specific local gates and the Windows Actions package/install
+gate passed. This is a development-branch acceptance record, not a `main`
+merge or release claim.
 
 ## M3 runtime and model workflow
 
@@ -87,16 +87,33 @@ remain supported rollback paths.
 
 ## Completion audit (2026-09-09)
 
-The original migration charter remains the acceptance authority. Remaining
-work is not reclassified as follow-up solely because an earlier slice passes:
+The original migration charter remains the acceptance authority. The full M3/M4
+candidate gate is now closed for this development branch:
 
-- Complete the new UI model edit/save/conflict/undo/redo/simulation workflow.
-- Expose variable editing, section Run, exported figures and diagnostic range
-  navigation in the workbench, and verify the shared session with real R2026a.
-- Exercise extension hangs/crashes, explicit restart and real custom-editor
-  disposal, including first-party engineering workflows through the API.
-- Verify install, launch, save, close/reopen and clean uninstall on Windows.
-- Re-run candidate-specific legacy, protocol, Electron, MATLAB and resource gates.
+- Real R2026a Electron acceptance passed command streaming, variable editing,
+  file/section Run in the shared persistent session, figure rendering,
+  diagnostic line navigation, cancellation/no replay, backend crash cleanup,
+  staged model edit/undo/redo, independent `SimulationInput` simulation and
+  source-hash conflict protection.
+- Extension acceptance passed lazy trusted-host activation, bounded output,
+  hang/failure attribution, explicit restart, custom-editor tab disposal and
+  first-party MATLAB/Simulink typed routes.
+- Local gates passed: 148 Python tests (9 expected skips), `ruff check`,
+  `ruff format --check`, TypeScript, 15 platform tests, development Electron,
+  extension and packaged Electron tests, plus the 9-test real R2026a Python
+  integration suite.
+- Resource baseline passed: ten-run startup median 792 ms, worst 818 ms;
+  ready-time Electron private memory 282 MiB and owned 30-second process-tree
+  snapshot 262 MiB.
+- GitHub [CI run 34269731398](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/34269731398)
+  passed all Python versions and the Windows worker-ownership job.
+- GitHub [Windows run 34269757508](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/34269757508)
+  passed Electron portable/package/installer lifecycle and legacy
+  PyInstaller EXE/installer jobs, including clean uninstall checks.
+
+The installer compiler is intentionally a CI step because Inno Setup is not
+installed on the development machine; CI is the authoritative installer build
+and lifecycle evidence.
 
 Windows run `34258530344` found an Electron 44 lazy-install packaging bug:
 `npm ci` does not itself populate `electron/dist`. Packaging now resolves the

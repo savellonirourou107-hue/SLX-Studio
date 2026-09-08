@@ -1,6 +1,6 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b–M2 accepted locally; M3/M4 implementation and acceptance remain in progress**. Updated: 2026-09-09.
+Status: **M0b–M2 accepted locally; M3/M4 accepted on `codex/slx-studio-2-foundation` at `3c97ba4`**. Updated: 2026-09-09.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document defines future implementation, not features available in the beta.
 
