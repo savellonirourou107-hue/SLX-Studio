@@ -1,7 +1,7 @@
 # SLX Studio 2.0 M2 foundation evidence
 
 Status: **foundation implemented; M2 acceptance remains open.** Evidence is
-from commit `d1030da` on `codex/slx-studio-2-foundation`, Windows 11
+from commit `f2a9b38` on `codex/slx-studio-2-foundation`, Windows 11
 (`10.0.26200`, x64), 2026-09-08 local time.
 
 ## Implemented
@@ -12,8 +12,13 @@ from commit `d1030da` on `codex/slx-studio-2-foundation`, Windows 11
 - `ViewRegistry`, bounded `OutputService` and `ProblemsService` provide the
   first Workbench contribution contracts with disposable listeners.
 - `CustomEditorRegistry` provides extension matching and priority. The desktop
-  registers the MATLAB text editor; `.slx` deliberately reports an unavailable
-  M3 viewport rather than showing a fake canvas.
+  registers the MATLAB text editor and a read-only `.slx` static-summary
+  contribution rather than showing a fake canvas.
+- The typed protocol exposes parser-backed `model/inspect` and `model/diff`
+  calls. Static model inspection never starts MATLAB or executes callbacks.
+- Versioned user/workspace settings are persisted with schema validation, file
+  hashes, atomic replacement and a bounded 64 KiB format. The explicit Python
+  backend restart command rejects concurrent transitions and never replays work.
 - The renderer uses typed `DesktopServices` for workspace, document, save and
   recovery operations. It has no REST calls, raw filesystem API, Node runtime or
   arbitrary IPC channel.
@@ -27,30 +32,31 @@ from commit `d1030da` on `codex/slx-studio-2-foundation`, Windows 11
 ## Evidence
 
 ```text
-python -m pytest -m "not matlab_integration" -ra   136 passed, 8 deselected
+python -m pytest -m "not matlab_integration" -ra   137 passed, 8 deselected
 python -m ruff check .                              All checks passed
 python -m ruff format --check .                     71 files already formatted
 npm run typecheck                                   passed
-npm run test:platform                               6 passed
+npm run test:platform                               8 passed
 npm run check:desktop                               passed (real Electron)
 ```
 
 The real desktop test opens generated `.m`/`.slx` fixtures, exercises the
-configuration and explicit unsupported-model boundary, and repeats the full
-M1 workflow including recovery and 100 disposal cycles. It does not start
-MATLAB, execute callbacks, parse a real model, or claim M3 behavior.
+parser-backed static summary and typed diff, persists a workspace setting,
+restarts the owned Python backend, and repeats the full M1 workflow including
+recovery and 100 disposal cycles. It does not start MATLAB, execute callbacks,
+parse a real user model, or claim M3 behavior.
 
 The exact `npm run measure:desktop` run at this commit reported:
 
 ```text
-median fresh-process → editor accepts input: 666.975 ms
-maximum:                                      703.48 ms
-maximum Electron private memory at ready:    277.25 MiB
-owned process-tree private memory at 30 s:    263.07 MiB
+median fresh-process → editor accepts input: 646.375 ms
+maximum:                                      680.52 ms
+maximum Electron private memory at ready:    275.1015625 MiB
+owned process-tree private memory at 30 s:    255.33984375 MiB
 ```
 
 The raw report is the ignored local file
-`output/measurements/desktop-m2-foundation.json`; it records the generated
+`output/measurements/desktop-m2-foundation.json`; it records commit `f2a9b38`, the generated
 fixture, OS, Node/Electron versions, warm-cache/instrumentation caveats and the
 owned process tree. These are local observations, not release guarantees.
 
