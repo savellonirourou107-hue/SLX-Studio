@@ -24,6 +24,7 @@ record describes the bounded viewer in commit `c6f31eb` on
 
 ```text
 python -m pytest tests/test_documents_rpc.py -o addopts= -ra  26 passed
+python -m pytest tests -m 'not matlab_integration' -o addopts= -ra  138 passed, 8 deselected
 node --test scripts/test-platform.mjs                              10 passed
 npm run build                                                       passed
 npm run test:desktop                                                passed
