@@ -282,8 +282,8 @@ core. A graphical model viewport remains an M3 deliverable.
 The private Python JSON-RPC adapter and backend supervisor are covered by split,
 coalesced, malformed, crash and no-replay tests. The palette now provides an
 explicit backend restart command, including a guard against concurrent process
-transitions. Problems navigation and the full contribution lifecycle remain
-open M2 work. Large model RPC responses currently
+transitions. Problems navigation is now covered by the static diagnostics
+panel; the full contribution lifecycle remains open M2 work. Large model RPC responses currently
 fail at the 16 MiB frame limit; paginated model delivery remains outstanding.
 
 The foundation's exact test and resource record is

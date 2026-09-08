@@ -1,7 +1,7 @@
 # SLX Studio 2.0 M2 foundation evidence
 
 Status: **foundation implemented; M2 acceptance remains open.** Evidence is
-from commit `f2a9b38` on `codex/slx-studio-2-foundation`, Windows 11
+from commits `f2a9b38` and `1525ab5` on `codex/slx-studio-2-foundation`, Windows 11
 (`10.0.26200`, x64), 2026-09-08 local time.
 
 ## Implemented
@@ -62,8 +62,8 @@ owned process tree. These are local observations, not release guarantees.
 
 ## Still required to close M2
 
-Problems navigation, paginated model responses, and a
-real Workbench contribution lifecycle are still outstanding. Existing Python
+Paginated model responses and a real Workbench contribution lifecycle are
+still outstanding. Existing Python
 CLI/REST and the accepted M1 desktop slice remain the rollback paths.
 
 ## Static model service follow-up
@@ -94,5 +94,6 @@ slice.
 
 Actual Electron coverage includes the settings dialog, live Monaco font-size
 check, configuration after restart, explicit backend restart and concurrent
-restart rejection, plus the full M1 regression path. The local settings dialog
+restart rejection, parser warnings in the Problems panel and click-through to
+the registered model contribution, plus the full M1 regression path. The local settings dialog
 screenshot is `output/playwright/desktop-settings.png` (ignored output).
