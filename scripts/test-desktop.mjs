@@ -17,7 +17,7 @@ const workspace = path.join(testRoot, '工程');
 await fs.mkdir(workspace);
 await fs.writeFile(path.join(workspace, 'control.m'), 'gain = 1;\n');
 await fs.writeFile(path.join(workspace, '控制.m'), '\ufeff%% 控制\r\nKp = 2;');
-const modelXml = '<System><Block BlockType="Inport" Name="Input" SID="1"/><Block BlockType="Gain" Name="Gain" SID="2"/><Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line></System>';
+const modelXml = '<System><Block BlockType="Inport" Name="Input" SID="1"/><Block BlockType="Gain" Name="Gain" SID="2"><P Name="VariantControl">A</P></Block><Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line></System>';
 execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
   '-c',
   'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1], "w"); z.writestr("simulink/systems/system_root.xml", sys.argv[2]); z.close()',
@@ -76,6 +76,11 @@ try {
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'SLX static summary is exposed through the custom editor contribution');
   assert.match(await page.getByRole('log').textContent(), /2 blocks, 1 connections/);
+  await page.getByRole('button', { name: /PROBLEMS/ }).click();
+  await page.locator('#problems .problem-row').waitFor();
+  assert.match(await page.locator('#problems').textContent(), /variant/);
+  await page.locator('#problems .problem-row').click();
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'clicking a problem navigates to its registered model contribution');
   const sameModelDiff = await page.evaluate(() => window.slx.diffModels('model.slx', 'model.slx', false));
   assert.equal(sameModelDiff.ok, true);
   assert.equal(sameModelDiff.value.changed, false, 'typed model diff reports identical files');

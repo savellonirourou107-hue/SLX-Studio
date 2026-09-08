@@ -4,7 +4,8 @@ import { ConfigurationStore, DESKTOP_SCHEMAS } from '../../../packages/configura
 import { DesktopServices } from '../../../packages/core/services';
 import { DocumentEditors } from '../../../packages/editor/documents';
 import { CustomEditorRegistry } from '../../../packages/editor/registry';
-import { OutputService, ViewRegistry } from '../../../packages/workbench';
+import { OutputService, ProblemsService, ViewRegistry } from '../../../packages/workbench';
+import type { Problem } from '../../../packages/workbench';
 import type { WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
 
@@ -16,6 +17,7 @@ const views = new ViewRegistry();
 views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' });
 views.register({ id: 'workbench.output', title: 'Output', location: 'panel' });
 const outputService = new OutputService();
+const problemsService = new ProblemsService();
 const editorRegistry = new CustomEditorRegistry();
 const output = element('output');
 let workspace: WorkspaceInfo | null = null;
@@ -27,6 +29,28 @@ function log(message: string): void {
   output.scrollTop = output.scrollHeight;
 }
 function report(error: unknown): void { log((error as Error).message || String(error)); }
+function selectPanel(panel: 'output' | 'problems'): void {
+  element('output-view').hidden = panel !== 'output';
+  element('problems-view').hidden = panel !== 'problems';
+  element('output-tab').classList.toggle('selected', panel === 'output');
+  element('problems-tab').classList.toggle('selected', panel === 'problems');
+}
+function renderProblems(): void {
+  const problems = problemsService.snapshot();
+  element('problem-count').textContent = problems.length ? `(${problems.length})` : '';
+  element('problems').replaceChildren(...problems.map(problem => {
+    const row = document.createElement('button');
+    row.className = 'problem-row'; row.role = 'listitem';
+    row.append(
+      Object.assign(document.createElement('span'), { className: 'problem-severity', textContent: problem.severity.toUpperCase() }),
+      document.createTextNode(`${problem.path}${problem.line ? `:${problem.line}` : ''} — ${problem.message}`),
+      Object.assign(document.createElement('span'), { className: 'problem-source', textContent: problem.source || 'diagnostics' }),
+    );
+    row.onclick = () => { selectPanel('output'); const editor = editorRegistry.resolve(problem.path); if (editor) void Promise.resolve(editor.open(problem.path)).catch(report); else log(`${problem.path}: no registered editor for this diagnostic.`); };
+    return row;
+  }));
+}
+problemsService.subscribe(renderProblems);
 let decisionQueue: Promise<unknown> = Promise.resolve();
 function decide(title: string, detail: string, options: string[]): Promise<string> {
   const job = decisionQueue.then(() => new Promise<string>(resolve => {
@@ -53,7 +77,7 @@ const settings = new SettingsController(element<HTMLDialogElement>('settings'), 
   editors.configure({ fontSize: configuration.get<number>('editor.fontSize'), minimap: configuration.get<boolean>('editor.minimap') });
 }, () => !!workspace, log);
 editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) });
-editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => { const model = await files.inspect(path); log(`${path}: static summary — ${model.blocks.length} blocks, ${model.lines.length} connections; MATLAB not started.`); } });
+editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => { const model = await files.inspect(path); const unsupported = Array.isArray(model.metadata.unsupported_features) ? model.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : []; const diagnostics: Problem[] = unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' })); problemsService.replace(diagnostics); log(`${path}: static summary — ${model.blocks.length} blocks, ${model.lines.length} connections; MATLAB not started.${unsupported.length ? ` Unsupported: ${unsupported.join(', ')}.` : ''}`); } });
 let lastTabSignature = '';
 function renderEditors(): void {
   const signature = [...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n');
@@ -170,6 +194,8 @@ window.addEventListener('keydown', event => {
   if (id && !document.querySelector('dialog[open]')) { event.preventDefault(); event.stopPropagation(); void commands.execute(id).catch(report); }
 }, true);
 element('clear-output').onclick = () => { outputService.clear(); output.textContent = ''; };
+element('output-tab').onclick = () => selectPanel('output');
+element('problems-tab').onclick = () => selectPanel('problems');
 void files.workspace().then(async info => {
   if (info) await setWorkspace(info);
   else await settings.reload();

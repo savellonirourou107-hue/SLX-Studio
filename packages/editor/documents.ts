@@ -34,6 +34,14 @@ export class DocumentEditors {
     this.options = { ...options };
     this.editor?.updateOptions({ fontSize: options.fontSize, minimap: { enabled: options.minimap } });
   }
+  reveal(path: string, line = 1, column = 1): void {
+    const document = this.documents.get(path);
+    if (!document || !this.editor) return;
+    this.select(path);
+    const position = { lineNumber: Math.max(1, Math.min(line, document.model.getLineCount())), column: Math.max(1, column) };
+    this.editor.setPosition(position);
+    this.editor.revealPositionInCenter(position);
+  }
   private async ensureEditor(): Promise<void> {
     if (!this.loading) this.loading = (async () => {
       const { monaco } = await import('./monaco');
