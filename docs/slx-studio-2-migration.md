@@ -281,6 +281,9 @@ coalesced, malformed, crash and no-replay tests. This is not yet the full
 Workbench, settings persistence, Problems navigation or parser/diff service
 surface required to close M2.
 
+The foundation's exact test and resource record is
+[docs/slx-studio-2-m2-foundation.md](slx-studio-2-m2-foundation.md).
+
 Rollback: switch the transport adapter/desktop entry, without reverting file formats.
 
 ### M3 — Model + code + simulation workflow

@@ -87,6 +87,6 @@ const report = {
 };
 const output = path.join(root, 'output/measurements');
 await fs.mkdir(output, { recursive: true });
-await fs.writeFile(path.join(output, 'desktop-m1.json'), `${JSON.stringify(report, null, 2)}\n`);
+await fs.writeFile(path.join(output, 'desktop-m2-foundation.json'), `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify(report.summary));
-console.log(`Wrote ${path.join(output, 'desktop-m1.json')}`);
+console.log(`Wrote ${path.join(output, 'desktop-m2-foundation.json')}`);

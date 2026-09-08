@@ -61,8 +61,8 @@ owned process-tree private memory at 30 s:    259.09 MiB
 
 The 30-second process-tree total includes the owned Python RPC child and
 Electron descendants, excludes MATLAB (not started), and excludes unrelated
-processes. The raw JSON is generated at `output/measurements/desktop-m1.json`
-and intentionally ignored by Git. The current renderer/electron JavaScript and
+processes. The raw JSON is intentionally ignored and may be overwritten by a
+later foundation measurement. The current renderer/electron JavaScript and
 CSS bundle is about 3.4 MiB; the unpacked Electron runtime is about 368 MiB and
 is not a distributable installer. A compressed Windows artifact and clean
 install/uninstall measurement are deliberately deferred to M4 packaging.
