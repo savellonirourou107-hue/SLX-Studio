@@ -41,6 +41,12 @@ The optional real MATLAB R2026a suite was run separately with
 MATLAB edit/simulation/figure, command-stream/cancel and tracepoint paths; it
 does not claim that the new Electron viewport drives MATLAB.
 
+The final desktop startup measurement at commit
+`3e898b593307493f347607bfd464b57f42ad12ca` reported a 684.995 ms median and
+708.03 ms maximum readiness, 279.43 MiB maximum Electron private memory at
+readiness, and 255.73 MiB owned private memory at 30 seconds. It is a warm-cache
+startup fixture and does not include opening the 1,000-block viewport.
+
 ## Known boundaries
 
 - Layout is an approximate static topology view. It does not claim exact
