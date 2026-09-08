@@ -1,8 +1,8 @@
 # SLX Studio 2.0 M3/M4 core acceptance
 
-Status: **implemented on `codex/slx-studio-2-foundation`; local gates are
-green except the Inno Setup installer compile, which is exercised by the
-Windows Actions job.** This is a development-branch acceptance record, not a
+Status: **implementation and acceptance in progress on `codex/slx-studio-2-foundation`.**
+Passing narrow local gates does not close the complete M3/M4 acceptance list.
+This is a development-branch evidence record, not a
 `main` merge or release claim.
 
 ## M3 runtime and model workflow
@@ -70,8 +70,27 @@ proves the Inno installer and clean artifact paths on `windows-latest`.
 
 ## Deliberate follow-ups
 
-The core migration is complete without pretending to include a full MATLAB
+The core migration does not require a full MATLAB
 LSP, pausing debugger, profiler, general PTY terminal, remote execution,
 Marketplace or exact Simulink graphical parity. Those are separate, scoped
 extensions. Existing Python CLI/REST, legacy Workbench and non-pausing probes
 remain supported rollback paths.
+
+## Completion audit (2026-09-09)
+
+The original migration charter remains the acceptance authority. Remaining
+work is not reclassified as follow-up solely because an earlier slice passes:
+
+- Complete the new UI model edit/save/conflict/undo/redo/simulation workflow.
+- Expose variable editing, section Run, exported figures and diagnostic range
+  navigation in the workbench, and verify the shared session with real R2026a.
+- Exercise extension hangs/crashes, explicit restart and real custom-editor
+  disposal, including first-party engineering workflows through the API.
+- Verify install, launch, save, close/reopen and clean uninstall on Windows.
+- Re-run candidate-specific legacy, protocol, Electron, MATLAB and resource gates.
+
+Windows run `34258530344` found an Electron 44 lazy-install packaging bug:
+`npm ci` does not itself populate `electron/dist`. Packaging now resolves the
+Electron entry point before copying; a lazy-runtime regression and an actual
+installer lifecycle test cover that failure path. The failed run is not
+installation-success evidence.

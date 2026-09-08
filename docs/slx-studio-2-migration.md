@@ -1,6 +1,6 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b–M4 core implemented on the development branch; local and CI gates are recorded separately**. Updated: 2026-09-09.
+Status: **M0b–M2 accepted locally; M3/M4 implementation and acceptance remain in progress**. Updated: 2026-09-09.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document defines future implementation, not features available in the beta.
 
@@ -298,9 +298,9 @@ The foundation's exact test and resource record is
 
 Rollback: switch the transport adapter/desktop entry, without reverting file formats.
 
-### M3 — Model + code + simulation workflow (core accepted locally)
+### M3 — Model + code + simulation workflow (acceptance in progress)
 
-The M3 core is implemented: the typed `model/viewport` service and Electron
+The first M3 slices are implemented: the typed `model/viewport` service and Electron
 custom editor provide bounded static SLX viewing with subsystem selection,
 search, parameter inspection and page navigation; the same workbench now owns
 the persistent MATLAB Command Window and `.m` run jobs. Validated in-place model
@@ -334,7 +334,7 @@ Evidence and test commands are recorded in
 [M3/M4 core acceptance](slx-studio-2-m3-m4.md). Rollback remains the explicit
 legacy/batch Workbench choice, retaining lifecycle warnings.
 
-### M4 — Extension platform and first installable 2.0 core (accepted with CI installer gate)
+### M4 — Extension platform and first installable 2.0 core (acceptance in progress)
 
 Deliver: small versioned Extension API, private Node host protocol, local trusted
 extension loading and first-party MATLAB/Simulink contributions. Extend built-in
