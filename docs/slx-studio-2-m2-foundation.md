@@ -56,7 +56,37 @@ owned process tree. These are local observations, not release guarantees.
 
 ## Still required to close M2
 
-Settings persistence and user/workspace file loading, Problems navigation,
-parser/diff services over the typed protocol, backend restart controls, and a
+Problems navigation, paginated model responses, and a
 real Workbench contribution lifecycle are still outstanding. Existing Python
 CLI/REST and the accepted M1 desktop slice remain the rollback paths.
+
+## Static model service follow-up
+
+The next slice connects the existing root-scoped Python parser and structural
+diff to the allowlisted desktop API. Selecting `.slx` reports block/connection
+counts in Output; it is not a graphical model editor. JSON responses are capped
+at 16 MiB, with a structured error on overflow rather than an unbounded stream.
+
+The actual Electron gate passed with a generated two-block, one-connection SLX
+ZIP fixture and an identical-model diff request. It also reran the M1 workflow
+and 100 editor disposal cycles. This is static ZIP/XML acceptance, not a
+MATLAB-created model or broad Simulink compatibility claim. TypeScript checks
+and platform tests passed; settings persistence is included in this follow-up
+slice.
+
+## Persisted settings and explicit restart follow-up
+
+- A standalone `ConfigurationFiles` adapter reads versioned, bounded user and
+  workspace JSON. Invalid keys are reported, never treated as execution settings.
+- The settings dialog changes the actual Monaco font size/minimap without
+  rebuilding its text model. Workspace overrides survive an application restart.
+- Updates are serialized, SHA-256 checked and atomically replaced. Malformed
+  files, oversized content and Windows junction targets fail closed.
+- `Backend: Restart Python Service` replaces the owned Python process without
+  replaying requests. Concurrent transitions are rejected; closing also cleans
+  up a backend that is still starting.
+
+Actual Electron coverage includes the settings dialog, live Monaco font-size
+check, configuration after restart, explicit backend restart and concurrent
+restart rejection, plus the full M1 regression path. The local settings dialog
+screenshot is `output/playwright/desktop-settings.png` (ignored output).

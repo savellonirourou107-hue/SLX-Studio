@@ -63,7 +63,7 @@ export class PythonBackend extends EventEmitter {
     // Drain continuously; never concatenate unbounded process output in memory.
     this.child.stderr.on('data', (data: Buffer) => this.emit('diagnostic', data.subarray(0, 4096).toString('utf8')));
     this.child.on('error', error => this.fail(error));
-    this.child.on('exit', () => this.fail(new Error('Python backend exited; reopen the application to restart.')));
+    this.child.on('exit', () => this.fail(new Error('Python backend exited; use Backend: Restart Python Service.')));
     this.child.stdin.on('error', error => this.fail(error));
   }
   request<T>(method: string, params: object = {}): Promise<T> {

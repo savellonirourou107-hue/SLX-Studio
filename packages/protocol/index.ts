@@ -21,6 +21,13 @@ export interface WorkspaceInfo {
   capabilities: string[];
   matlab_started: boolean;
 }
+export interface ModelBlock { system_id: string; sid: string; name: string; block_type: string; path: string; parameters: Readonly<Record<string, string>>; }
+export interface ModelLine { system_id: string; src: string; dst: string; name: string; }
+export interface ModelSnapshot { schema_version: string; name: string; metadata: Readonly<Record<string, unknown>>; blocks: readonly ModelBlock[]; lines: readonly ModelLine[]; }
+export interface ModelDiff { schema_version: string; old_name: string; new_name: string; changed: boolean; change_count: number; added_blocks: readonly ModelBlock[]; removed_blocks: readonly ModelBlock[]; changed_blocks: readonly { before: ModelBlock; after: ModelBlock; parameter_changes: readonly { name: string; before: string | null; after: string | null }[] }[]; added_lines: readonly ModelLine[]; removed_lines: readonly ModelLine[]; }
+export type ConfigurationValue = boolean | number | string | null | readonly ConfigurationValue[] | { readonly [key: string]: ConfigurationValue };
+export interface ConfigurationFile { scope: 'user' | 'workspace'; exists: boolean; sha256: string | null; values: Readonly<Record<string, ConfigurationValue>>; issues: readonly string[]; }
+export interface ConfigurationState { effective: Readonly<Record<string, ConfigurationValue>>; user: ConfigurationFile; workspace: ConfigurationFile; }
 export interface Draft {
   path: string;
   content: string;
@@ -33,6 +40,11 @@ export interface DesktopAPI {
   listDirectory(path: string, cursor: number): Promise<Result<DirectoryPage>>;
   readDocument(path: string): Promise<Result<DocumentSnapshot>>;
   saveDocument(path: string, content: string, hash: string, bom: boolean): Promise<Result<DocumentSnapshot>>;
+  inspectModel(path: string): Promise<Result<ModelSnapshot>>;
+  diffModels(oldPath: string, newPath: string, includeLayout: boolean): Promise<Result<ModelDiff>>;
+  configuration(): Promise<Result<ConfigurationState>>;
+  updateConfiguration(scope: 'user' | 'workspace', values: Readonly<Record<string, ConfigurationValue>>, expectedSha256: string | null): Promise<Result<ConfigurationState>>;
+  restartBackend(): Promise<Result<WorkspaceInfo>>;
   loadDraft(path: string): Promise<Result<Draft | null>>;
   storeDraft(draft: Draft | { path: string; clear: true }): Promise<Result<null>>;
   onCommand(callback: (command: string) => void): () => void;

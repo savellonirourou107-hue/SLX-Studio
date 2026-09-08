@@ -2,8 +2,9 @@
 
 This is a separately launched Electron preview on the
 `codex/slx-studio-2-foundation` branch. It does not replace the Python CLI or
-legacy Workbench. The current real workflow is `.m` editing; `.slx` viewport,
-MATLAB execution and extensions are still migration work.
+legacy Workbench. The current real workflow is `.m` editing plus a read-only
+`.slx` structural summary; a graphical model viewport, MATLAB execution and
+extensions are still migration work.
 
 ## Run from source
 
@@ -35,9 +36,33 @@ close offers Save, Discard or Cancel, and recovery drafts can be restored after
 restart. Mixed/legacy line endings open read-only to avoid silent conversion.
 
 The `Settings: Show Effective Configuration` command displays the current
-schema-backed configuration. Settings persistence and interactive settings UI
-are not implemented yet. The `.slx` contribution currently reports its migration
-boundary; it is not a working model viewport.
+schema-backed configuration. `Settings: Edit Configuration` persists the font
+size and minimap settings through the typed service. User settings live in the
+desktop state directory; workspace settings live in `.slx-studio/settings.json`.
+Only registered, non-sensitive keys can be written, and saves use a file hash
+to reject external changes. Selecting an `.slx` file invokes the Python parser via
+the typed service boundary and reports its block/connection counts in Output;
+the parser does not start MATLAB or execute model callbacks. `model/diff` is
+also available to the desktop API for typed structural comparisons. This is a
+read-only summary, not a working model viewport or `.slx` writer.
+
+Both settings files use this versioned JSON format (maximum 64 KiB):
+
+```json
+{
+  "version": 1,
+  "settings": { "editor.fontSize": 16, "editor.minimap": false }
+}
+```
+
+Settings are read at startup, on workspace changes and through the settings
+commands; there is no background file watcher yet. Invalid files/keys produce
+visible warnings and do not grant execution trust. The dialog refuses to
+overwrite invalid files, so unknown or damaged content is not silently removed.
+
+`Backend: Restart Python Service` explicitly creates a fresh owned backend for
+the current workspace while retaining open text models. Failed or pending
+operations are never replayed automatically. This does not start MATLAB.
 
 ## Developer gates
 

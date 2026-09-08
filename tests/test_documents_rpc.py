@@ -7,6 +7,7 @@ import os
 import stat
 import subprocess
 import sys
+import zipfile
 
 import pytest
 
@@ -209,6 +210,43 @@ def test_rpc_framing_and_notifications(tmp_path):
     assert json.loads(rpc.read_frame(target))["error"]["code"] == -32601
     assert json.loads(rpc.read_frame(target))[0]["id"] == "four"
     assert rpc.read_frame(target) is None
+
+
+def _write_model(path, gain="2", add_sink=False):
+    sink = (
+        '<Block BlockType="Outport" Name="Scope" SID="3"><P Name="Position">[400 100 430 130]</P></Block>'
+        if add_sink
+        else ""
+    )
+    line2 = '<Line><P Name="Src">2#out:1</P><P Name="Dst">3#in:1</P></Line>' if add_sink else ""
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<System>
+  <Block BlockType="Inport" Name="Input" SID="1"><P Name="Position">[20 100 50 130]</P></Block>
+  <Block BlockType="Gain" Name="Gain" SID="2"><P Name="Gain">{gain}</P><P Name="Position">[100 100 140 130]</P></Block>
+  {sink}
+  <Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line>{line2}
+</System>"""
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("simulink/systems/system_root.xml", xml)
+
+
+def test_rpc_reaches_static_parser_and_diff_without_matlab(tmp_path):
+    _write_model(tmp_path / "old.slx")
+    _write_model(tmp_path / "new.slx", gain="3", add_sink=True)
+    backend = rpc.Backend(str(tmp_path))
+    inspected = backend.dispatch(message("model/inspect", {"relative": "old.slx"}))
+    assert inspected["result"]["schema_version"] == "0.5"
+    assert len(inspected["result"]["blocks"]) == 2
+    diff = backend.dispatch(message("model/diff", {"old": "old.slx", "new": "new.slx"}))
+    assert diff["result"]["changed"]
+    assert diff["result"]["change_count"] == 3
+    assert backend.dispatch(message("model/inspect", {"relative": "../old.slx"}))["error"]["code"] == -32602
+    assert (
+        backend.dispatch(
+            message("model/diff", {"old": "old.slx", "new": "new.slx", "include_layout": "yes"})
+        )["error"]["code"]
+        == -32602
+    )
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,7 @@ export class DocumentEditors {
   private monaco: typeof Monaco | null = null;
   private loading: Promise<void> | null = null;
   private opening = new Map<string, Promise<void>>();
+  private options = { fontSize: 14, minimap: false };
   constructor(
     private readonly container: HTMLElement,
     private readonly files: DesktopServices,
@@ -29,13 +30,17 @@ export class DocumentEditors {
     private readonly changed: () => void,
     private readonly log: (text: string) => void,
   ) {}
+  configure(options: { fontSize: number; minimap: boolean }): void {
+    this.options = { ...options };
+    this.editor?.updateOptions({ fontSize: options.fontSize, minimap: { enabled: options.minimap } });
+  }
   private async ensureEditor(): Promise<void> {
     if (!this.loading) this.loading = (async () => {
       const { monaco } = await import('./monaco');
       this.monaco = monaco;
       const editor = monaco.editor.create(this.container, {
-        theme: 'slx-dark', model: null, automaticLayout: true, fontSize: 14,
-        fontFamily: 'Consolas, "Cascadia Code", monospace', minimap: { enabled: false },
+        theme: 'slx-dark', model: null, automaticLayout: true, fontSize: this.options.fontSize,
+        fontFamily: 'Consolas, "Cascadia Code", monospace', minimap: { enabled: this.options.minimap },
         padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 4,
         ariaLabel: 'MATLAB code editor', fixedOverflowWidgets: true,
       });

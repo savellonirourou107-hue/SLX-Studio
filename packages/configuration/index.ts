@@ -7,6 +7,13 @@ export interface ConfigurationSchema<T extends ConfigurationValue = Configuratio
   sensitive?: boolean;
 }
 type Entry = ConfigurationSchema & { defaultValue: ConfigurationValue };
+export type ConfigurationScope = 'user' | 'workspace';
+
+/** The small, non-sensitive settings surface shared by the preview desktop. */
+export const DESKTOP_SCHEMAS: readonly ConfigurationSchema[] = Object.freeze([
+  { key: 'editor.fontSize', defaultValue: 14, validate: (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 10 && value <= 32, workspaceWritable: true },
+  { key: 'editor.minimap', defaultValue: false, validate: (value): value is boolean => typeof value === 'boolean', workspaceWritable: true },
+]);
 
 function copy<T extends ConfigurationValue>(value: T): T {
   return structuredClone(value);
@@ -36,6 +43,29 @@ export class ConfigurationStore {
   }
   setUser(key: string, value: unknown): void { this.set(this.user, key, value, 'user'); }
   setWorkspace(key: string, value: unknown): void { this.set(this.workspace, key, value, 'workspace'); }
+  /** Replace one persisted layer atomically and report ignored entries. */
+  load(scope: ConfigurationScope, values: unknown): readonly string[] {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return ['settings must be an object'];
+    const next = new Map<string, ConfigurationValue>();
+    const issues: string[] = [];
+    for (const [key, value] of Object.entries(values)) {
+      try {
+        const schema = this.schema(key);
+        if (scope === 'workspace' && (!schema.workspaceWritable || schema.sensitive)) throw new Error('not workspace-writable');
+        if (!schema.validate(value)) throw new Error('invalid value');
+        next.set(key, copy(value));
+      } catch (error) { issues.push(`${key}: ${(error as Error).message}`); }
+    }
+    const target = scope === 'user' ? this.user : this.workspace;
+    target.clear();
+    for (const [key, value] of next) target.set(key, value);
+    return issues;
+  }
+  layer(scope: ConfigurationScope): Readonly<Record<string, ConfigurationValue>> {
+    const values: Record<string, ConfigurationValue> = {};
+    for (const [key, value] of (scope === 'user' ? this.user : this.workspace)) values[key] = copy(value);
+    return Object.freeze(values);
+  }
   clearUser(key: string): void { this.schema(key); this.user.delete(key); }
   clearWorkspace(key: string): void { this.schema(key); this.workspace.delete(key); }
   get<T extends ConfigurationValue>(key: string): T {

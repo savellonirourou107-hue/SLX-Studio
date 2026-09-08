@@ -271,15 +271,20 @@ Acceptance:
   require a MATLAB installation, full recursive scan, extension host or network.
 
 The current M2 foundation adds `ConfigurationStore` (default < user < workspace,
-workspace-write and sensitive-key guards), `ViewRegistry`, bounded
-`OutputService`/`ProblemsService`, and `CustomEditorRegistry`. The renderer now
-uses the registries for the Explorer, Output and `.m` text contributions, while
-all file access continues through the typed preload service. `.slx` reports that
-no desktop editor is registered yet instead of presenting a mock viewport.
+workspace-write and sensitive-key guards), persisted user/workspace settings,
+`ViewRegistry`, bounded `OutputService`/`ProblemsService`, and
+`CustomEditorRegistry`. The renderer now uses the registries for the Explorer,
+Output, settings dialog and `.m` text contributions, while all file access
+continues through the typed preload service. Selecting `.slx` now shows
+parser-derived block/connection counts in Output without executing
+MATLAB; structural `model/inspect` and `model/diff` services reuse the Python
+core. A graphical model viewport remains an M3 deliverable.
 The private Python JSON-RPC adapter and backend supervisor are covered by split,
-coalesced, malformed, crash and no-replay tests. This is not yet the full
-Workbench, settings persistence, Problems navigation or parser/diff service
-surface required to close M2.
+coalesced, malformed, crash and no-replay tests. The palette now provides an
+explicit backend restart command, including a guard against concurrent process
+transitions. Problems navigation and the full contribution lifecycle remain
+open M2 work. Large model RPC responses currently
+fail at the 16 MiB frame limit; paginated model delivery remains outstanding.
 
 The foundation's exact test and resource record is
 [docs/slx-studio-2-m2-foundation.md](slx-studio-2-m2-foundation.md).

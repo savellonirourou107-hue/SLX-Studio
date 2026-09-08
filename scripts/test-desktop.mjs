@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
@@ -16,7 +17,13 @@ const workspace = path.join(testRoot, '工程');
 await fs.mkdir(workspace);
 await fs.writeFile(path.join(workspace, 'control.m'), 'gain = 1;\n');
 await fs.writeFile(path.join(workspace, '控制.m'), '\ufeff%% 控制\r\nKp = 2;');
-await fs.writeFile(path.join(workspace, 'model.slx'), 'static fixture');
+const modelXml = '<System><Block BlockType="Inport" Name="Input" SID="1"/><Block BlockType="Gain" Name="Gain" SID="2"/><Line><P Name="Src">1#out:1</P><P Name="Dst">2#in:1</P></Line></System>';
+execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
+  '-c',
+  'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1], "w"); z.writestr("simulink/systems/system_root.xml", sys.argv[2]); z.close()',
+  path.join(workspace, 'model.slx'),
+  modelXml,
+], { windowsHide: true });
 await fs.writeFile(path.join(workspace, 'mixed.m'), 'a = 1;\r\nb = 2;\n');
 const env = { ...process.env, SLX_DESKTOP_TEST_HIDE: '1', SLX_DESKTOP_STATE_DIR: path.join(testRoot, 'state'), SLX_DESKTOP_WORKSPACE: workspace };
 delete env.ELECTRON_RUN_AS_NODE;
@@ -67,12 +74,28 @@ try {
   assert.equal(await page.evaluate(() => typeof window.slx.invoke), 'undefined');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('no registered editor in this desktop'), 'unimplemented SLX viewport is explicit');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'SLX static summary is exposed through the custom editor contribution');
+  assert.match(await page.getByRole('log').textContent(), /2 blocks, 1 connections/);
+  const sameModelDiff = await page.evaluate(() => window.slx.diffModels('model.slx', 'model.slx', false));
+  assert.equal(sameModelDiff.ok, true);
+  assert.equal(sameModelDiff.value.changed, false, 'typed model diff reports identical files');
+  await command('Settings: Edit Configuration');
+  await page.locator('#settings-scope').selectOption('workspace');
+  await page.locator('#settings-font-size').fill('16');
+  await page.screenshot({ path: path.join(artifactRoot, 'desktop-settings.png') });
+  await page.getByRole('button', { name: 'Apply settings', exact: true }).click();
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('Settings saved (workspace)'), 'workspace settings are persisted through the typed service');
+  assert.match(await fs.readFile(path.join(workspace, '.slx-studio', 'settings.json'), 'utf8'), /"editor\.fontSize": 16/);
   await command('Settings: Show Effective Configuration');
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('"editor.fontSize": 14'), 'effective settings are exposed through a command');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('"editor.fontSize": 16'), 'persisted settings affect the effective configuration');
+  assert.equal(await page.locator('#monaco .view-lines').evaluate(node => getComputedStyle(node).fontSize), '16px', 'saved font size changes the actual Monaco editor');
+  await command('Backend: Restart Python Service');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('Python backend restarted'), 'backend restart is explicit and does not replay requests');
+  const restarts = await page.evaluate(() => Promise.all([window.slx.restartBackend(), window.slx.restartBackend()]));
+  assert.equal(restarts.filter(result => result.ok).length, 1, 'concurrent backend transitions are rejected instead of leaking workers');
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('no registered editor in this desktop'), 'output can be cleared and reused');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'output can be cleared and reused');
   assert.ok(!(await page.getByRole('log').textContent()).includes('editor.fontSize'), 'cleared output does not reappear');
   await page.getByRole('treeitem', { name: 'mixed.m', exact: true }).click();
   await page.getByRole('tab', { name: 'mixed.m', exact: true }).waitFor();
@@ -157,6 +180,8 @@ try {
   console.log('STEP restart');
   await closeForTest();
   await launch();
+  await command('Settings: Show Effective Configuration');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('"editor.fontSize": 16'), 'workspace settings survive an application restart');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   await page.getByRole('button', { name: 'Restore draft', exact: true }).click();
   await command('File: Save');

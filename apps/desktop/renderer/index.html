@@ -18,6 +18,14 @@
   </main>
   <dialog id="palette" aria-label="Command Palette"><input id="command-search" placeholder="Type a command…" aria-label="Search commands"><div id="command-results"></div></dialog>
   <dialog id="decision" aria-labelledby="decision-title"><h2 id="decision-title"></h2><p id="decision-text"></p><div id="decision-actions"></div></dialog>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <h2 id="settings-title">Editor settings</h2>
+    <label>Scope <select id="settings-scope"><option value="user">User</option><option value="workspace">Workspace</option></select></label>
+    <label>Font size <input id="settings-font-size" type="number" min="10" max="32" step="1"></label>
+    <label class="settings-checkbox"><input id="settings-minimap" type="checkbox"> Show minimap</label>
+    <p id="settings-message" role="status"></p>
+    <div class="settings-actions"><button id="settings-reload">Reload settings</button><button id="settings-close">Cancel</button><button id="settings-save">Apply settings</button></div>
+  </dialog>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -5,9 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
+from pathlib import Path
 from typing import Any, BinaryIO
 
-from .documents import DocumentConflict, list_directory, read_document, save_document
+from .diff import compare_models
+from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
+from .parser import parse_slx
 from .workspace import workspace_root
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
@@ -15,6 +19,51 @@ MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 class FrameError(ValueError):
     pass
+
+
+def _slx_path(root: Path, relative: str) -> Path:
+    path = document_path(root, relative)
+    if path.suffix.lower() != ".slx":
+        raise ValueError("model path must end in .slx")
+    return path
+
+
+def inspect_model(root: Path, relative: str) -> dict[str, Any]:
+    model = parse_slx(_slx_path(root, relative))
+    return {
+        "schema_version": "0.5",
+        "name": model.name,
+        "metadata": model.metadata,
+        "blocks": [asdict(block) for _, block in sorted(model.blocks.items())],
+        "lines": [asdict(line) for line in sorted(model.lines)],
+    }
+
+
+def diff_models(root: Path, old: str, new: str, include_layout: bool = False) -> dict[str, Any]:
+    if not isinstance(include_layout, bool):
+        raise TypeError("include_layout must be boolean")
+    result = compare_models(
+        parse_slx(_slx_path(root, old)), parse_slx(_slx_path(root, new)), include_layout=include_layout
+    )
+    return {
+        "schema_version": "0.5",
+        "old_name": result.old_name,
+        "new_name": result.new_name,
+        "changed": result.changed,
+        "change_count": result.change_count,
+        "added_blocks": [asdict(block) for block in result.added_blocks],
+        "removed_blocks": [asdict(block) for block in result.removed_blocks],
+        "changed_blocks": [
+            {
+                "before": asdict(change.before),
+                "after": asdict(change.after),
+                "parameter_changes": [asdict(item) for item in change.parameter_changes],
+            }
+            for change in result.changed_blocks
+        ],
+        "added_lines": [asdict(line) for line in result.added_lines],
+        "removed_lines": [asdict(line) for line in result.removed_lines],
+    }
 
 
 def read_frame(stream: BinaryIO) -> bytes | None:
@@ -90,6 +139,8 @@ class Backend:
             "workspace/listDirectory": lambda **params: list_directory(self.root, **params),
             "document/read": lambda **params: read_document(self.root, **params),
             "document/save": lambda **params: save_document(self.root, **params),
+            "model/inspect": lambda **params: inspect_model(self.root, **params),
+            "model/diff": lambda **params: diff_models(self.root, **params),
         }
         try:
             method = methods.get(message["method"])
@@ -115,7 +166,13 @@ class Backend:
             "protocol_version": 1,
             "root": str(self.root),
             "initial_file": self.initial_file,
-            "capabilities": ["workspace.listDirectory", "document.read", "document.save"],
+            "capabilities": [
+                "workspace.listDirectory",
+                "document.read",
+                "document.save",
+                "model/inspect",
+                "model/diff",
+            ],
             "matlab_started": False,
         }
 

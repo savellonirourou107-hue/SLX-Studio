@@ -19,6 +19,7 @@ _IGNORED_DIRS = {
     ".venv",
     "venv",
     "node_modules",
+    ".slx-studio",
 }
 _MAX_TEXT_BYTES = 4 * 1024 * 1024
 _MAX_SEARCH_DOCUMENTS = 64

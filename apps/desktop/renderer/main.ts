@@ -1,21 +1,17 @@
 import './style.css';
 import { CommandRegistry } from '../../../packages/commands';
-import { ConfigurationStore } from '../../../packages/configuration';
+import { ConfigurationStore, DESKTOP_SCHEMAS } from '../../../packages/configuration';
 import { DesktopServices } from '../../../packages/core/services';
 import { DocumentEditors } from '../../../packages/editor/documents';
 import { CustomEditorRegistry } from '../../../packages/editor/registry';
 import { OutputService, ViewRegistry } from '../../../packages/workbench';
 import type { WorkspaceInfo } from '../../../packages/protocol';
+import { SettingsController } from './settings';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const files = new DesktopServices(window.slx);
 const commands = new CommandRegistry();
-const configuration = new ConfigurationStore([
-  { key: 'editor.fontSize', defaultValue: 14, validate: (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 10 && value <= 32 },
-  { key: 'editor.minimap', defaultValue: false, validate: (value): value is boolean => typeof value === 'boolean' },
-  { key: 'workspace.explorer.pageSize', defaultValue: 512, validate: (value): value is number => value === 512, workspaceWritable: true },
-  { key: 'security.trust', defaultValue: false, validate: (value): value is boolean => typeof value === 'boolean', sensitive: true },
-]);
+const configuration = new ConfigurationStore(DESKTOP_SCHEMAS);
 const views = new ViewRegistry();
 views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' });
 views.register({ id: 'workbench.output', title: 'Output', location: 'panel' });
@@ -51,7 +47,13 @@ function decide(title: string, detail: string, options: string[]): Promise<strin
   return job;
 }
 const editors = new DocumentEditors(element('monaco'), files, decide, renderEditors, log);
+const settings = new SettingsController(element<HTMLDialogElement>('settings'), files, state => {
+  configuration.load('user', state.user.values);
+  configuration.load('workspace', state.workspace.values);
+  editors.configure({ fontSize: configuration.get<number>('editor.fontSize'), minimap: configuration.get<boolean>('editor.minimap') });
+}, () => !!workspace, log);
 editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) });
+editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => { const model = await files.inspect(path); log(`${path}: static summary — ${model.blocks.length} blocks, ${model.lines.length} connections; MATLAB not started.`); } });
 let lastTabSignature = '';
 function renderEditors(): void {
   const signature = [...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n');
@@ -118,6 +120,7 @@ async function setWorkspace(info: WorkspaceInfo): Promise<void> {
   element('workspace-name').textContent = info.root.split(/[\\/]/).pop()?.toUpperCase() || info.root;
   element('workspace-name').title = info.root;
   element('workspace-status').textContent = info.root;
+  await settings.reload();
   await refresh();
   if (info.initial_file?.endsWith('.m')) await editors.open(info.initial_file);
 }
@@ -139,7 +142,15 @@ commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', ru
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer', enabled: () => !!workspace, run: refresh });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => !!editors.active, run: () => editors.save() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => !!editors.active, run: () => editors.reload() });
-commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: () => log(JSON.stringify(configuration.effective(), null, 2)) });
+commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
+commands.register({ id: 'settings.edit', title: 'Settings: Edit Configuration', run: () => settings.show() });
+commands.register({ id: 'backend.restart', title: 'Backend: Restart Python Service', enabled: () => !!workspace, run: async () => {
+  const info = await files.restartBackend();
+  workspace = info;
+  await settings.reload();
+  await refresh();
+  log('Python backend restarted; pending requests were not replayed.');
+} });
 commands.register({ id: 'file.close', title: 'File: Close Editor', enabled: () => !!editors.active, run: () => editors.active && editors.close(editors.active.path) });
 commands.register({ id: 'workbench.palette', title: 'Workbench: Command Palette', run: () => {
   element<HTMLInputElement>('command-search').value = ''; commandResults(); palette.showModal(); element('command-search').focus();
@@ -156,10 +167,11 @@ window.slx.onClose(() => {
 window.addEventListener('keydown', event => {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
   const id = event.key.toLowerCase() === 's' ? 'file.save' : event.key.toLowerCase() === 'w' ? 'file.close' : event.shiftKey && event.key.toLowerCase() === 'p' ? 'workbench.palette' : '';
-  if (id && !element<HTMLDialogElement>('decision').open) { event.preventDefault(); event.stopPropagation(); void commands.execute(id).catch(report); }
+  if (id && !document.querySelector('dialog[open]')) { event.preventDefault(); event.stopPropagation(); void commands.execute(id).catch(report); }
 }, true);
 element('clear-output').onclick = () => { outputService.clear(); output.textContent = ''; };
 void files.workspace().then(async info => {
   if (info) await setWorkspace(info);
+  else await settings.reload();
   document.body.dataset.ready = 'true';
 }).catch(report);

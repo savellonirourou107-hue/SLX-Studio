@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { PythonBackend } from './backend';
+import { ConfigurationFiles } from './configuration';
 import type { Draft, Result, WorkspaceInfo } from '../../../packages/protocol';
 
 const origin = 'slx-app://workbench';
@@ -17,9 +18,12 @@ app.setAppLogsPath(path.join(stateRoot, 'logs'));
 protocol.registerSchemesAsPrivileged([{ scheme: 'slx-app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true } }]);
 let window: BrowserWindow;
 let backend: PythonBackend | null = null;
+let startingBackend: PythonBackend | null = null;
+let changingBackend = false;
 let workspace: WorkspaceInfo | null = null;
 let closing = false;
 const draftQueues = new Map<string, Promise<unknown>>();
+const configurationFiles = new ConfigurationFiles(stateRoot);
 
 function validate(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== `${origin}/index.html`) throw new Error('Untrusted IPC sender');
@@ -46,17 +50,23 @@ function handle<T>(channel: string, callback: (payload: unknown) => Promise<T>):
   });
 }
 async function openWorkspace(folder: string): Promise<WorkspaceInfo> {
-  const info = await fs.stat(folder);
-  if (!info.isDirectory() && path.extname(folder).toLowerCase() !== '.m') throw new Error('Select a folder or MATLAB script');
-  const candidate = new PythonBackend(process.env.SLX_STUDIO_PYTHON || 'python', folder, sourceRoot, path.join(stateRoot, 'python'));
+  if (changingBackend || closing) throw new Error('A backend transition or desktop close is already in progress');
+  changingBackend = true;
+  let candidate: PythonBackend | null = null;
   try {
+    const info = await fs.stat(folder);
+    if (!info.isDirectory() && path.extname(folder).toLowerCase() !== '.m') throw new Error('Select a folder or MATLAB script');
+    candidate = new PythonBackend(process.env.SLX_STUDIO_PYTHON || 'python', folder, sourceRoot, path.join(stateRoot, 'python'));
+    startingBackend = candidate;
     const initialized = await candidate.request<WorkspaceInfo>('initialize');
     if (initialized.protocol_version !== 1) throw new Error('Unsupported Python backend version');
+    if (closing || window.isDestroyed()) throw new Error('Desktop closed during backend startup');
     backend?.close();
     backend = candidate;
     workspace = initialized;
     return initialized;
-  } catch (error) { candidate.close(); throw error; }
+  } catch (error) { candidate?.close(); throw error; }
+  finally { startingBackend = null; changingBackend = false; }
 }
 function draftFile(relative: string): string {
   if (!workspace) throw new Error('No workspace');
@@ -99,7 +109,7 @@ async function start(): Promise<void> {
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.on('close', event => { if (!closing) { event.preventDefault(); window.webContents.send('slx:closeRequested'); } });
-  window.on('closed', () => backend?.close());
+  window.on('closed', () => { closing = true; backend?.close(); startingBackend?.close(); });
   window.once('ready-to-show', () => { if (process.env.SLX_DESKTOP_TEST_HIDE !== '1') window.show(); });
   const sendCommand = (id: string) => () => window.webContents.send('slx:command', id);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -123,6 +133,21 @@ async function start(): Promise<void> {
     return backendRequired().request('workspace/listDirectory', { relative: text(args.path), cursor: args.cursor });
   });
   handle('slx:read', async payload => backendRequired().request('document/read', { relative: text(object(payload).path) }));
+  handle('slx:inspect', async payload => backendRequired().request('model/inspect', { relative: text(object(payload).path) }));
+  handle('slx:diff', async payload => {
+    const args = object(payload);
+    if (typeof args.includeLayout !== 'boolean') throw new Error('Invalid diff options');
+    return backendRequired().request('model/diff', { old: text(args.oldPath), new: text(args.newPath), include_layout: args.includeLayout });
+  });
+  handle('slx:configuration', async () => configurationFiles.read(workspace?.root || null));
+  handle('slx:updateConfiguration', async payload => {
+    const args = object(payload);
+    return configurationFiles.update(workspace?.root || null, args.scope, args.values, args.expectedSha256);
+  });
+  handle('slx:restartBackend', async () => {
+    if (!workspace || !backend) throw new Error('Open a workspace first');
+    return openWorkspace(workspace.root);
+  });
   handle('slx:save', async payload => {
     const args = object(payload);
     if (typeof args.bom !== 'boolean' || !/^[a-f0-9]{64}$/.test(text(args.hash, 64))) throw new Error('Invalid save version');
@@ -168,5 +193,5 @@ async function start(): Promise<void> {
   await window.loadURL(`${origin}/index.html`);
 }
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => backend?.close());
+app.on('before-quit', () => { closing = true; backend?.close(); startingBackend?.close(); });
 void start().catch(error => { process.stderr.write(`SLX desktop startup failed: ${String(error)}\n`); app.exit(1); });
