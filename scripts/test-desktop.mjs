@@ -91,6 +91,14 @@ try {
   await replaceText('%% 控制\nKp = 5;');
   await command('File: Save');
   await waitFor(async () => await fs.readFile(path.join(workspace, '控制.m'), 'utf8') === '\ufeff%% 控制\r\nKp = 5;', 'Unicode/BOM/CRLF/no-final-newline preserved');
+  await page.getByRole('tab', { name: 'control.m', exact: true }).click();
+  await replaceText('menu = 3;\n');
+  await application.evaluate(({ Menu, BrowserWindow }) => {
+    const file = Menu.getApplicationMenu()?.items.find(item => item.label === 'File');
+    const save = file?.submenu?.items.find(item => item.label === 'Save');
+    save?.click?.(save, BrowserWindow.getFocusedWindow(), {});
+  });
+  await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'menu = 3;\n', 'application menu invokes the shared save command');
   assert.equal(await page.getByRole('tab').count(), 2);
   const escape = await page.evaluate(() => window.slx.readDocument('../escape.m'));
   console.log('STEP conflict');
@@ -104,6 +112,15 @@ try {
   await page.keyboard.press('Control+s');
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('Save failed'), 'external modification reports conflict');
   assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'external = 1;\n');
+  const foreignPreload = path.join(root, 'dist/desktop/electron/preload.cjs');
+  const foreignResult = await application.evaluate(async ({ BrowserWindow }, preload) => {
+    const foreign = new BrowserWindow({ show: false, webPreferences: { preload, contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    await foreign.loadURL('slx-app://workbench/index.html');
+    const result = await foreign.webContents.executeJavaScript('window.slx.readDocument("control.m")');
+    foreign.destroy();
+    return result;
+  }, foreignPreload);
+  assert.equal(foreignResult.ok, false, 'IPC rejects a foreign renderer frame');
   await command('File: Reload from Disk');
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByRole('tab', { name: 'control.m', exact: true }).click();
@@ -130,7 +147,13 @@ try {
   await command('File: Save');
   await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'draft = 8;\n', 'draft recovery saves through the normal service');
   console.log('PASS: persistent draft recovery after an application restart.');
+  await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
+  await replaceText('window = 9;\n');
+  await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(page.isClosed(), false, 'window close cancellation keeps the dirty workbench');
   await page.getByRole('button', { name: 'Close control.m', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard', exact: true }).click();
   for (let cycle = 0; cycle < 100; cycle += 1) {
     await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
     await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
