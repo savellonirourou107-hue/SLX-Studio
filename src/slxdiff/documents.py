@@ -10,6 +10,7 @@ import hashlib
 import os
 import stat
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -110,7 +111,21 @@ def save_document(root: Path, relative: str, content: str, expected_sha256: str,
         _, latest, _ = _raw_document(root, relative)
         if hashlib.sha256(latest).hexdigest() != expected_sha256:
             raise DocumentConflict("file changed during save; editor contents were not written")
-        os.replace(temporary, path)
+        for attempt in range(4):
+            if attempt:
+                _, current, _ = _raw_document(root, relative)
+                if hashlib.sha256(current).hexdigest() != expected_sha256:
+                    raise DocumentConflict("file changed during save retry; editor contents were not written")
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 3:
+                    raise
+                # Windows antivirus/indexers can briefly hold the destination.
+                # Retry only this transient OS error; conflicts and all other
+                # failures remain fail-closed and never overwrite blindly.
+                time.sleep(0.025 * (2**attempt))
     finally:
         Path(temporary).unlink(missing_ok=True)
     # Return the version actually written, never a later external writer's hash.

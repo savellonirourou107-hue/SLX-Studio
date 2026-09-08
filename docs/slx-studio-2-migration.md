@@ -253,7 +253,7 @@ real MATLAB coverage.
 Rollback: continue using existing `slx-studio` / `slx-diff studio` commands.
 Keep the new launch command separately named until the migration is accepted.
 
-### M2 — Modular Workbench and Python service transport
+### M2 — Modular Workbench and Python service transport (foundation in progress)
 
 Deliver: workbench contributions, Settings, Problems/Output panel contracts,
 custom editor registration, JSON-RPC Python adapter and backend supervisor.
@@ -269,6 +269,17 @@ Acceptance:
   failed side-effecting operations are not retried automatically.
 - Python CLI and legacy REST regression tests remain green; startup does not
   require a MATLAB installation, full recursive scan, extension host or network.
+
+The current M2 foundation adds `ConfigurationStore` (default < user < workspace,
+workspace-write and sensitive-key guards), `ViewRegistry`, bounded
+`OutputService`/`ProblemsService`, and `CustomEditorRegistry`. The renderer now
+uses the registries for the Explorer, Output and `.m` text contributions, while
+all file access continues through the typed preload service. `.slx` reports that
+no desktop editor is registered yet instead of presenting a mock viewport.
+The private Python JSON-RPC adapter and backend supervisor are covered by split,
+coalesced, malformed, crash and no-replay tests. This is not yet the full
+Workbench, settings persistence, Problems navigation or parser/diff service
+surface required to close M2.
 
 Rollback: switch the transport adapter/desktop entry, without reverting file formats.
 

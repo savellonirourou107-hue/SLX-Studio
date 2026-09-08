@@ -18,12 +18,14 @@
 
 ## 产品定位
 
-**下一代方向（规划中）：** 将 SLX Studio 逐步升级为面向 MATLAB / Simulink /
+**下一代方向（开发中，未发布）：** 将 SLX Studio 逐步升级为面向 MATLAB / Simulink /
 控制工程的 Model + Code + Simulation-first IDE。采用 Electron + TypeScript +
 Monaco 工作台，保留轻量 Python 工程核心并逐步建立扩展机制。
 这不是已经发布的 2.0，也不承诺兼容 VS Code 插件。
 具体范围见 [2.0 项目目标](SLX_STUDIO_2_GOAL.md) 与
 [迁移顺序、资源预算和验收标准](docs/slx-studio-2-migration.md)。
+独立的 [2.0 开发版桌面](docs/slx-studio-2-desktop.md) 已具备经过真实 Electron
+本地验收的 Monaco 编辑闭环；模型与运行能力仍在迁移中。
 
 SLX Studio 不试图复制完整 MATLAB Desktop。它专门解决更轻量、频繁的工程循环：
 

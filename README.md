@@ -18,12 +18,15 @@
 
 ## Why SLX Studio
 
-**Next major direction (planned):** a Model + Code + Simulation-first IDE with
+**Next major direction (in development):** a Model + Code + Simulation-first IDE with
 an Electron/TypeScript/Monaco desktop and an extensible workbench, preserving
 the dependency-light Python engineering core. This is a staged migration, not
 an already available 2.0 release or a promise of VS Code extension compatibility.
 See the [2.0 project goal](SLX_STUDIO_2_GOAL.md) and
 [migration/acceptance plan](docs/slx-studio-2-migration.md).
+The separate [2.0 development desktop](docs/slx-studio-2-desktop.md) now has a
+locally validated Electron/Monaco editing slice; model/runtime migration remains
+in progress.
 
 SLX Studio is not trying to reproduce the full MATLAB desktop. It targets the small, frequent loop around a MATLAB/Simulink project:
 

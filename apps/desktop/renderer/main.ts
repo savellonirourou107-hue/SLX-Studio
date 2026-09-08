@@ -1,18 +1,33 @@
 import './style.css';
 import { CommandRegistry } from '../../../packages/commands';
+import { ConfigurationStore } from '../../../packages/configuration';
 import { DesktopServices } from '../../../packages/core/services';
 import { DocumentEditors } from '../../../packages/editor/documents';
+import { CustomEditorRegistry } from '../../../packages/editor/registry';
+import { OutputService, ViewRegistry } from '../../../packages/workbench';
 import type { WorkspaceInfo } from '../../../packages/protocol';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const files = new DesktopServices(window.slx);
 const commands = new CommandRegistry();
+const configuration = new ConfigurationStore([
+  { key: 'editor.fontSize', defaultValue: 14, validate: (value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 10 && value <= 32 },
+  { key: 'editor.minimap', defaultValue: false, validate: (value): value is boolean => typeof value === 'boolean' },
+  { key: 'workspace.explorer.pageSize', defaultValue: 512, validate: (value): value is number => value === 512, workspaceWritable: true },
+  { key: 'security.trust', defaultValue: false, validate: (value): value is boolean => typeof value === 'boolean', sensitive: true },
+]);
+const views = new ViewRegistry();
+views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' });
+views.register({ id: 'workbench.output', title: 'Output', location: 'panel' });
+const outputService = new OutputService();
+const editorRegistry = new CustomEditorRegistry();
 const output = element('output');
 let workspace: WorkspaceInfo | null = null;
 let closing = false;
 let explorerGeneration = 0;
 function log(message: string): void {
-  output.textContent = `${output.textContent}\n${message}`.slice(-65_536);
+  outputService.append(message);
+  output.textContent = outputService.snapshot().map(entry => entry.text).join('\n').slice(-65_536);
   output.scrollTop = output.scrollHeight;
 }
 function report(error: unknown): void { log((error as Error).message || String(error)); }
@@ -36,6 +51,7 @@ function decide(title: string, detail: string, options: string[]): Promise<strin
   return job;
 }
 const editors = new DocumentEditors(element('monaco'), files, decide, renderEditors, log);
+editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) });
 let lastTabSignature = '';
 function renderEditors(): void {
   const signature = [...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n');
@@ -83,7 +99,7 @@ async function directory(parent: HTMLElement, relative: string, cursor: number, 
         row.setAttribute('aria-expanded', String(!children.hidden)); icon.textContent = children.hidden ? '›' : '⌄';
         if (!loaded && !children.hidden) { loaded = true; try { await directory(children, item.path, 0, generation); } catch (error) { loaded = false; report(error); } }
       };
-    } else row.onclick = () => item.kind === 'm' ? void editors.open(item.path).catch(report) : log(`${item.path}: SLX custom editor migration is next. Use the existing Python Workbench for model editing.`);
+    } else row.onclick = () => { const editor = editorRegistry.resolve(item.path); if (editor) void Promise.resolve(editor.open(item.path)).catch(report); else log(`${item.path}: no registered editor in this desktop. Use the legacy Workbench; the SLX viewport is an M3 deliverable.`); };
   }
   if (page.next_cursor !== null) {
     const more = document.createElement('button'); more.className = 'tree-more'; more.textContent = 'Load more entries…';
@@ -123,6 +139,7 @@ commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', ru
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer', enabled: () => !!workspace, run: refresh });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => !!editors.active, run: () => editors.save() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => !!editors.active, run: () => editors.reload() });
+commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: () => log(JSON.stringify(configuration.effective(), null, 2)) });
 commands.register({ id: 'file.close', title: 'File: Close Editor', enabled: () => !!editors.active, run: () => editors.active && editors.close(editors.active.path) });
 commands.register({ id: 'workbench.palette', title: 'Workbench: Command Palette', run: () => {
   element<HTMLInputElement>('command-search').value = ''; commandResults(); palette.showModal(); element('command-search').focus();
@@ -141,7 +158,7 @@ window.addEventListener('keydown', event => {
   const id = event.key.toLowerCase() === 's' ? 'file.save' : event.key.toLowerCase() === 'w' ? 'file.close' : event.shiftKey && event.key.toLowerCase() === 'p' ? 'workbench.palette' : '';
   if (id && !element<HTMLDialogElement>('decision').open) { event.preventDefault(); event.stopPropagation(); void commands.execute(id).catch(report); }
 }, true);
-element('clear-output').onclick = () => { output.textContent = ''; };
+element('clear-output').onclick = () => { outputService.clear(); output.textContent = ''; };
 void files.workspace().then(async info => {
   if (info) await setWorkspace(info);
   document.body.dataset.ready = 'true';

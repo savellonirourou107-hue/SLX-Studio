@@ -10,7 +10,8 @@
     "desktop": "node scripts/launch-desktop.mjs",
     "test:desktop": "node scripts/test-desktop.mjs",
     "test:platform": "node --test scripts/test-platform.mjs",
-    "measure:desktop": "node scripts/measure-desktop.mjs"
+    "measure:desktop": "node scripts/measure-desktop.mjs",
+    "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop"
   },
   "dependencies": { "monaco-editor": "0.56.0" },
   "overrides": { "dompurify": "3.4.15" },

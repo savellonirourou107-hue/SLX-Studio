@@ -67,6 +67,68 @@ def test_save_failure_keeps_source_and_cleans_temp(tmp_path, monkeypatch):
     assert sorted(item.name for item in tmp_path.iterdir()) == ["file.m"]
 
 
+def test_save_retries_transient_windows_permission_error(tmp_path, monkeypatch):
+    file = tmp_path / "file.m"
+    file.write_text("original", encoding="utf8")
+    base = documents.read_document(tmp_path, file.name)
+    replace = documents.os.replace
+    attempts = 0
+
+    def transient(source, target):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise PermissionError(5, "temporary sharing violation")
+        return replace(source, target)
+
+    monkeypatch.setattr(documents.os, "replace", transient)
+    saved = documents.save_document(tmp_path, file.name, "changed", base["sha256"])
+    assert attempts == 3
+    assert saved["content"] == "changed"
+    assert file.read_text() == "changed"
+
+
+def test_save_retry_rechecks_external_changes(tmp_path, monkeypatch):
+    file = tmp_path / "file.m"
+    file.write_text("original", encoding="utf8")
+    base = documents.read_document(tmp_path, file.name)
+
+    def concurrent_writer(*args):
+        file.write_text("external", encoding="utf8")
+        raise PermissionError(5, "temporary sharing violation")
+
+    monkeypatch.setattr(documents.os, "replace", concurrent_writer)
+    with pytest.raises(documents.DocumentConflict, match="save retry"):
+        documents.save_document(tmp_path, file.name, "editor", base["sha256"])
+    assert file.read_text() == "external"
+
+
+def test_permission_retry_exhaustion_preserves_source(tmp_path, monkeypatch):
+    file = tmp_path / "file.m"
+    file.write_text("original", encoding="utf8")
+    base = documents.read_document(tmp_path, file.name)
+    attempts = 0
+
+    def locked(*args):
+        nonlocal attempts
+        attempts += 1
+        raise PermissionError(5, "locked")
+
+    monkeypatch.setattr(documents.os, "replace", locked)
+    with pytest.raises(PermissionError):
+        documents.save_document(tmp_path, file.name, "editor", base["sha256"])
+    assert attempts == 4
+    assert file.read_text() == "original"
+    assert sorted(item.name for item in tmp_path.iterdir()) == ["file.m"]
+
+
+@pytest.mark.parametrize("content", ["a\r\nb\n", "a\rb"])
+def test_mixed_and_legacy_newlines_are_flagged(tmp_path, content):
+    file = tmp_path / "mixed.m"
+    file.write_bytes(content.encode())
+    assert documents.read_document(tmp_path, file.name)["mixed_eol"]
+
+
 def test_readonly_deleted_and_oversize_documents(tmp_path):
     file = tmp_path / "file.m"
     file.write_text("x=1;", encoding="utf8")
