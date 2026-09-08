@@ -270,6 +270,60 @@ def test_rpc_reaches_static_parser_and_diff_without_matlab(tmp_path):
     )
 
 
+def _write_large_model(path, count=1000):
+    blocks = "".join(
+        f'<Block BlockType="Gain" Name="Block{i:04d}" SID="{i + 1}">'
+        f'<P Name="Gain">{i}</P><P Name="Position">[{20 + (i % 10) * 130} {40 + (i // 10) * 70} {80 + (i % 10) * 130} {70 + (i // 10) * 70}]</P></Block>'
+        for i in range(count)
+    )
+    lines = "".join(
+        f'<Line><P Name="Src">{i + 1}#out:1</P><P Name="Dst">{i + 2}#in:1</P></Line>'
+        for i in range(count - 1)
+    )
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("simulink/systems/system_root.xml", f"<System>{blocks}{lines}</System>")
+
+
+def test_model_viewport_is_bounded_searchable_and_version_pinned(tmp_path):
+    model = tmp_path / "large.slx"
+    _write_large_model(model)
+    backend = rpc.Backend(str(tmp_path))
+    first = backend.dispatch(message("model/viewport", {"relative": "large.slx"}))
+    assert first["result"]["system_id"] == "system_root"
+    assert len(first["result"]["blocks"]) == 160
+    assert first["result"]["matched_blocks"] == 1000
+    assert first["result"]["next_cursor"] == 160
+    assert len(first["result"]["lines"]) == 159
+    assert first["result"]["omitted_lines"] == 840
+    second = backend.dispatch(
+        message(
+            "model/viewport",
+            {
+                "relative": "large.slx",
+                "cursor": first["result"]["next_cursor"],
+                "expected_sha256": first["result"]["sha256"],
+            },
+        )
+    )
+    assert second["result"]["blocks"][0]["name"] == "Block0160"
+    found = backend.dispatch(message("model/viewport", {"relative": "large.slx", "query": "block0999"}))
+    assert found["result"]["matched_blocks"] == 1 and found["result"]["blocks"][0]["sid"] == "1000"
+    _write_model(model, gain="9")
+    stale = backend.dispatch(
+        message(
+            "model/viewport",
+            {"relative": "large.slx", "cursor": 160, "expected_sha256": first["result"]["sha256"]},
+        )
+    )
+    assert stale["error"]["code"] == -32009
+    assert (
+        backend.dispatch(message("model/viewport", {"relative": "large.slx", "system_id": "missing"}))[
+            "error"
+        ]["code"]
+        == -32602
+    )
+
+
 @pytest.mark.parametrize(
     "payload",
     [

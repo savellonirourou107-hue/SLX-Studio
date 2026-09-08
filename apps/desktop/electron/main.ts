@@ -152,6 +152,15 @@ async function start(): Promise<void> {
     if (typeof args.includeLayout !== 'boolean') throw new Error('Invalid diff options');
     return backendRequired().request('model/diff', { old: text(args.oldPath), new: text(args.newPath), include_layout: args.includeLayout, added_block_cursor: integer(args.addedBlockCursor, 'added block cursor'), removed_block_cursor: integer(args.removedBlockCursor, 'removed block cursor'), changed_block_cursor: integer(args.changedBlockCursor, 'changed block cursor'), added_line_cursor: integer(args.addedLineCursor, 'added line cursor'), removed_line_cursor: integer(args.removedLineCursor, 'removed line cursor'), page_size: pageSize(args.pageSize) });
   });
+  handle('slx:viewport', async payload => {
+    const args = object(payload);
+    if (args.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(text(args.expectedSha256, 64))) throw new Error('Invalid model version');
+    return backendRequired().request('model/viewport', {
+      relative: text(args.path), system_id: args.systemId === undefined ? undefined : text(args.systemId),
+      query: args.query === undefined ? '' : text(args.query, 200),
+      cursor: integer(args.cursor, 'viewport cursor', 0, 1_000_000), expected_sha256: args.expectedSha256,
+    });
+  });
   handle('slx:configuration', async () => configurationFiles.read(workspace?.root || null));
   handle('slx:updateConfiguration', async payload => {
     const args = object(payload);

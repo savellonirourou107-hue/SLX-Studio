@@ -17,6 +17,7 @@ const { CommandRegistry } = await loadTypeScript('packages/commands/index.ts');
 const { ConfigurationStore } = await loadTypeScript('packages/configuration/index.ts');
 const { CustomEditorRegistry } = await loadTypeScript('packages/editor/registry.ts');
 const { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } = await loadTypeScript('packages/workbench/index.ts');
+const { endpoint, position, scene } = await loadTypeScript('packages/model/geometry.ts');
 const { ConfigurationFiles } = await loadTypeScript('apps/desktop/electron/configuration.ts');
 const frame = value => {
   const payload = Buffer.from(JSON.stringify(value));
@@ -142,6 +143,20 @@ test('Workbench contribution activation owns registrations and releases them on 
   broken();
   dispose();
   assert.equal(registry.list().length, 0);
+});
+
+test('static model geometry rejects unsafe positions and keeps bounded topology visible', () => {
+  assert.deepEqual(position('[10 20 50 60]'), { x: 10, y: 20, width: 40, height: 40 });
+  assert.equal(position('[NaN 0 1 1]'), null);
+  assert.equal(position('[0 0 10000001 10]'), null);
+  assert.deepEqual(endpoint('Gain:out1'), { path: 'Gain', kind: 'out', port: 1 });
+  assert.equal(endpoint('broken'), null);
+  const block = (path, sid, rawPosition) => ({ system_id: 'root', sid, name: path, block_type: 'Gain', path, parameters: { Position: rawPosition } });
+  const result = scene([block('Input', '1', '[10 40 60 80]'), block('Gain', '2', '[120 40 170 80]')], [{ system_id: 'root', src: 'Input:out1', dst: 'Gain:in1', name: '' }]);
+  assert.equal(result.nodes.length, 2);
+  assert.equal(result.wires.length, 1);
+  assert.equal(result.unresolved, 0);
+  assert.match(result.wires[0].path, /^M /);
 });
 
 test('configuration files persist safe layers and fail closed on conflicts or malformed input', async () => {

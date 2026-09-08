@@ -24,6 +24,14 @@ execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
   path.join(workspace, 'model.slx'),
   modelXml,
 ], { windowsHide: true });
+const largeXmlPath = path.join(testRoot, 'large-system.xml');
+const largeBlocks = Array.from({ length: 1000 }, (_, index) => `<Block BlockType="Gain" Name="Block${String(index).padStart(4, '0')}" SID="${index + 1}"><P Name="Position">[${20 + (index % 10) * 130} ${40 + Math.floor(index / 10) * 70} ${80 + (index % 10) * 130} ${70 + Math.floor(index / 10) * 70}]</P></Block>`).join('');
+const largeLines = Array.from({ length: 999 }, (_, index) => `<Line><P Name="Src">${index + 1}#out:1</P><P Name="Dst">${index + 2}#in:1</P></Line>`).join('');
+await fs.writeFile(largeXmlPath, `<System>${largeBlocks}${largeLines}</System>`);
+execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
+  '-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1], "w"); z.writestr("simulink/systems/system_root.xml", open(sys.argv[2], encoding="utf-8").read()); z.close()',
+  path.join(workspace, 'large.slx'), largeXmlPath,
+], { windowsHide: true });
 await fs.writeFile(path.join(workspace, 'mixed.m'), 'a = 1;\r\nb = 2;\n');
 const env = { ...process.env, SLX_DESKTOP_TEST_HIDE: '1', SLX_DESKTOP_STATE_DIR: path.join(testRoot, 'state'), SLX_DESKTOP_WORKSPACE: workspace };
 delete env.ELECTRON_RUN_AS_NODE;
@@ -74,13 +82,28 @@ try {
   assert.equal(await page.evaluate(() => typeof window.slx.invoke), 'undefined');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'SLX static summary is exposed through the custom editor contribution');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'SLX static model view is exposed through the custom editor contribution');
   assert.match(await page.getByRole('log').textContent(), /2 blocks, 1 connections/);
+  await page.getByRole('group', { name: 'Static model canvas' }).waitFor();
+  await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button', { name: 'Block Gain (Gain)' }).click();
+  assert.match(await page.getByRole('complementary').last().textContent(), /Gain/);
+  await page.getByRole('textbox', { name: 'Find model blocks' }).fill('Input');
+  await waitFor(async () => await page.getByRole('button', { name: 'Inspect Gain', exact: true }).count() === 0, 'model search filters the bounded outline');
+  assert.equal(await page.getByRole('button', { name: 'Inspect Gain', exact: true }).count(), 0, 'model search filters the bounded outline');
+  await page.getByRole('textbox', { name: 'Find model blocks' }).fill('');
+  await page.getByRole('treeitem', { name: 'large.slx', exact: true }).click();
+  await waitFor(async () => await page.getByRole('button', { name: 'Next blocks', exact: true }).isEnabled(), 'large model viewport exposes a bounded next page');
+  assert.equal(await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button').count(), 160, 'large model rendering is bounded to one page');
+  await page.getByRole('button', { name: 'Next blocks', exact: true }).click();
+  await waitFor(async () => (await page.getByText(/161–320 \/ 1000 matching blocks/).count()) === 1, 'large model viewport advances by bounded pages');
+  await page.getByRole('textbox', { name: 'Find model blocks' }).fill('Block0999');
+  await waitFor(async () => await page.getByRole('button', { name: 'Inspect Block0999', exact: true }).count() === 1, 'large model viewport filters without expanding the DOM');
+  await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
   await page.getByRole('button', { name: /PROBLEMS/ }).click();
   await page.locator('#problems .problem-row').waitFor();
   assert.match(await page.locator('#problems').textContent(), /variant/);
   await page.locator('#problems .problem-row').click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'clicking a problem navigates to its registered model contribution');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'clicking a problem navigates to its registered model contribution');
   const sameModelDiff = await page.evaluate(() => window.slx.diffModels('model.slx', 'model.slx', false));
   assert.equal(sameModelDiff.ok, true);
   assert.equal(sameModelDiff.value.changed, false, 'typed model diff reports identical files');
@@ -94,7 +117,7 @@ try {
   await command('Workbench: Reload Built-in Contributions');
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('Workbench contributions reloaded'), 'built-in contributions can be reloaded without leaking registrations');
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'reloaded contributions restore the Simulink editor');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'reloaded contributions restore the Simulink editor');
   await command('Settings: Edit Configuration');
   await page.locator('#settings-scope').selectOption('workspace');
   await page.locator('#settings-font-size').fill('16');
@@ -111,7 +134,7 @@ try {
   assert.equal(restarts.filter(result => result.ok).length, 1, 'concurrent backend transitions are rejected instead of leaking workers');
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'output can be cleared and reused');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'output can be cleared and reused');
   assert.ok(!(await page.getByRole('log').textContent()).includes('editor.fontSize'), 'cleared output does not reappear');
   await page.getByRole('treeitem', { name: 'mixed.m', exact: true }).click();
   await page.getByRole('tab', { name: 'mixed.m', exact: true }).waitFor();
@@ -153,7 +176,7 @@ try {
     save?.click?.(save, BrowserWindow.getFocusedWindow(), {});
   });
   await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'menu = 3;\n', 'application menu invokes the shared save command');
-  assert.equal(await page.getByRole('tab').count(), 2);
+  assert.equal(await page.getByRole('tab').count(), 4, 'text and multiple model tabs coexist in one workbench');
   const escape = await page.evaluate(() => window.slx.readDocument('../escape.m'));
   console.log('STEP conflict');
   assert.equal(escape.ok, false, 'workspace escape is rejected by the typed API');

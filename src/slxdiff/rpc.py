@@ -11,6 +11,7 @@ from typing import Any, BinaryIO
 
 from .diff import compare_models
 from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
+from .model_view import model_viewport
 from .parser import parse_slx
 from .workspace import workspace_root
 
@@ -232,6 +233,7 @@ class Backend:
             "document/read": lambda **params: read_document(self.root, **params),
             "document/save": lambda **params: save_document(self.root, **params),
             "model/inspect": lambda **params: inspect_model(self.root, **params),
+            "model/viewport": lambda **params: model_viewport(self.root, **params),
             "model/diff": lambda **params: diff_models(self.root, **params),
         }
         try:
@@ -263,6 +265,7 @@ class Backend:
                 "document.read",
                 "document.save",
                 "model/inspect",
+                "model/viewport",
                 "model/diff",
             ],
             "matlab_started": False,

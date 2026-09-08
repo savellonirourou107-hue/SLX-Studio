@@ -1,4 +1,4 @@
-import type { ConfigurationState, ConfigurationValue, DesktopAPI, DirectoryPage, DocumentSnapshot, Draft, ModelDiff, ModelDiffOptions, ModelInspectOptions, ModelSnapshot, WorkspaceInfo } from '../protocol';
+import type { ConfigurationState, ConfigurationValue, DesktopAPI, DirectoryPage, DocumentSnapshot, Draft, ModelDiff, ModelDiffOptions, ModelInspectOptions, ModelSnapshot, ModelViewport, ModelViewportOptions, WorkspaceInfo } from '../protocol';
 import { unwrap } from '../protocol';
 
 export interface FileService {
@@ -14,6 +14,7 @@ export class DesktopServices implements FileService {
   async read(path: string): Promise<DocumentSnapshot> { return unwrap(await this.api.readDocument(path)); }
   async save(base: DocumentSnapshot, content: string): Promise<DocumentSnapshot> { return unwrap(await this.api.saveDocument(base.path, content, base.sha256, base.bom)); }
   async inspect(path: string, options?: ModelInspectOptions): Promise<ModelSnapshot> { return unwrap(await this.api.inspectModel(path, options)); }
+  async viewport(path: string, options?: ModelViewportOptions): Promise<ModelViewport> { return unwrap(await this.api.modelViewport(path, options)); }
   async diff(oldPath: string, newPath: string, includeLayout = false, options?: ModelDiffOptions): Promise<ModelDiff> { return unwrap(await this.api.diffModels(oldPath, newPath, includeLayout, options)); }
   async configuration(): Promise<ConfigurationState> { return unwrap(await this.api.configuration()); }
   async updateConfiguration(scope: 'user' | 'workspace', values: Readonly<Record<string, ConfigurationValue>>, expectedSha256: string | null): Promise<ConfigurationState> { return unwrap(await this.api.updateConfiguration(scope, values, expectedSha256)); }

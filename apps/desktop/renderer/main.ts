@@ -4,9 +4,10 @@ import { ConfigurationStore, DESKTOP_SCHEMAS } from '../../../packages/configura
 import { DesktopServices } from '../../../packages/core/services';
 import { DocumentEditors } from '../../../packages/editor/documents';
 import { CustomEditorRegistry } from '../../../packages/editor/registry';
+import { ModelEditors } from '../../../packages/model/view';
 import { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } from '../../../packages/workbench';
 import type { Problem } from '../../../packages/workbench';
-import type { WorkspaceInfo } from '../../../packages/protocol';
+import type { ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -19,6 +20,8 @@ const problemsService = new ProblemsService();
 const editorRegistry = new CustomEditorRegistry();
 const output = element('output');
 let workspace: WorkspaceInfo | null = null;
+let activeKind: 'text' | 'model' = 'text';
+const modelProblems = new Map<string, Problem[]>();
 let closing = false;
 let explorerGeneration = 0;
 function log(message: string): void {
@@ -27,6 +30,12 @@ function log(message: string): void {
   output.scrollTop = output.scrollHeight;
 }
 function report(error: unknown): void { log((error as Error).message || String(error)); }
+function inspectedModel(path: string, data: ModelViewport): void {
+  const unsupported = Array.isArray(data.metadata.unsupported_features) ? data.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : [];
+  modelProblems.set(path, unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' })));
+  problemsService.replace([...modelProblems.values()].flat());
+  log(`${path}: static model view — ${data.system_blocks} blocks, ${data.system_lines} connections; MATLAB not started.`);
+}
 function selectPanel(panel: 'output' | 'problems'): void {
   element('output-view').hidden = panel !== 'output';
   element('problems-view').hidden = panel !== 'problems';
@@ -69,6 +78,7 @@ function decide(title: string, detail: string, options: string[]): Promise<strin
   return job;
 }
 const editors = new DocumentEditors(element('monaco'), files, decide, renderEditors, log);
+const modelEditors = new ModelEditors(element('model-stage'), files, renderEditors, inspectedModel);
 const settings = new SettingsController(element<HTMLDialogElement>('settings'), files, state => {
   configuration.load('user', state.user.values);
   configuration.load('workspace', state.workspace.values);
@@ -80,43 +90,62 @@ contributions.register({
   activate(context) {
     context.add(views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' }));
     context.add(views.register({ id: 'workbench.output', title: 'Output', location: 'panel' }));
-    context.add(editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) }));
-    context.add(editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => {
-      const model = await files.inspect(path);
-      const unsupported = Array.isArray(model.metadata.unsupported_features) ? model.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : [];
-      const diagnostics: Problem[] = unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' }));
-      problemsService.replace(diagnostics);
-      log(`${path}: static summary — ${model.total_blocks} blocks, ${model.total_lines} connections; MATLAB not started.${unsupported.length ? ` Unsupported: ${unsupported.join(', ')}.` : ''}`);
-    } }));
+    context.add(editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: async path => { activeKind = 'text'; renderEditors(); await editors.open(path); } }));
+    context.add(editorRegistry.register({ id: 'editor.simulinkViewport', label: 'Simulink static viewport', extensions: ['.slx'], open: async path => { activeKind = 'model'; renderEditors(); await modelEditors.open(path); } }));
   },
 });
 const builtInActivation = contributions.activate('builtin.core').catch(error => { report(error); throw error; });
 let lastTabSignature = '';
 function renderEditors(): void {
-  const signature = [...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n');
-  if (signature !== lastTabSignature) {
+  const signature = `${activeKind}\n${[...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n')}\n${[...modelEditors.documents.values()].map(document => `${document.path}|${modelEditors.active === document}`).join('\n')}`;
+  if (signature !== lastTabSignature || !element('tabs').childElementCount) {
     lastTabSignature = signature;
-    element('tabs').replaceChildren(...[...editors.documents.values()].map(opened => {
+    element('welcome').hidden = editors.documents.size > 0 || modelEditors.documents.size > 0;
+    element('monaco').hidden = activeKind !== 'text' || !editors.active;
+    element('model-stage').hidden = activeKind !== 'model' || !modelEditors.active;
+    element('tabs').replaceChildren(...[
+    ...[...editors.documents.values()].map(opened => {
       const wrapper = document.createElement('div');
-      wrapper.className = `tab-wrap${editors.active === opened ? ' active' : ''}`;
+      wrapper.className = `tab-wrap${activeKind === 'text' && editors.active === opened ? ' active' : ''}`;
       const tab = document.createElement('button');
-      tab.className = 'tab-select';
-      tab.role = 'tab';
-      tab.setAttribute('aria-selected', String(editors.active === opened));
-      tab.setAttribute('aria-label', opened.path);
-      tab.textContent = `${opened.path.split('/').pop()}${editors.dirty(opened) ? ' ●' : ''}`;
-      tab.onclick = () => editors.select(opened.path);
-      const close = document.createElement('button');
-      close.className = 'tab-close'; close.textContent = '×';
+      tab.className = 'tab-select'; tab.role = 'tab';
+      tab.setAttribute('aria-selected', String(activeKind === 'text' && editors.active === opened));
+      tab.setAttribute('aria-label', opened.path); tab.textContent = `${opened.path.split('/').pop()}${editors.dirty(opened) ? ' ●' : ''}`;
+      tab.onclick = () => { activeKind = 'text'; editors.select(opened.path); };
+      const close = document.createElement('button'); close.className = 'tab-close'; close.textContent = '×';
       close.setAttribute('aria-label', `Close ${opened.path}`);
-      close.onclick = () => void editors.close(opened.path).catch(report);
-      wrapper.append(tab, close);
-      return wrapper;
-    }));
+      close.onclick = () => void closeEditor('text', opened.path).catch(report);
+      wrapper.append(tab, close); return wrapper;
+    }),
+    ...[...modelEditors.documents.values()].map(opened => {
+      const wrapper = document.createElement('div'); wrapper.className = `tab-wrap model-tab${activeKind === 'model' && modelEditors.active === opened ? ' active' : ''}`;
+      const tab = document.createElement('button'); tab.className = 'tab-select'; tab.role = 'tab';
+      tab.setAttribute('aria-selected', String(activeKind === 'model' && modelEditors.active === opened)); tab.setAttribute('aria-label', opened.path);
+      tab.textContent = `▦ ${opened.path.split('/').pop()}`; tab.onclick = () => { activeKind = 'model'; modelEditors.select(opened.path); };
+      const close = document.createElement('button'); close.className = 'tab-close'; close.textContent = '×'; close.setAttribute('aria-label', `Close ${opened.path}`);
+      close.onclick = () => { closeEditor('model', opened.path).catch(report); }; wrapper.append(tab, close); return wrapper;
+    }),
+    ]);
+  } else {
+    element('welcome').hidden = editors.documents.size > 0 || modelEditors.documents.size > 0;
+    element('monaco').hidden = activeKind !== 'text' || !editors.active;
+    element('model-stage').hidden = activeKind !== 'model' || !modelEditors.active;
   }
-  element('welcome').hidden = editors.documents.size > 0;
-  element('breadcrumbs').textContent = editors.active?.path.replaceAll('/', '  ›  ') || 'Workspace';
-  element('document-status').textContent = editors.position();
+  const activePath = activeKind === 'model' ? modelEditors.active?.path : editors.active?.path;
+  element('breadcrumbs').textContent = activePath?.replaceAll('/', '  ›  ') || 'Workspace';
+  element('document-status').textContent = activeKind === 'model' ? 'Static model · read-only' : editors.position();
+}
+async function closeEditor(kind: 'text' | 'model', path: string): Promise<void> {
+  if (kind === 'model') {
+    const wasActive = activeKind === 'model' && modelEditors.active?.path === path;
+    modelEditors.close(path); modelProblems.delete(path); problemsService.replace([...modelProblems.values()].flat());
+    if (wasActive && !modelEditors.active && editors.active) activeKind = 'text';
+  } else {
+    const wasActive = activeKind === 'text' && editors.active?.path === path;
+    if (!await editors.close(path)) return;
+    if (wasActive && !editors.active && modelEditors.active) activeKind = 'model';
+  }
+  renderEditors();
 }
 async function directory(parent: HTMLElement, relative: string, cursor: number, generation: number): Promise<void> {
   const page = await files.list(relative, cursor);
@@ -175,11 +204,11 @@ function commandResults(): void {
 commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', run: async () => {
   if (!await editors.closeAll()) return;
   const selected = await files.chooseWorkspace();
-  if (selected) await setWorkspace(selected);
+  if (selected) { modelEditors.closeAll(); modelProblems.clear(); problemsService.clear(); await setWorkspace(selected); }
 } });
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer', enabled: () => !!workspace, run: refresh });
-commands.register({ id: 'file.save', title: 'File: Save', enabled: () => !!editors.active, run: () => editors.save() });
-commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => !!editors.active, run: () => editors.reload() });
+commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.save() });
+commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
 commands.register({ id: 'settings.edit', title: 'Settings: Edit Configuration', run: () => settings.show() });
 commands.register({ id: 'workbench.reloadContributions', title: 'Workbench: Reload Built-in Contributions', run: async () => {
@@ -195,7 +224,7 @@ commands.register({ id: 'backend.restart', title: 'Backend: Restart Python Servi
   await refresh();
   log('Python backend restarted; pending requests were not replayed.');
 } });
-commands.register({ id: 'file.close', title: 'File: Close Editor', enabled: () => !!editors.active, run: () => editors.active && editors.close(editors.active.path) });
+commands.register({ id: 'file.close', title: 'File: Close Editor', enabled: () => (activeKind === 'text' ? !!editors.active : !!modelEditors.active), run: () => activeKind === 'text' ? editors.active && closeEditor('text', editors.active.path) : modelEditors.active && closeEditor('model', modelEditors.active.path) });
 commands.register({ id: 'workbench.palette', title: 'Workbench: Command Palette', run: () => {
   element<HTMLInputElement>('command-search').value = ''; commandResults(); palette.showModal(); element('command-search').focus();
 } });

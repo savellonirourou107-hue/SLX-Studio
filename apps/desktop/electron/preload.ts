@@ -13,6 +13,7 @@ const api: DesktopAPI = {
   readDocument: path => ipcRenderer.invoke('slx:read', { path }),
   saveDocument: (path, content, hash, bom) => ipcRenderer.invoke('slx:save', { path, content, hash, bom }),
   inspectModel: (path, options = {}) => ipcRenderer.invoke('slx:inspect', { path, ...options }),
+  modelViewport: (path, options = {}) => ipcRenderer.invoke('slx:viewport', { ...options, path }),
   diffModels: (oldPath, newPath, includeLayout, options = {}) => ipcRenderer.invoke('slx:diff', { oldPath, newPath, includeLayout, ...options }),
   configuration: () => ipcRenderer.invoke('slx:configuration'),
   updateConfiguration: (scope, values, expectedSha256) => ipcRenderer.invoke('slx:updateConfiguration', { scope, values, expectedSha256 }),
