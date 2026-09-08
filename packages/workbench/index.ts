@@ -3,6 +3,96 @@ export interface ViewContribution { id: string; title: string; location: ViewLoc
 export interface OutputEntry { text: string; level: 'info' | 'warning' | 'error'; at: number; }
 export interface Problem { path: string; message: string; severity: 'info' | 'warning' | 'error'; line?: number; column?: number; source?: string; }
 type Listener<T> = (value: T) => void;
+export interface Disposable { dispose(): void; }
+export interface WorkbenchContributionContext {
+  add(resource: Disposable | (() => void)): void;
+}
+export interface WorkbenchContribution {
+  id: string;
+  activate(context: WorkbenchContributionContext): void | Promise<void>;
+}
+
+/** Owns contribution registrations so activation failures cannot leak listeners. */
+export class WorkbenchContributionRegistry {
+  private readonly definitions = new Map<string, WorkbenchContribution>();
+  private readonly active = new Map<string, WorkbenchContributionContextImpl>();
+  private readonly states = new Map<string, 'inactive' | 'activating' | 'active' | 'failed'>();
+  private readonly activations = new Map<string, Promise<void>>();
+  register(contribution: WorkbenchContribution): () => void {
+    if (!contribution || typeof contribution.id !== 'string' || !/^[a-z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+$/.test(contribution.id) || typeof contribution.activate !== 'function' || this.definitions.has(contribution.id)) throw new Error(`Invalid or duplicate contribution: ${contribution?.id}`);
+    const entry = Object.freeze({ ...contribution });
+    this.definitions.set(entry.id, entry);
+    this.states.set(entry.id, 'inactive');
+    return () => {
+      if (this.definitions.get(entry.id) !== entry) return;
+      const context = this.active.get(entry.id);
+      this.active.delete(entry.id);
+      context?.dispose();
+      this.states.delete(entry.id);
+      this.definitions.delete(entry.id);
+    };
+  }
+  async activate(id: string): Promise<void> {
+    const contribution = this.definitions.get(id);
+    if (!contribution) throw new Error(`Unknown contribution: ${id}`);
+    if (this.active.has(id)) return;
+    const pending = this.activations.get(id);
+    if (pending) return pending;
+    const operation = this.activateOnce(id, contribution);
+    this.activations.set(id, operation);
+    try { await operation; } finally { if (this.activations.get(id) === operation) this.activations.delete(id); }
+  }
+  private async activateOnce(id: string, contribution: WorkbenchContribution): Promise<void> {
+    const context = new WorkbenchContributionContextImpl();
+    this.states.set(id, 'activating');
+    try {
+      await contribution.activate(context);
+      if (this.definitions.get(id) !== contribution || this.states.get(id) !== 'activating') {
+        context.dispose();
+        return;
+      }
+      this.active.set(id, context);
+      this.states.set(id, 'active');
+    } catch (error) {
+      // Keep the activation failure as the public error even when a partially
+      // registered resource also fails to dispose. The context still attempts
+      // every cleanup callback before returning here.
+      try { context.dispose(); } catch { /* preserve the activation error */ }
+      if (this.definitions.get(id) === contribution && this.states.get(id) === 'activating') this.states.set(id, 'failed');
+      throw error;
+    }
+  }
+  deactivate(id: string): void {
+    if (!this.definitions.has(id)) throw new Error(`Unknown contribution: ${id}`);
+    const context = this.active.get(id);
+    this.active.delete(id);
+    this.states.set(id, 'inactive');
+    context?.dispose();
+  }
+  list(): readonly { id: string; state: 'inactive' | 'activating' | 'active' | 'failed' }[] {
+    return [...this.definitions.keys()].map(id => ({ id, state: this.states.get(id)! }));
+  }
+}
+
+class WorkbenchContributionContextImpl implements WorkbenchContributionContext {
+  private readonly resources: (() => void)[] = [];
+  private disposed = false;
+  add(resource: Disposable | (() => void)): void {
+    if (this.disposed) throw new Error('Contribution context is disposed');
+    const dispose = typeof resource === 'function' ? resource : resource?.dispose?.bind(resource);
+    if (typeof dispose !== 'function') throw new Error('Contribution resource must be disposable');
+    this.resources.push(dispose);
+  }
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    let failure: unknown;
+    for (const dispose of this.resources.splice(0).reverse()) {
+      try { dispose(); } catch (error) { failure ||= error; }
+    }
+    if (failure) throw failure;
+  }
+}
 
 export class ViewRegistry {
   private readonly entries = new Map<string, ViewContribution>();

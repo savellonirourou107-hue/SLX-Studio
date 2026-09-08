@@ -4,7 +4,7 @@ import { ConfigurationStore, DESKTOP_SCHEMAS } from '../../../packages/configura
 import { DesktopServices } from '../../../packages/core/services';
 import { DocumentEditors } from '../../../packages/editor/documents';
 import { CustomEditorRegistry } from '../../../packages/editor/registry';
-import { OutputService, ProblemsService, ViewRegistry } from '../../../packages/workbench';
+import { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } from '../../../packages/workbench';
 import type { Problem } from '../../../packages/workbench';
 import type { WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
@@ -14,8 +14,6 @@ const files = new DesktopServices(window.slx);
 const commands = new CommandRegistry();
 const configuration = new ConfigurationStore(DESKTOP_SCHEMAS);
 const views = new ViewRegistry();
-views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' });
-views.register({ id: 'workbench.output', title: 'Output', location: 'panel' });
 const outputService = new OutputService();
 const problemsService = new ProblemsService();
 const editorRegistry = new CustomEditorRegistry();
@@ -76,8 +74,23 @@ const settings = new SettingsController(element<HTMLDialogElement>('settings'), 
   configuration.load('workspace', state.workspace.values);
   editors.configure({ fontSize: configuration.get<number>('editor.fontSize'), minimap: configuration.get<boolean>('editor.minimap') });
 }, () => !!workspace, log);
-editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) });
-editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => { const model = await files.inspect(path); const unsupported = Array.isArray(model.metadata.unsupported_features) ? model.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : []; const diagnostics: Problem[] = unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' })); problemsService.replace(diagnostics); log(`${path}: static summary — ${model.blocks.length} blocks, ${model.lines.length} connections; MATLAB not started.${unsupported.length ? ` Unsupported: ${unsupported.join(', ')}.` : ''}`); } });
+const contributions = new WorkbenchContributionRegistry();
+contributions.register({
+  id: 'builtin.core',
+  activate(context) {
+    context.add(views.register({ id: 'workbench.explorer', title: 'Explorer', location: 'sidebar' }));
+    context.add(views.register({ id: 'workbench.output', title: 'Output', location: 'panel' }));
+    context.add(editorRegistry.register({ id: 'editor.matlabText', label: 'MATLAB text', extensions: ['.m'], open: path => editors.open(path) }));
+    context.add(editorRegistry.register({ id: 'editor.simulinkSummary', label: 'Simulink static summary', extensions: ['.slx'], open: async path => {
+      const model = await files.inspect(path);
+      const unsupported = Array.isArray(model.metadata.unsupported_features) ? model.metadata.unsupported_features.filter((feature): feature is string => typeof feature === 'string') : [];
+      const diagnostics: Problem[] = unsupported.map(feature => ({ path, message: `Static inspection does not model ${feature}.`, severity: 'warning', source: 'SLX parser' }));
+      problemsService.replace(diagnostics);
+      log(`${path}: static summary — ${model.total_blocks} blocks, ${model.total_lines} connections; MATLAB not started.${unsupported.length ? ` Unsupported: ${unsupported.join(', ')}.` : ''}`);
+    } }));
+  },
+});
+const builtInActivation = contributions.activate('builtin.core').catch(error => { report(error); throw error; });
 let lastTabSignature = '';
 function renderEditors(): void {
   const signature = [...editors.documents.values()].map(document => `${document.path}|${editors.dirty(document)}|${editors.active === document}`).join('\n');
@@ -140,6 +153,7 @@ async function refresh(): Promise<void> {
   if (workspace) await directory(element('tree'), '', 0, generation);
 }
 async function setWorkspace(info: WorkspaceInfo): Promise<void> {
+  await builtInActivation;
   workspace = info;
   element('workspace-name').textContent = info.root.split(/[\\/]/).pop()?.toUpperCase() || info.root;
   element('workspace-name').title = info.root;
@@ -168,6 +182,12 @@ commands.register({ id: 'file.save', title: 'File: Save', enabled: () => !!edito
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
 commands.register({ id: 'settings.edit', title: 'Settings: Edit Configuration', run: () => settings.show() });
+commands.register({ id: 'workbench.reloadContributions', title: 'Workbench: Reload Built-in Contributions', run: async () => {
+  await builtInActivation;
+  contributions.deactivate('builtin.core');
+  await contributions.activate('builtin.core');
+  log('Workbench contributions reloaded; registrations were disposed and recreated.');
+} });
 commands.register({ id: 'backend.restart', title: 'Backend: Restart Python Service', enabled: () => !!workspace, run: async () => {
   const info = await files.restartBackend();
   workspace = info;

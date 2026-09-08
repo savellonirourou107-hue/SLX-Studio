@@ -84,6 +84,17 @@ try {
   const sameModelDiff = await page.evaluate(() => window.slx.diffModels('model.slx', 'model.slx', false));
   assert.equal(sameModelDiff.ok, true);
   assert.equal(sameModelDiff.value.changed, false, 'typed model diff reports identical files');
+  const modelPage = await page.evaluate(() => window.slx.inspectModel('model.slx', { blockCursor: 1, pageSize: 1 }));
+  assert.equal(modelPage.ok, true);
+  assert.equal(modelPage.value.blocks.length, 1);
+  assert.equal(modelPage.value.total_blocks, 2);
+  assert.equal(modelPage.value.next_block_cursor, null);
+  const invalidModelPage = await page.evaluate(() => window.slx.inspectModel('model.slx', { pageSize: 0 }));
+  assert.equal(invalidModelPage.ok, false, 'desktop IPC rejects an empty model page');
+  await command('Workbench: Reload Built-in Contributions');
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('Workbench contributions reloaded'), 'built-in contributions can be reloaded without leaking registrations');
+  await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
+  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static summary'), 'reloaded contributions restore the Simulink editor');
   await command('Settings: Edit Configuration');
   await page.locator('#settings-scope').selectOption('workspace');
   await page.locator('#settings-font-size').fill('16');

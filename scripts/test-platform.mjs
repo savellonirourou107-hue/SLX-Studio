@@ -16,7 +16,7 @@ const { FrameDecoder, PythonBackend } = await loadTypeScript('apps/desktop/elect
 const { CommandRegistry } = await loadTypeScript('packages/commands/index.ts');
 const { ConfigurationStore } = await loadTypeScript('packages/configuration/index.ts');
 const { CustomEditorRegistry } = await loadTypeScript('packages/editor/registry.ts');
-const { OutputService, ProblemsService, ViewRegistry } = await loadTypeScript('packages/workbench/index.ts');
+const { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegistry } = await loadTypeScript('packages/workbench/index.ts');
 const { ConfigurationFiles } = await loadTypeScript('apps/desktop/electron/configuration.ts');
 const frame = value => {
   const payload = Buffer.from(JSON.stringify(value));
@@ -115,6 +115,33 @@ test('Workbench views, custom editors, output and problems are bounded and dispo
   problems.replace([{ path: 'a.m', message: 'warning', severity: 'warning' }, { path: 'b.m', message: 'error', severity: 'error' }]);
   assert.deepEqual(problems.snapshot().map(problem => problem.path), ['a.m']);
   assert.throws(() => problems.replace([{ path: '', message: 'bad', severity: 'error' }]));
+});
+
+test('Workbench contribution activation owns registrations and releases them on deactivate or failure', async () => {
+  const registry = new WorkbenchContributionRegistry();
+  const views = new ViewRegistry();
+  const editors = new CustomEditorRegistry();
+  let activated = 0;
+  const dispose = registry.register({ id: 'builtin.test', activate(context) {
+    activated += 1;
+    context.add(views.register({ id: 'view.test', title: 'Test', location: 'panel' }));
+    context.add(editors.register({ id: 'editor.test', label: 'Test', extensions: ['.m'], open() {} }));
+  } });
+  await registry.activate('builtin.test');
+  assert.deepEqual(registry.list(), [{ id: 'builtin.test', state: 'active' }]);
+  assert.equal(views.list().length, 1);
+  registry.deactivate('builtin.test');
+  assert.deepEqual(registry.list(), [{ id: 'builtin.test', state: 'inactive' }]);
+  assert.equal(views.list().length, 0);
+  assert.equal(editors.list().length, 0);
+  await Promise.all([registry.activate('builtin.test'), registry.activate('builtin.test')]);
+  assert.equal(activated, 2);
+  const broken = registry.register({ id: 'builtin.broken', activate(context) { context.add(() => { throw new Error('dispose still attempted'); }); throw new Error('activation failed'); } });
+  await assert.rejects(registry.activate('builtin.broken'), /activation failed/);
+  assert.equal(registry.list().find(item => item.id === 'builtin.broken')?.state, 'failed');
+  broken();
+  dispose();
+  assert.equal(registry.list().length, 0);
 });
 
 test('configuration files persist safe layers and fail closed on conflicts or malformed input', async () => {

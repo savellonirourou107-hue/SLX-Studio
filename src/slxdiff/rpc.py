@@ -15,6 +15,8 @@ from .parser import parse_slx
 from .workspace import workspace_root
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
+MODEL_PAGE_MAX_ITEMS = 512
+MODEL_PAGE_MAX_BYTES = 2 * 1024 * 1024
 
 
 class FrameError(ValueError):
@@ -28,22 +30,108 @@ def _slx_path(root: Path, relative: str) -> Path:
     return path
 
 
-def inspect_model(root: Path, relative: str) -> dict[str, Any]:
+def _validate_page(cursor: int, page_size: int) -> None:
+    if isinstance(cursor, bool) or not isinstance(cursor, int) or not 0 <= cursor <= 100_000:
+        raise ValueError("model page cursor must be a bounded non-negative integer")
+    if (
+        isinstance(page_size, bool)
+        or not isinstance(page_size, int)
+        or not 1 <= page_size <= MODEL_PAGE_MAX_ITEMS
+    ):
+        raise ValueError(f"model page size must be an integer from 1 to {MODEL_PAGE_MAX_ITEMS}")
+
+
+def _page_records(
+    records: list[dict[str, Any]], cursor: int, page_size: int, label: str
+) -> tuple[list[dict[str, Any]], int | None]:
+    _validate_page(cursor, page_size)
+    selected: list[dict[str, Any]] = []
+    size = 2
+    for record in records[cursor : cursor + page_size]:
+        encoded = json.dumps(record, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode(
+            "utf-8"
+        )
+        if len(encoded) > MODEL_PAGE_MAX_BYTES:
+            raise ValueError(f"{label} item exceeds the model page size limit")
+        if selected and size + len(encoded) + 1 > MODEL_PAGE_MAX_BYTES:
+            break
+        selected.append(record)
+        size += len(encoded) + 1
+    end = cursor + len(selected)
+    return selected, end if end < len(records) else None
+
+
+def inspect_model(
+    root: Path,
+    relative: str,
+    block_cursor: int = 0,
+    line_cursor: int = 0,
+    page_size: int = MODEL_PAGE_MAX_ITEMS,
+) -> dict[str, Any]:
     model = parse_slx(_slx_path(root, relative))
+    blocks = [asdict(block) for _, block in sorted(model.blocks.items())]
+    lines = [asdict(line) for line in sorted(model.lines)]
+    block_page, next_block_cursor = _page_records(blocks, block_cursor, page_size, "block")
+    line_page, next_line_cursor = _page_records(lines, line_cursor, page_size, "line")
     return {
         "schema_version": "0.5",
         "name": model.name,
         "metadata": model.metadata,
-        "blocks": [asdict(block) for _, block in sorted(model.blocks.items())],
-        "lines": [asdict(line) for line in sorted(model.lines)],
+        "blocks": block_page,
+        "lines": line_page,
+        "total_blocks": len(blocks),
+        "total_lines": len(lines),
+        "block_cursor": block_cursor,
+        "line_cursor": line_cursor,
+        "page_size": page_size,
+        "next_block_cursor": next_block_cursor,
+        "next_line_cursor": next_line_cursor,
     }
 
 
-def diff_models(root: Path, old: str, new: str, include_layout: bool = False) -> dict[str, Any]:
+def diff_models(
+    root: Path,
+    old: str,
+    new: str,
+    include_layout: bool = False,
+    added_block_cursor: int = 0,
+    removed_block_cursor: int = 0,
+    changed_block_cursor: int = 0,
+    added_line_cursor: int = 0,
+    removed_line_cursor: int = 0,
+    page_size: int = MODEL_PAGE_MAX_ITEMS,
+) -> dict[str, Any]:
     if not isinstance(include_layout, bool):
         raise TypeError("include_layout must be boolean")
     result = compare_models(
         parse_slx(_slx_path(root, old)), parse_slx(_slx_path(root, new)), include_layout=include_layout
+    )
+    added_blocks = [asdict(block) for block in result.added_blocks]
+    removed_blocks = [asdict(block) for block in result.removed_blocks]
+    changed_blocks = [
+        {
+            "before": asdict(change.before),
+            "after": asdict(change.after),
+            "parameter_changes": [asdict(item) for item in change.parameter_changes],
+        }
+        for change in result.changed_blocks
+    ]
+    added_lines = [asdict(line) for line in result.added_lines]
+    removed_lines = [asdict(line) for line in result.removed_lines]
+    added_block_page, next_added_block_cursor = _page_records(
+        added_blocks, added_block_cursor, page_size, "added block"
+    )
+    removed_block_page, next_removed_block_cursor = _page_records(
+        removed_blocks, removed_block_cursor, page_size, "removed block"
+    )
+    changed_block_page, next_changed_block_cursor = _page_records(
+        changed_blocks, changed_block_cursor, page_size, "changed block"
+    )
+    added_line_page, next_added_line_cursor = _page_records(
+        added_lines, added_line_cursor, page_size, "added line"
+    )
+    removed_line_page, next_removed_line_cursor = _page_records(
+        removed_lines, removed_line_cursor, page_size, "removed line"
     )
     return {
         "schema_version": "0.5",
@@ -51,18 +139,22 @@ def diff_models(root: Path, old: str, new: str, include_layout: bool = False) ->
         "new_name": result.new_name,
         "changed": result.changed,
         "change_count": result.change_count,
-        "added_blocks": [asdict(block) for block in result.added_blocks],
-        "removed_blocks": [asdict(block) for block in result.removed_blocks],
-        "changed_blocks": [
-            {
-                "before": asdict(change.before),
-                "after": asdict(change.after),
-                "parameter_changes": [asdict(item) for item in change.parameter_changes],
-            }
-            for change in result.changed_blocks
-        ],
-        "added_lines": [asdict(line) for line in result.added_lines],
-        "removed_lines": [asdict(line) for line in result.removed_lines],
+        "added_blocks": added_block_page,
+        "removed_blocks": removed_block_page,
+        "changed_blocks": changed_block_page,
+        "added_lines": added_line_page,
+        "removed_lines": removed_line_page,
+        "total_added_blocks": len(added_blocks),
+        "total_removed_blocks": len(removed_blocks),
+        "total_changed_blocks": len(changed_blocks),
+        "total_added_lines": len(added_lines),
+        "total_removed_lines": len(removed_lines),
+        "page_size": page_size,
+        "next_added_block_cursor": next_added_block_cursor,
+        "next_removed_block_cursor": next_removed_block_cursor,
+        "next_changed_block_cursor": next_changed_block_cursor,
+        "next_added_line_cursor": next_added_line_cursor,
+        "next_removed_line_cursor": next_removed_line_cursor,
     }
 
 

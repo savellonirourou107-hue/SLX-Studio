@@ -36,6 +36,16 @@ function text(value: unknown, max = 4096): string {
   if (typeof value !== 'string' || value.length > max || value.includes('\0')) throw new Error('Invalid text argument');
   return value;
 }
+function integer(value: unknown, name: string, fallback = 0, maximum = 100_000): number {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > maximum) throw new Error(`Invalid ${name}`);
+  return value;
+}
+function pageSize(value: unknown): number {
+  const parsed = integer(value, 'page size', 512, 512);
+  if (parsed < 1) throw new Error('Invalid page size');
+  return parsed;
+}
 function backendRequired(): PythonBackend {
   if (!backend) throw new Error('Open a workspace first');
   return backend;
@@ -133,11 +143,14 @@ async function start(): Promise<void> {
     return backendRequired().request('workspace/listDirectory', { relative: text(args.path), cursor: args.cursor });
   });
   handle('slx:read', async payload => backendRequired().request('document/read', { relative: text(object(payload).path) }));
-  handle('slx:inspect', async payload => backendRequired().request('model/inspect', { relative: text(object(payload).path) }));
+  handle('slx:inspect', async payload => {
+    const args = object(payload);
+    return backendRequired().request('model/inspect', { relative: text(args.path), block_cursor: integer(args.blockCursor, 'block cursor'), line_cursor: integer(args.lineCursor, 'line cursor'), page_size: pageSize(args.pageSize) });
+  });
   handle('slx:diff', async payload => {
     const args = object(payload);
     if (typeof args.includeLayout !== 'boolean') throw new Error('Invalid diff options');
-    return backendRequired().request('model/diff', { old: text(args.oldPath), new: text(args.newPath), include_layout: args.includeLayout });
+    return backendRequired().request('model/diff', { old: text(args.oldPath), new: text(args.newPath), include_layout: args.includeLayout, added_block_cursor: integer(args.addedBlockCursor, 'added block cursor'), removed_block_cursor: integer(args.removedBlockCursor, 'removed block cursor'), changed_block_cursor: integer(args.changedBlockCursor, 'changed block cursor'), added_line_cursor: integer(args.addedLineCursor, 'added line cursor'), removed_line_cursor: integer(args.removedLineCursor, 'removed line cursor'), page_size: pageSize(args.pageSize) });
   });
   handle('slx:configuration', async () => configurationFiles.read(workspace?.root || null));
   handle('slx:updateConfiguration', async payload => {

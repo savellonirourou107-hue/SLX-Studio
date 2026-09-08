@@ -237,14 +237,35 @@ def test_rpc_reaches_static_parser_and_diff_without_matlab(tmp_path):
     inspected = backend.dispatch(message("model/inspect", {"relative": "old.slx"}))
     assert inspected["result"]["schema_version"] == "0.5"
     assert len(inspected["result"]["blocks"]) == 2
+    page = backend.dispatch(
+        message("model/inspect", {"relative": "old.slx", "block_cursor": 1, "line_cursor": 0, "page_size": 1})
+    )["result"]
+    assert len(page["blocks"]) == 1 and page["total_blocks"] == 2 and page["next_block_cursor"] is None
+    assert page["lines"] and page["next_line_cursor"] is None
     diff = backend.dispatch(message("model/diff", {"old": "old.slx", "new": "new.slx"}))
     assert diff["result"]["changed"]
     assert diff["result"]["change_count"] == 3
+    diff_page = backend.dispatch(message("model/diff", {"old": "old.slx", "new": "new.slx", "page_size": 1}))[
+        "result"
+    ]
+    assert diff_page["total_changed_blocks"] == 1 and len(diff_page["changed_blocks"]) == 1
+    assert diff_page["total_added_lines"] == 1 and len(diff_page["added_lines"]) == 1
+    assert diff_page["page_size"] == 1
     assert backend.dispatch(message("model/inspect", {"relative": "../old.slx"}))["error"]["code"] == -32602
     assert (
         backend.dispatch(
             message("model/diff", {"old": "old.slx", "new": "new.slx", "include_layout": "yes"})
         )["error"]["code"]
+        == -32602
+    )
+    assert (
+        backend.dispatch(message("model/inspect", {"relative": "old.slx", "page_size": 0}))["error"]["code"]
+        == -32602
+    )
+    assert (
+        backend.dispatch(message("model/inspect", {"relative": "old.slx", "block_cursor": True}))["error"][
+            "code"
+        ]
         == -32602
     )
 
