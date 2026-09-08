@@ -1,0 +1,11 @@
+import { build } from 'esbuild';
+import { mkdir, copyFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.chdir(root);
+await mkdir('dist/desktop/renderer', { recursive: true });
+await build({ entryPoints: ['apps/desktop/electron/main.ts', 'apps/desktop/electron/preload.ts'], outdir: 'dist/desktop/electron', outExtension: { '.js': '.cjs' }, bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], sourcemap: true });
+await build({ entryPoints: { app: 'apps/desktop/renderer/main.ts', 'editor.worker': 'node_modules/monaco-editor/esm/vs/editor/editor.worker.js' }, outdir: 'dist/desktop/renderer', bundle: true, format: 'esm', splitting: true, target: 'chrome130', minify: true, loader: { '.ttf': 'file' }, entryNames: '[name]', assetNames: 'assets/[name]-[hash]' });
+await copyFile('apps/desktop/renderer/index.html', 'dist/desktop/renderer/index.html');
+console.log('Desktop built; legacy Python package unchanged.');

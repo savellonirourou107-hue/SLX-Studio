@@ -1,0 +1,13 @@
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const require = createRequire(import.meta.url);
+const electron = require('electron');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const env = { ...process.env };
+delete env.ELECTRON_RUN_AS_NODE;
+if (process.argv[2]) env.SLX_DESKTOP_WORKSPACE = path.resolve(process.argv[2]);
+const child = spawn(electron, [path.join(root, 'dist/desktop/electron/main.cjs')], { cwd: root, env, stdio: 'inherit', windowsHide: true });
+child.on('exit', code => { process.exitCode = code ?? 1; });
+child.on('error', error => { console.error(error.message); process.exitCode = 1; });
