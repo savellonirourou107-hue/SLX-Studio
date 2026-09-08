@@ -105,15 +105,15 @@ def _matlab_quote(text: str) -> str:
 def _matlab_command(executable: str | Path) -> list[str]:
     """Build a subprocess command for MATLAB or a script-based test double.
 
-    On POSIX, a test double with a Python shebang can be executed directly.
-    Windows does not honor a shebang for extensionless files, so explicitly
-    invoke Python for script-based doubles while leaving a real ``matlab.exe``
-    untouched.  This keeps the public ``matlab=`` override portable without
-    changing the command line used by real MATLAB installations.
+    A script-based override is explicitly run through Python on every host.
+    This keeps non-executable test doubles portable on POSIX and handles
+    extensionless shebang files on Windows, while leaving a real
+    ``matlab.exe`` untouched. The public ``matlab=`` override therefore has
+    the same behavior in local and CI environments.
     """
 
     path = Path(executable)
-    if os.name == "nt" and path.is_file():
+    if path.is_file():
         try:
             first_line = path.open("rb").readline(256).lower()
         except OSError:
