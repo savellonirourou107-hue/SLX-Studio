@@ -20,10 +20,21 @@ const { OutputService, ProblemsService, ViewRegistry, WorkbenchContributionRegis
 const { endpoint, position, scene } = await loadTypeScript('packages/model/geometry.ts');
 const { ConfigurationFiles } = await loadTypeScript('apps/desktop/electron/configuration.ts');
 const { ExtensionHostManager } = await loadTypeScript('apps/desktop/electron/extensions.ts');
+const { matlabSection } = await loadTypeScript('packages/editor/sections.ts');
 const frame = value => {
   const payload = Buffer.from(JSON.stringify(value));
   return Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]);
 };
+
+test('console chunks preserve non-newline output while retaining a bounded tail', () => {
+  const output = new OutputService(3, 20);
+  output.append('command'); output.appendChunk('first'); output.appendChunk('last');
+  assert.deepEqual(output.snapshot().map(entry => entry.text), ['command', 'firstlast']);
+  output.appendChunk('x'.repeat(30));
+  assert.equal(output.snapshot().map(entry => entry.text).join(''), 'x'.repeat(20));
+  output.append('done'); output.appendChunk('next');
+  assert.equal(output.snapshot().at(-1).text, 'next');
+});
 
 test('frame decoder handles split/coalesced frames and Unicode byte lengths', () => {
   const decoder = new FrameDecoder();
@@ -62,6 +73,13 @@ test('command registry validates, shares handlers, checks enablement and dispose
   dispose();
   dispose();
   await assert.rejects(registry.execute('file.save'), /Unknown command/);
+});
+
+test('MATLAB section selection preserves source line ranges and ignores block-comment markers', () => {
+  const source = 'value = 1;\r\n%% First\r\nvalue = 2;\r\n%{\r\n%% not a section\r\n%}\r\n%% Second\r\nvalue = 3;';
+  assert.deepEqual(matlabSection(source, 3), { code: '%% First\nvalue = 2;\n%{\n%% not a section\n%}', startLine: 2, endLine: 6 });
+  assert.deepEqual(matlabSection(source, 7), { code: '%% Second\nvalue = 3;', startLine: 7, endLine: 8 });
+  assert.deepEqual(matlabSection(source, 1), { code: 'value = 1;', startLine: 1, endLine: 1 });
 });
 
 test('configuration uses default < user < workspace precedence and rejects unsafe workspace overrides', () => {

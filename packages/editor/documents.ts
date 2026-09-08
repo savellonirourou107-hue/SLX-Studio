@@ -1,6 +1,7 @@
 import type * as Monaco from 'monaco-editor/editor/editor.api.js';
 import type { DesktopServices } from '../core/services';
 import type { DocumentSnapshot } from '../protocol';
+import { matlabSection } from './sections';
 
 export interface OpenDocument {
   path: string;
@@ -180,5 +181,9 @@ export class DocumentEditors {
   position(): string {
     const position = this.editor?.getPosition();
     return this.active && position ? `Ln ${position.lineNumber}, Col ${position.column} · ${this.active.base.eol} · MATLAB (syntax only)` : 'Ready';
+  }
+  section(): { path: string; code: string; startLine: number; endLine: number } {
+    if (!this.active || !this.editor) throw new Error('Open a MATLAB file first');
+    return { path: this.active.path, ...matlabSection(this.active.model.getValue(), this.editor.getPosition()?.lineNumber || 1) };
   }
 }

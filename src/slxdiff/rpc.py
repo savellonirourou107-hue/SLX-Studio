@@ -13,8 +13,10 @@ from .diff import compare_models
 from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
 from .matlab_bridge import apply_model_edit_with_matlab
 from .matlab_runtime import MatlabRuntime
+from .model_runtime import ModelRuntime
 from .model_view import model_viewport
 from .parser import parse_slx
+from .process_ownership import own_backend_process_tree
 from .workspace import workspace_root
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
@@ -233,8 +235,10 @@ class Backend:
     def __init__(self, root: str) -> None:
         self.root, self.initial_file = workspace_root(root)
         self._matlab = MatlabRuntime(self.root)
+        self._models = ModelRuntime(self.root)
 
     def close(self) -> None:
+        self._models.close()
         self._matlab.close()
 
     @staticmethod
@@ -268,8 +272,17 @@ class Backend:
             "model/viewport": lambda **params: model_viewport(self.root, **params),
             "model/diff": lambda **params: diff_models(self.root, **params),
             "model/applyEdit": lambda **params: apply_model_edit(self.root, **params),
+            "model/edit/start": lambda **params: self._models.start_edit(**params),
+            "model/simulation/start": lambda **params: self._models.start_simulation(**params),
+            "model/job/status": lambda **params: self._models.status(**params),
+            "model/job/stop": lambda **params: self._models.stop(**params),
+            "model/history": lambda **params: self._models.history_action(**params),
             "matlab/status": lambda **params: self._matlab.status(),
             "matlab/command/start": lambda **params: self._matlab.start_command(params.get("command")),
+            "matlab/variable/set": lambda **params: self._matlab.start_variable(
+                params.get("name"), params.get("expression")
+            ),
+            "matlab/result/page": lambda **params: self._matlab.result_page(**params),
             "matlab/command/status": lambda **params: self._matlab.status_job(
                 "command",
                 params.get("job_id"),
@@ -325,8 +338,15 @@ class Backend:
                 "model/viewport",
                 "model/diff",
                 "model/applyEdit",
+                "model/edit/start",
+                "model/simulation/start",
+                "model/job/status",
+                "model/job/stop",
+                "model/history",
                 "matlab/status",
                 "matlab/command/start",
+                "matlab/variable/set",
+                "matlab/result/page",
                 "matlab/command/status",
                 "matlab/command/stop",
                 "matlab/run/start",
@@ -383,6 +403,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True)
     args = parser.parse_args()
+    own_backend_process_tree()
     serve(Backend(args.workspace), sys.stdin.buffer, sys.stdout.buffer)
 
 

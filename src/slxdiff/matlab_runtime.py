@@ -1,7 +1,7 @@
 """Desktop-facing MATLAB runtime built on the existing persistent worker.
 
 The RPC layer deliberately exposes only explicit start/status/stop operations.
-Inspecting or opening an SLX never creates this object, so static model viewing
+Inspecting or opening an SLX never starts a worker, so static model viewing
 remains safe and fast.  Command and script jobs share one worker and execution
 lock, which keeps variables, figures and diagnostics in the same session.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from .msession import MatlabCommandManager
 from .persistent import PersistentMatlabSession
 
 _MAX_TRACEPOINTS = 256
+_RESULT_PAGE_SIZE = 128
+_STREAM_PAGE_CHARS = 65_536
 
 
 class MatlabRuntime:
@@ -107,7 +110,20 @@ class MatlabRuntime:
         with self._lock:
             if self._busy():
                 raise RuntimeError("a MATLAB command or script is already active")
-            return commands.start(command)
+            started = commands.start(command)
+            return self.status_job("command", started["id"])
+
+    def start_variable(self, name: str, expression: str) -> dict[str, Any]:
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,62}", name):
+            raise ValueError("variable name must be a MATLAB identifier")
+        if (
+            not isinstance(expression, str)
+            or not expression.strip()
+            or "\n" in expression
+            or "\r" in expression
+        ):
+            raise ValueError("variable editor accepts one non-empty MATLAB expression")
+        return self.start_command(f"{name} = {expression};")
 
     def start_run(
         self,
@@ -144,7 +160,85 @@ class MatlabRuntime:
             if self._busy():
                 raise RuntimeError("a MATLAB command or script is already active")
             assert self._runs is not None
-            return self._runs.start(path, code=code, start_line=start_line, tracepoints=points)
+            started = self._runs.start(path, code=code, start_line=start_line, tracepoints=points)
+            return self.status_job("run", started["id"])
+
+    def _result_page(
+        self,
+        result: dict[str, Any],
+        *,
+        variable_cursor: int = 0,
+        figure_cursor: int = 0,
+        event_cursor: int = 0,
+    ) -> dict[str, Any]:
+        for cursor in (variable_cursor, figure_cursor, event_cursor):
+            if isinstance(cursor, bool) or not isinstance(cursor, int) or not 0 <= cursor <= 1_000_000:
+                raise ValueError("result cursor must be a bounded non-negative integer")
+        # Output is delivered only as deltas. Never repeat up to two MiB of
+        # console text or six large figures in every job status response.
+        page = {
+            key: value
+            for key, value in result.items()
+            if key
+            in {
+                "ok",
+                "cancelled",
+                "elapsed_seconds",
+                "backend",
+                "session_id",
+                "session_generation",
+                "session_reset",
+                "state_lost",
+                "output_truncated",
+                "returncode",
+            }
+        }
+        for key in ("path", "command"):
+            if key in result:
+                page[key] = str(result[key])[:262_144]
+        if isinstance(result.get("error"), dict):
+            error = result["error"]
+            filename = str(error.get("file") or "")
+            if filename:
+                try:
+                    filename = Path(filename).resolve().relative_to(self.root).as_posix()
+                except ValueError:
+                    filename = ""  # external errors are visible, but not an arbitrary file-open capability
+            page["error"] = {
+                "message": str(error.get("message") or "")[:8192],
+                "identifier": str(error.get("identifier") or "")[:256],
+                "file": filename,
+                "line": error.get("line", 0),
+            }
+        for name, cursor, size in (
+            ("variables", variable_cursor, _RESULT_PAGE_SIZE),
+            ("figures", figure_cursor, 1),
+            ("debug_events", event_cursor, _RESULT_PAGE_SIZE),
+        ):
+            items = result.get(name) if isinstance(result.get(name), list) else []
+            page[name] = items[cursor : cursor + size]
+            page[f"total_{name}"] = len(items)
+            page[f"{name}_cursor"] = cursor
+            page[f"next_{name}_cursor"] = cursor + size if cursor + size < len(items) else None
+        page["variables"] = [
+            {
+                key: (str(item.get(key, ""))[:512] if key != "bytes" else item.get(key, 0))
+                for key in ("name", "class", "size", "bytes", "preview")
+            }
+            for item in page["variables"]
+            if isinstance(item, dict)
+        ]
+        page["debug_events"] = [
+            {
+                "file": str(item.get("file") or "")[:4096],
+                "line": item.get("line", 0),
+                "variables": [str(name)[:128] for name in item.get("variables", [])[:128]],
+                "total_variables": len(item.get("variables", [])),
+            }
+            for item in page["debug_events"]
+            if isinstance(item, dict)
+        ]
+        return page
 
     def status_job(
         self, kind: str, job_id: str, *, stdout_offset: int = 0, stderr_offset: int = 0
@@ -155,7 +249,31 @@ class MatlabRuntime:
             manager = self._commands if kind == "command" else self._runs
             if manager is None:
                 raise ValueError("unknown MATLAB job")
-            return manager.status(job_id, stdout_offset=stdout_offset, stderr_offset=stderr_offset)
+            status = manager.status(job_id, stdout_offset=stdout_offset, stderr_offset=stderr_offset)
+            pending_output = False
+            for stream, offset in (("stdout", stdout_offset), ("stderr", stderr_offset)):
+                delta = status[f"{stream}_delta"]
+                total = status[f"{stream}_offset"]
+                delivered = delta[:_STREAM_PAGE_CHARS]
+                status[f"{stream}_delta"] = delivered
+                status[f"{stream}_offset"] = min(offset, total) + len(delivered)
+                pending_output |= status[f"{stream}_offset"] < total
+            status["output_pending"] = pending_output
+            if isinstance(status.get("result"), dict):
+                status["result"] = self._result_page(status["result"])
+            return status
+
+    def result_page(self, kind: str, job_id: str, **cursors: int) -> dict[str, Any]:
+        if kind not in {"command", "run"}:
+            raise ValueError("job kind must be command or run")
+        with self._lock:
+            manager = self._commands if kind == "command" else self._runs
+            if manager is None:
+                raise ValueError("unknown MATLAB job")
+            result = manager.status(job_id).get("result")
+            if not isinstance(result, dict):
+                raise ValueError("MATLAB job has no result yet")  # noqa: TRY004 - job lifecycle, not input type
+            return self._result_page(result, **cursors)
 
     def stop(self, kind: str, job_id: str) -> dict[str, Any]:
         if kind not in {"command", "run"}:
@@ -164,7 +282,8 @@ class MatlabRuntime:
             manager = self._commands if kind == "command" else self._runs
             if manager is None:
                 raise ValueError("unknown MATLAB job")
-            return manager.stop(job_id)
+            manager.stop(job_id)
+            return self.status_job(kind, job_id)
 
     def close(self) -> None:
         with self._lock:

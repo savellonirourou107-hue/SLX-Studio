@@ -132,9 +132,7 @@ def test_matlab_r2026a_debug_tracepoints_capture_line_and_workspace(tmp_path: Pa
     assert all("a" in event["variables"] for event in result["debug_events"])
 
 
-def test_matlab_r2026a_desktop_rpc_applies_validated_model_edit(tmp_path: Path, monkeypatch) -> None:
-    matlab = _configured_matlab()
-    monkeypatch.setenv("SLX_STUDIO_MATLAB", matlab)
+def create_rpc_model(tmp_path: Path, matlab: str) -> Path:
     script = tmp_path / "make_rpc_model.m"
     script.write_text(
         """
@@ -152,7 +150,13 @@ save_system(modelName, modelPath); close_system(modelName, 0);
     )
     created = run_m_file(script, matlab=matlab, timeout=120)
     assert created["ok"], created
-    model_path = tmp_path / "rpc_model.slx"
+    return tmp_path / "rpc_model.slx"
+
+
+def test_matlab_r2026a_desktop_rpc_applies_validated_model_edit(tmp_path: Path, monkeypatch) -> None:
+    matlab = _configured_matlab()
+    monkeypatch.setenv("SLX_STUDIO_MATLAB", matlab)
+    model_path = create_rpc_model(tmp_path, matlab)
     model = parse_slx(model_path)
     gain = next(block for block in model.blocks.values() if block.name == "Gain")
     edit = build_single_edit(

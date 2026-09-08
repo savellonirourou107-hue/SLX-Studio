@@ -1,6 +1,6 @@
 export type ViewLocation = 'activity' | 'sidebar' | 'panel';
 export interface ViewContribution { id: string; title: string; location: ViewLocation; }
-export interface OutputEntry { text: string; level: 'info' | 'warning' | 'error'; at: number; }
+export interface OutputEntry { text: string; level: 'info' | 'warning' | 'error'; at: number; stream?: boolean; }
 export interface Problem { path: string; message: string; severity: 'info' | 'warning' | 'error'; line?: number; column?: number; source?: string; }
 type Listener<T> = (value: T) => void;
 export interface Disposable { dispose(): void; }
@@ -121,6 +121,19 @@ export class OutputService {
     this.emit();
   }
   clear(): void { this.entries.length = 0; this.emit(); }
+  appendChunk(text: string, level: OutputEntry['level'] = 'info'): void {
+    if (typeof text !== 'string' || !text) return;
+    const last = this.entries[this.entries.length - 1];
+    if (last?.stream && last.level === level) {
+      last.text = (last.text + text).slice(-this.maxChars);
+      let total = this.entries.reduce((size, entry) => size + entry.text.length, 0);
+      while (total > this.maxChars && this.entries.length > 1) total -= this.entries.shift()!.text.length;
+    } else {
+      this.append(text.slice(-this.maxChars), level);
+      this.entries[this.entries.length - 1].stream = true;
+    }
+    this.emit();
+  }
   snapshot(): readonly OutputEntry[] { return this.entries.map(entry => ({ ...entry })); }
   subscribe(listener: Listener<readonly OutputEntry[]>): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private emit(): void { const snapshot = this.snapshot(); for (const listener of this.listeners) listener(snapshot); }

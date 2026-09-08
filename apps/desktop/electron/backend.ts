@@ -1,5 +1,6 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 const MAX_FRAME = 16 * 1024 * 1024;
 
 export class FrameDecoder {
@@ -39,6 +40,7 @@ export class PythonBackend extends EventEmitter {
   private readonly pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private id = 0;
   private closed = false;
+  private shutdownTimer?: NodeJS.Timeout;
   constructor(python: string, workspace: string, sourceRoot: string, state: string) {
     super();
     this.child = spawn(python, ['-u', '-m', 'slxdiff.rpc', '--workspace', workspace], {
@@ -63,7 +65,7 @@ export class PythonBackend extends EventEmitter {
     // Drain continuously; never concatenate unbounded process output in memory.
     this.child.stderr.on('data', (data: Buffer) => this.emit('diagnostic', data.subarray(0, 4096).toString('utf8')));
     this.child.on('error', error => this.fail(error));
-    this.child.on('exit', () => this.fail(new Error('Python backend exited; use Backend: Restart Python Service.')));
+    this.child.on('exit', () => { clearTimeout(this.shutdownTimer); this.fail(new Error('Python backend exited; use Backend: Restart Python Service.')); });
     this.child.stdin.on('error', error => this.fail(error));
   }
   request<T>(method: string, params: object = {}): Promise<T> {
@@ -78,13 +80,27 @@ export class PythonBackend extends EventEmitter {
       this.child.stdin.write(Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]));
     });
   }
-  private fail(error: Error): void {
+  private stopOwnedTree(): void {
+    if (!this.child.pid || this.child.exitCode !== null) return;
+    if (process.platform === 'win32') {
+      const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe');
+      execFile(executable, ['/PID', String(this.child.pid), '/T', '/F'], { windowsHide: true, timeout: 10_000 }, error => {
+        if (error && this.child.exitCode === null) this.emit('diagnostic', 'Could not terminate the owned Python process tree.');
+      });
+    } else this.child.kill();
+  }
+  private fail(error: Error, graceful = false): void {
     if (this.closed) return;
     this.closed = true;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
     this.child.stdin.end();
-    if (this.child.exitCode === null) this.child.kill();
+    // EOF lets Backend.serve finally close its owned MATLAB session. Killing
+    // Python immediately here used to bypass that cleanup and orphan MATLAB.
+    if (graceful) {
+      this.shutdownTimer = setTimeout(() => this.stopOwnedTree(), 5000);
+      this.shutdownTimer.unref();
+    } else this.stopOwnedTree();
   }
-  close(): void { this.fail(new Error('Backend closed by the desktop')); }
+  close(): void { this.fail(new Error('Backend closed by the desktop'), true); }
 }

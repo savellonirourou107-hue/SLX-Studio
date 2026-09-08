@@ -1,0 +1,10 @@
+{
+  "id": "firstparty.matlab", "apiVersion": 1, "version": "2.0.0", "main": "extension.mjs",
+  "activationEvents": ["onCommand:firstparty.matlab.command", "onCommand:firstparty.matlab.variables"],
+  "contributes": {
+    "commands": [
+      { "command": "firstparty.matlab.command", "title": "MATLAB: Command Window (Extension)" },
+      { "command": "firstparty.matlab.variables", "title": "MATLAB: Variables and Figures (Extension)" }
+    ], "views": [{ "id": "firstparty.matlab.output", "title": "MATLAB Session", "location": "panel" }], "editors": []
+  }
+}

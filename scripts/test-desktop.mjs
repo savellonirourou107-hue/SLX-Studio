@@ -33,7 +33,11 @@ execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
   path.join(workspace, 'large.slx'), largeXmlPath,
 ], { windowsHide: true });
 await fs.writeFile(path.join(workspace, 'mixed.m'), 'a = 1;\r\nb = 2;\n');
-const env = { ...process.env, SLX_DESKTOP_TEST_HIDE: '1', SLX_DESKTOP_STATE_DIR: path.join(testRoot, 'state'), SLX_DESKTOP_WORKSPACE: workspace };
+// Keep this baseline workflow focused on the sample extension. First-party
+// MATLAB/Simulink activation is exercised by the real R2026a desktop test.
+const extensionRoot = path.join(testRoot, 'extensions');
+await fs.cp(path.join(root, 'extensions', 'sample.hello'), path.join(extensionRoot, 'sample.hello'), { recursive: true });
+const env = { ...process.env, SLX_DESKTOP_TEST_HIDE: '1', SLX_DESKTOP_STATE_DIR: path.join(testRoot, 'state'), SLX_DESKTOP_WORKSPACE: workspace, SLX_STUDIO_EXTENSION_ROOT: extensionRoot };
 delete env.ELECTRON_RUN_AS_NODE;
 let application;
 let page;
@@ -110,7 +114,9 @@ try {
   await page.locator('#problems .problem-row').waitFor();
   assert.match(await page.locator('#problems').textContent(), /variant/);
   await page.locator('#problems .problem-row').click();
-  await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'clicking a problem navigates to its registered model contribution');
+  await waitFor(async () => (await page.locator('#output').textContent()).includes('static model view'), 'clicking a problem navigates to its registered model contribution');
+  assert.equal(await page.getByRole('tab', { name: 'model.slx', exact: true }).getAttribute('aria-selected'), 'true');
+  await page.getByRole('button', { name: 'OUTPUT', exact: true }).click();
   const sameModelDiff = await page.evaluate(() => window.slx.diffModels('model.slx', 'model.slx', false));
   assert.equal(sameModelDiff.ok, true);
   assert.equal(sameModelDiff.value.changed, false, 'typed model diff reports identical files');

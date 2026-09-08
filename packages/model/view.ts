@@ -12,6 +12,7 @@ const svg = <K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
   node.textContent = text; return node;
 };
 let nextViewId = 0;
+export type ModelAction = 'edit' | 'undo' | 'redo' | 'simulate' | 'parameter';
 
 /** A bounded, disposable view: it retains one model page, not an entire SLX graph. */
 export class ModelView {
@@ -43,13 +44,19 @@ export class ModelView {
     readonly path: string,
     private readonly files: Pick<DesktopServices, 'viewport'>,
     private readonly inspected: (path: string, data: ModelViewport) => void,
+    private readonly action?: (action: ModelAction, view: ModelView, parameter?: string) => void,
   ) {
     const toolbar = make('div', 'model-toolbar');
     const label = make('label', '', 'System ');
     this.system.setAttribute('aria-label', 'Model subsystem'); label.append(this.system);
-    const readOnly = make('span', 'model-readonly', 'READ ONLY');
+    const readOnly = make('span', 'model-readonly', 'STATIC PREVIEW');
     const reload = make('button', '', 'Reload model'); reload.onclick = () => void this.reload();
     toolbar.append(label, readOnly, reload);
+    for (const [name, title] of [['edit', 'Edit and Save…'], ['undo', 'Undo model edit'], ['redo', 'Redo model edit'], ['simulate', 'Simulate…']] as const) {
+      const button = make('button', 'model-action', title);
+      button.onclick = () => this.action?.(name, this);
+      toolbar.append(button);
+    }
     this.notice.setAttribute('role', 'status');
     const body = make('div', 'model-body');
     const outline = make('aside', 'model-outline');
@@ -105,6 +112,8 @@ export class ModelView {
     this.resize.observe(this.canvas);
   }
   snapshot(): ModelViewport | undefined { return this.data; }
+  selectedBlock(): ModelBlock | undefined { return this.data?.blocks.find(block => block.path === this.selected); }
+  setBusy(busy: boolean): void { for (const button of this.element.querySelectorAll<HTMLButtonElement>('.model-action')) button.disabled = busy; }
   private resetPage(): void { this.cursor = 0; this.history = []; }
   async reload(): Promise<void> {
     clearTimeout(this.timer); this.version = undefined; this.systemId = undefined; this.resetPage(); await this.load();
@@ -119,6 +128,7 @@ export class ModelView {
       const data = await this.files.viewport(this.path, { systemId: this.systemId, query: this.search.value, cursor: this.cursor, expectedSha256: this.version });
       if (this.disposed || revision !== this.revision) return;
       this.version = data.sha256; this.systemId = data.system_id; this.data = data;
+      this.element.dataset.sha256 = data.sha256;
       this.system.replaceChildren(...data.systems.map(system => {
         const option = make('option', '', `${system.label} (${system.blocks})`); option.value = system.id; return option;
       }));
@@ -181,7 +191,15 @@ export class ModelView {
     this.inspector.replaceChildren(make('h3', '', 'INSPECTOR'), make('h4', '', block.name), make('p', 'model-block-path', block.path));
     const details = make('dl');
     const entries = [['Type', block.block_type], ['SID', block.sid], ...Object.entries(block.parameters)];
-    for (const [key, value] of entries.slice(0, 102)) details.append(make('dt', '', key), make('dd', '', value.length > 4096 ? `${value.slice(0, 4096)}… [truncated]` : value));
+    for (const [key, value] of entries.slice(0, 102)) {
+      const field = make('dd', '', value.length > 4096 ? `${value.slice(0, 4096)}… [truncated]` : value);
+      if (key !== 'Type' && key !== 'SID') {
+        const edit = make('button', 'model-action parameter-edit', 'Edit…');
+        edit.setAttribute('aria-label', `Edit model parameter ${key}`);
+        edit.onclick = () => this.action?.('parameter', this, key); field.append(edit);
+      }
+      details.append(make('dt', '', key), field);
+    }
     this.inspector.append(details, make('p', 'model-empty', 'Stored text only; parameter expressions are not evaluated.'));
     if (entries.length > 102) this.inspector.append(make('p', 'model-empty', 'Parameter list limited to 100 entries.'));
   }
@@ -213,11 +231,11 @@ export class ModelView {
 export class ModelEditors {
   readonly documents = new Map<string, ModelView>();
   active: ModelView | null = null;
-  constructor(private readonly container: HTMLElement, private readonly files: DesktopServices, private readonly changed: () => void, private readonly inspected: (path: string, data: ModelViewport) => void) {}
+  constructor(private readonly container: HTMLElement, private readonly files: DesktopServices, private readonly changed: () => void, private readonly inspected: (path: string, data: ModelViewport) => void, private readonly action?: (action: ModelAction, view: ModelView, parameter?: string) => void) {}
   async open(path: string): Promise<void> {
     if (this.documents.has(path)) { this.select(path); return; }
     if (this.documents.size >= 8) throw new Error('Close a model tab before opening more (8-tab preview limit).');
-    const view = new ModelView(path, this.files, this.inspected);
+    const view = new ModelView(path, this.files, this.inspected, this.action);
     this.documents.set(path, view); this.container.append(view.element); this.select(path);
     await view.load();
   }

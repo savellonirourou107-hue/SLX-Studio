@@ -355,11 +355,14 @@ class PersistentMatlabSession(MatlabCommandSession):
                     ),
                     encoding="utf-8",
                 )
-            command = f"run('{_matlab_quote(str(executable))}')"
-            if executable != script:
-                # run() changes into the temporary copy's directory. Add the
-                # original source folder so section/probe code resolves siblings.
-                command = f"addpath('{_matlab_quote(str(script.parent))}'); " + command
+            # The worker never returns to MATLAB's interactive prompt, where
+            # edited files would normally be detected. Include the source
+            # folder then refresh its function cache before every explicit Run.
+            # Do not clear functions/workspace: that would lose user state.
+            command = (
+                f"addpath('{_matlab_quote(str(script.parent))}'); rehash; "
+                f"run('{_matlab_quote(str(executable))}')"
+            )
             result = self.execute(command, **callbacks)
             result["path"] = str(script)
             result["returncode"] = 0 if result["ok"] else 1

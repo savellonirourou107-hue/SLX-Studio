@@ -1,11 +1,40 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import stat
 import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+
+from .documents import DocumentConflict, is_link_or_reparse
+
+
+def atomic_model_replace(snapshot: Path, target: Path, expected_sha256: str) -> None:
+    """Stage full model bytes beside the target, recheck its version, then replace.
+
+    Conflict detection is not atomic CAS against a hostile concurrent writer.
+    MATLAB, never this function, produces edited SLX contents.
+    """
+    if is_link_or_reparse(target) or _sha256(target) != expected_sha256:
+        raise DocumentConflict("model changed outside SLX Studio; reload before saving")
+    mode = target.stat().st_mode
+    if not mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
+        raise PermissionError("model is read-only")
+    fd, filename = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "wb") as sink, snapshot.open("rb") as source:
+            shutil.copyfileobj(source, sink, 1024 * 1024)
+            sink.flush()
+            os.fsync(sink.fileno())
+        os.chmod(filename, stat.S_IMODE(mode))
+        if is_link_or_reparse(target) or _sha256(target) != expected_sha256:
+            raise DocumentConflict("model changed during save; staged edit was not written")
+        os.replace(filename, target)
+    finally:
+        Path(filename).unlink(missing_ok=True)
 
 
 def _sha256(path: Path) -> str:
@@ -138,7 +167,7 @@ class ModelHistory:
         record = records[cursor - 1]
         if _sha256(target) != record.after_sha256:
             raise ValueError("model changed outside SLX Studio; reload before undo")
-        shutil.copy2(record.before, target)
+        atomic_model_replace(record.before, target, record.after_sha256)
         self._cursor[key] = cursor - 1
         return self._status_unlocked(target)
 
@@ -156,6 +185,6 @@ class ModelHistory:
         record = records[cursor]
         if _sha256(target) != record.before_sha256:
             raise ValueError("model changed outside SLX Studio; reload before redo")
-        shutil.copy2(record.after, target)
+        atomic_model_replace(record.after, target, record.before_sha256)
         self._cursor[key] = cursor + 1
         return self._status_unlocked(target)

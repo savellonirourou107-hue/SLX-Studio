@@ -10,7 +10,7 @@ export interface DocumentSnapshot {
 }
 export interface DirectoryPage {
   path: string;
-  items: { name: string; path: string; kind: 'directory' | 'm' | 'slx' }[];
+  items: { name: string; path: string; kind: 'directory' | 'm' | 'slx' | 'slxpreview' }[];
   next_cursor: number | null;
   truncated: boolean;
 }
@@ -45,6 +45,17 @@ export interface Draft {
   base: DocumentSnapshot;
 }
 export interface MatlabVariable { name: string; class: string; size: string; bytes: number; preview: string; }
+export interface ModelJobStatus {
+  id: string; kind: 'edit' | 'simulation'; path: string; state: 'running' | 'finished' | 'failed' | 'cancelled';
+  started_at: number; finished_at?: number; source_sha256: string; saved_sha256?: string;
+  backend: 'matlab_batch'; stop_time?: string; error?: string;
+  result?: { ok: boolean; cancelled?: boolean; message?: string; simulation?: {
+    ran: boolean; stop_time: string; elapsed_seconds: number; solver: string; solver_type: string;
+    matlab_release: string; simulink_version: unknown; output_variables: string[];
+    series: { name: string; time: number[]; data: number[] }[];
+  } };
+}
+export interface ModelHistoryStatus { can_undo: boolean; can_redo: boolean; undo_count: number; redo_count: number; sha256: string; path: string; }
 export interface MatlabFigure { name: string; mime: string; bytes: number; data_base64: string; }
 export interface MatlabResult {
   ok: boolean; cancelled?: boolean; command?: string; path?: string; elapsed_seconds?: number;
@@ -53,12 +64,16 @@ export interface MatlabResult {
   debug_events?: readonly { file: string; line: number; variables: readonly string[] }[];
   error?: { message: string; identifier?: string; line?: number; file?: string } | null;
   backend?: string; session_id?: string; session_generation?: number; session_reset?: boolean; state_lost?: boolean;
+  total_variables?: number; total_figures?: number; total_debug_events?: number;
+  variables_cursor?: number; figures_cursor?: number; debug_events_cursor?: number;
+  next_variables_cursor?: number | null; next_figures_cursor?: number | null; next_debug_events_cursor?: number | null;
 }
 export interface MatlabJobStatus {
   id: string; state: 'running' | 'finished' | 'failed' | 'cancelled'; started_at: number; finished_at?: number;
   path?: string; command?: string; tracepoints?: readonly number[];
   stdout_delta: string; stderr_delta: string; stdout_offset: number; stderr_offset: number;
   result?: MatlabResult; error?: string;
+  output_pending?: boolean;
 }
 export interface MatlabRuntimeStatus {
   backend: 'persistent'; state: 'stopped' | 'ready' | 'closed'; available: boolean; detail: string;
@@ -84,6 +99,11 @@ export interface DesktopAPI {
   modelViewport(path: string, options?: ModelViewportOptions): Promise<Result<ModelViewport>>;
   diffModels(oldPath: string, newPath: string, includeLayout: boolean, options?: ModelDiffOptions): Promise<Result<ModelDiff>>;
   applyModelEdit(path: string, edit: Readonly<Record<string, unknown>>, outputPath?: string): Promise<Result<Record<string, unknown>>>;
+  startModelEdit(path: string, edit: Readonly<Record<string, unknown>>): Promise<Result<ModelJobStatus>>;
+  startSimulation(path: string, expectedSha256: string, stopTime: string): Promise<Result<ModelJobStatus>>;
+  modelJobStatus(jobId: string): Promise<Result<ModelJobStatus>>;
+  stopModelJob(jobId: string): Promise<Result<ModelJobStatus>>;
+  modelHistory(path: string, action?: 'status' | 'undo' | 'redo'): Promise<Result<ModelHistoryStatus>>;
   configuration(): Promise<Result<ConfigurationState>>;
   updateConfiguration(scope: 'user' | 'workspace', values: Readonly<Record<string, ConfigurationValue>>, expectedSha256: string | null): Promise<Result<ConfigurationState>>;
   restartBackend(): Promise<Result<WorkspaceInfo>>;
@@ -91,6 +111,8 @@ export interface DesktopAPI {
   storeDraft(draft: Draft | { path: string; clear: true }): Promise<Result<null>>;
   matlabStatus(): Promise<Result<MatlabRuntimeStatus>>;
   matlabStartCommand(command: string): Promise<Result<MatlabJobStatus>>;
+  matlabSetVariable(name: string, expression: string): Promise<Result<MatlabJobStatus>>;
+  matlabResultPage(kind: 'command' | 'run', jobId: string, options?: { variableCursor?: number; figureCursor?: number; eventCursor?: number }): Promise<Result<MatlabResult>>;
   matlabCommandStatus(jobId: string, stdoutOffset?: number, stderrOffset?: number): Promise<Result<MatlabJobStatus>>;
   matlabStopCommand(jobId: string): Promise<Result<MatlabJobStatus>>;
   matlabStartRun(path: string, options?: { code?: string; startLine?: number; tracepoints?: readonly number[] }): Promise<Result<MatlabJobStatus>>;

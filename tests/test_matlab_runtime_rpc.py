@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from slxdiff import rpc
 
@@ -73,9 +77,69 @@ def test_desktop_runtime_is_lazy_shared_and_streamable(tmp_path: Path, monkeypat
         completed = wait_job(backend, "run", run["result"]["id"])
         assert completed["state"] == "finished" and completed["result"]["path"].endswith("controller.m")
         assert completed["result"]["session_id"] == command["result"]["session_id"]
+        changed = backend.dispatch(message("matlab/variable/set", {"name": "value", "expression": "7"}))
+        variable_job = wait_job(backend, "command", changed["result"]["id"])
+        assert variable_job["result"]["session_id"] == command["result"]["session_id"]
+        assert (
+            backend.dispatch(message("matlab/variable/set", {"name": "x;exit", "expression": "7"}))["error"][
+                "code"
+            ]
+            == -32602
+        )
         assert (
             backend.dispatch(message("matlab/run/start", {"relative": "../outside.m"}))["error"]["code"]
             == -32602
         )
     finally:
         backend.close()
+
+
+def test_result_and_stream_pages_are_bounded_without_dropping_tail(tmp_path: Path) -> None:
+    from slxdiff.matlab_runtime import MatlabRuntime
+
+    runtime = MatlabRuntime(tmp_path)
+    output = "控制" * 70_000
+    result = {
+        "ok": True,
+        "stdout": output,
+        "variables": [{"name": f"v{index}", "preview": "1"} for index in range(300)],
+        "figures": [
+            {"name": f"plot{index}", "mime": "image/png", "data_base64": "A" * (4 * 1024 * 1024)}
+            for index in range(6)
+        ],
+        "debug_events": [{"file": "test.m", "line": 2, "variables": ["value"] * 200} for _ in range(300)],
+        "error": {"message": "failed", "file": str(tmp_path / "controller.m"), "line": 3},
+    }
+
+    def status(_job_id, stdout_offset=0, stderr_offset=0):
+        return {
+            "id": "test",
+            "state": "finished",
+            "stdout_delta": output[stdout_offset:],
+            "stdout_offset": len(output),
+            "stderr_delta": "",
+            "stderr_offset": 0,
+            "result": result,
+        }
+
+    runtime._commands = SimpleNamespace(status=status)
+    offset = 0
+    collected = ""
+    while True:
+        page = runtime.status_job("command", "test", stdout_offset=offset)
+        assert len(page["stdout_delta"]) <= 65_536
+        assert len(json.dumps(page, ensure_ascii=False).encode("utf-8")) < 6 * 1024 * 1024
+        collected += page["stdout_delta"]
+        offset = page["stdout_offset"]
+        if not page["output_pending"]:
+            break
+    assert collected == output
+    assert "stdout" not in page["result"]
+    assert page["result"]["error"]["file"] == "controller.m"
+    assert len(page["result"]["variables"]) == 128
+    tail = runtime.result_page("command", "test", variable_cursor=256, figure_cursor=5, event_cursor=256)
+    assert len(tail["variables"]) == 44 and tail["next_variables_cursor"] is None
+    assert tail["figures"][0]["name"] == "plot5" and tail["next_figures_cursor"] is None
+    assert len(tail["debug_events"][0]["variables"]) == 128
+    with pytest.raises(ValueError, match="cursor"):
+        runtime.result_page("command", "test", variable_cursor=-1)

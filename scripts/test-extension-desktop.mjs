@@ -18,6 +18,7 @@ await fs.mkdir(workspace);
 await fs.mkdir(faulty, { recursive: true });
 await fs.cp(path.join(root, 'extensions/sample.hello'), path.join(trusted, 'sample.hello'), { recursive: true });
 await fs.writeFile(path.join(workspace, 'control.m'), 'gain = 1;\n');
+await fs.writeFile(path.join(workspace, 'demo.slxpreview'), 'sample editor payload\n');
 await fs.writeFile(path.join(faulty, 'slx-extension.json'), JSON.stringify({
   id: 'zzfault.ext', apiVersion: 1, version: '1.0.0', main: 'extension.mjs', activationEvents: ['onCommand:zzfault.run'],
   contributes: { commands: [{ command: 'zzfault.run', title: 'Fault: Run' }], views: [{ id: 'zzfault.view', title: 'Fault Inspector', location: 'sidebar' }] },
@@ -46,6 +47,9 @@ try {
   assert.ok(listed.value.every(item => item.state === 'inactive'));
   await command('Extensions: Activate Trusted Extension…');
   await page.getByText('Sample Inspector', { exact: false }).waitFor();
+  await page.getByRole('treeitem', { name: 'demo.slxpreview', exact: true }).click();
+  await page.getByRole('tab', { name: 'demo.slxpreview', exact: true }).waitFor();
+  assert.match(await page.locator('.custom-editor').textContent(), /Sample Preview/);
   await command('Extensions: Activate Trusted Extension…');
   await page.getByText('Fault Inspector', { exact: false }).waitFor();
   await command('Fault: Run');
@@ -72,6 +76,8 @@ try {
   await command('Extensions: List Trusted Extensions');
   await page.evaluate(() => window.slx.extensionsList());
   await waitFor(async () => !(await page.locator('#extension-views').textContent()).includes('Fault Inspector'), 'removing a trusted extension releases its view and host');
+  await command('Extensions: Deactivate Active Extension');
+  await waitFor(async () => await page.locator('.custom-editor').count() === 0, 'deactivating sample releases its custom editor tab');
   await fs.rm(faulty, { recursive: true, force: true });
   console.log('PASS: extension hang leaves editing/saving responsive; failed-host cleanup, explicit restart and removal execute in real Electron.');
 } catch (error) {

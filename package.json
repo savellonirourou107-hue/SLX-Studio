@@ -12,6 +12,7 @@
     "desktop": "node scripts/launch-desktop.mjs",
     "test:desktop": "node scripts/test-desktop.mjs",
     "test:extensions": "node scripts/test-extension-desktop.mjs",
+    "test:matlab-desktop": "node scripts/test-matlab-desktop.mjs",
     "test:platform": "node --test scripts/test-platform.mjs scripts/test-package.mjs",
     "measure:desktop": "node scripts/measure-desktop.mjs",
     "check:desktop": "npm run typecheck && npm run test:platform && npm run build && npm run test:desktop && npm run test:extensions",

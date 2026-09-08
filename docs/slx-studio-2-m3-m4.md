@@ -16,12 +16,15 @@ diagnostics, cancellation and `state_lost`/session-reset information. Command
 and script jobs share one worker and execution lock; a second active job is
 rejected instead of racing the MATLAB base workspace.
 
-`Simulink: Apply Validated Model Edit…` accepts the existing versioned edit JSON
-contract. The Python service validates model hash, operation schema and block
-semantics, then calls `apply_model_edit_with_matlab`; it never rewrites private
-SLX ZIP/XML members. The edit is currently an in-place MATLAB batch operation,
-and the static viewport reloads after success. Save As and graphical routing
-remain in the legacy Workbench until their own UI contract is migrated.
+The new model editor exposes parameter edits, validated JSON edits, undo/redo and
+an explicit simulation action. Jobs are asynchronous: MATLAB writes an isolated
+copy, the source SHA-256 is checked again, then a bounded atomic replacement and
+disk-backed history record are committed. A failed history commit rolls back the
+new bytes when the source is still our version. Simulation uses an independent
+`SimulationInput` batch session, reports model hash/solver/release provenance,
+and never modifies the source or shares Command Window variables. Save As and
+graphical routing remain in the legacy Workbench until their own UI contract is
+migrated.
 
 ## M4 extension and packaging workflow
 
@@ -37,6 +40,10 @@ code with the OS user's privileges, not a security sandbox.
 `extensions/sample.hello` contributes a command, sidebar view and `.slxpreview`
 custom editor. The real Electron test activates it explicitly, executes its
 command, observes the view, then deactivates it and verifies the view is gone.
+`extensions/firstparty.matlab` and `extensions/firstparty.simulink` provide
+first-party declarative commands; their actions route through the typed
+renderer/preload services, so trusted Node extension code cannot spawn MATLAB or
+access workspace files directly.
 Workspace-supplied extensions are not scanned or auto-activated.
 
 The Windows packaging path copies the tested Electron runtime into
@@ -58,6 +65,7 @@ python -m ruff check .
 python -m ruff format --check .
 npm run check:desktop
 npm run test:package
+npm run measure:desktop
 $env:SLX_STUDIO_MATLAB = 'E:\\matlab2026\\bin\\matlab.exe'
 python -m pytest tests/test_matlab_r2026a_integration.py tests/test_persistent_matlab_integration.py -o addopts= -ra
 ```
@@ -65,8 +73,9 @@ python -m pytest tests/test_matlab_r2026a_integration.py tests/test_persistent_m
 Pure Python/fake-worker tests prove protocol and lifecycle behavior only. The
 R2026a suite proves the owned MATLAB worker and validated bridge on this host;
 it is not a claim of broad Simulink release parity. Electron tests prove the
-actual packaged/development renderer and IPC boundary. The Windows Action
-proves the Inno installer and clean artifact paths on `windows-latest`.
+actual packaged/development renderer and IPC boundary, including staged model
+edit/undo/redo/simulation and backend-crash cleanup. The Windows Action proves
+the Inno installer and clean artifact paths on `windows-latest`.
 
 ## Deliberate follow-ups
 

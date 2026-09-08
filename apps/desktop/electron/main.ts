@@ -170,6 +170,22 @@ async function start(): Promise<void> {
       cursor: integer(args.cursor, 'viewport cursor', 0, 1_000_000), expected_sha256: args.expectedSha256,
     });
   });
+  handle('slx:modelEditStart', async payload => {
+    const args = object(payload);
+    return backendRequired().request('model/edit/start', { relative: text(args.path), edit: object(args.edit) });
+  });
+  handle('slx:simulationStart', async payload => {
+    const args = object(payload);
+    if (!/^[a-f0-9]{64}$/.test(text(args.expectedSha256, 64))) throw new Error('Invalid model version');
+    return backendRequired().request('model/simulation/start', { relative: text(args.path), expected_sha256: args.expectedSha256, stop_time: text(args.stopTime, 32) });
+  });
+  handle('slx:modelJobStatus', async payload => backendRequired().request('model/job/status', { job_id: text(object(payload).jobId, 64) }));
+  handle('slx:modelJobStop', async payload => backendRequired().request('model/job/stop', { job_id: text(object(payload).jobId, 64) }));
+  handle('slx:modelHistory', async payload => {
+    const args = object(payload);
+    if (!['status', 'undo', 'redo'].includes(String(args.action))) throw new Error('Invalid model history action');
+    return backendRequired().request('model/history', { relative: text(args.path), action: args.action });
+  });
   handle('slx:matlabStatus', async () => backendRequired().request('matlab/status'));
   handle('slx:matlabCommandStart', async payload => {
     const args = object(payload);
@@ -203,6 +219,15 @@ async function start(): Promise<void> {
   handle('slx:matlabRunStop', async payload => {
     const args = object(payload);
     return backendRequired().request('matlab/run/stop', { job_id: text(args.jobId, 64) });
+  });
+  handle('slx:matlabVariableSet', async payload => {
+    const args = object(payload);
+    return backendRequired().request('matlab/variable/set', { name: text(args.name, 63), expression: text(args.expression, 65_536) });
+  });
+  handle('slx:matlabResultPage', async payload => {
+    const args = object(payload);
+    if (args.kind !== 'command' && args.kind !== 'run') throw new Error('Invalid MATLAB job kind');
+    return backendRequired().request('matlab/result/page', { kind: args.kind, job_id: text(args.jobId, 128), variable_cursor: integer(args.variableCursor, 'variable cursor', 0, 1_000_000), figure_cursor: integer(args.figureCursor, 'figure cursor', 0, 1_000_000), event_cursor: integer(args.eventCursor, 'event cursor', 0, 1_000_000) });
   });
   handle('slx:extensionsList', async () => extensions.discover());
   handle('slx:extensionsActivate', async payload => {

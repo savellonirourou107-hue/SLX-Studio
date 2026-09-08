@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .batch_process import run_batch
 from .parser import parse_slx
 from .patching import PatchDocument, load_patch, validate_patch_for_model
 from .slx_path import relative_to_system
@@ -132,6 +133,7 @@ result = struct('ok', false, 'message', '', 'output_model', '', 'simulation', st
 loadedName = '';
 try
     req = jsondecode(fileread(requestPath));
+    if isfield(req, 'work_dir'), addpath(char(req.work_dir)); end
     inputPath = char(req.input_model);
     outputPath = char(req.output_model);
     h = load_system(inputPath);
@@ -169,7 +171,9 @@ try
     if isfield(req, 'simulate') && req.simulate.enabled
         stopTime = char(req.simulate.stop_time);
         started = tic;
-        simOut = sim(loadedName, 'StopTime', stopTime, 'ReturnWorkspaceOutputs', 'on');
+        in = Simulink.SimulationInput(loadedName);
+        in = in.setModelParameter('StopTime', stopTime, 'ReturnWorkspaceOutputs', 'on');
+        simOut = sim(in);
         elapsed = toc(started);
         vars = {{}};
         try
@@ -178,6 +182,10 @@ try
         end
         series = slxstudio_collect_sim_series(simOut);
         result.simulation = struct('ran', true, 'stop_time', stopTime, 'elapsed_seconds', elapsed, 'output_variables', {{vars}}, 'series', series);
+        result.simulation.solver = get_param(loadedName, 'Solver');
+        result.simulation.solver_type = get_param(loadedName, 'SolverType');
+        result.simulation.matlab_release = version('-release');
+        result.simulation.simulink_version = ver('simulink');
     else
         result.simulation = struct('ran', false);
     end
@@ -286,20 +294,14 @@ def _run_matlab_request(
         request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
         runner_path.write_text(_runner_source(request_path, result_path), encoding="utf-8")
         batch = f"run('{_matlab_quote(str(runner_path.resolve()))}')"
-        proc = subprocess.Popen(
+        proc = run_batch(
             [*_matlab_command(status.executable), "-batch", batch],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            timeout=timeout,
+            on_process=on_process,
+            cancelled=cancelled,
+            cwd=request.get("work_dir"),
         )
-        if on_process:
-            on_process(proc)
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            proc.kill()
-            proc.communicate()
-            raise RuntimeError(f"MATLAB bridge timed out after {timeout:g} seconds") from exc
+        stdout, stderr = proc.stdout, proc.stderr
         was_cancelled = bool(cancelled()) if cancelled else False
         if result_path.exists():
             try:
@@ -340,6 +342,7 @@ def apply_patch_with_matlab(
     timeout: float = 300.0,
     on_process: Callable[[subprocess.Popen[str]], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    work_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     source = Path(model_path).resolve()
     output = Path(output_path).resolve()
@@ -353,6 +356,7 @@ def apply_patch_with_matlab(
         "output_model": str(output),
         "patch": document.to_dict(),
         "simulate": {"enabled": bool(simulate), "stop_time": normalized_stop_time},
+        "work_dir": str(work_dir or source.parent),
     }
     return _run_matlab_request(
         request, matlab=matlab, timeout=timeout, on_process=on_process, cancelled=cancelled
@@ -541,6 +545,7 @@ result = struct('ok', false, 'message', '', 'output_model', '');
 loadedName = '';
 try
     req = jsondecode(fileread(requestPath));
+    if isfield(req, 'work_dir'), addpath(char(req.work_dir)); end
     inputPath = char(req.input_model);
     outputPath = char(req.output_model);
     h = load_system(inputPath);
@@ -641,6 +646,9 @@ def apply_model_edit_with_matlab(
     output_path: str | Path | None = None,
     matlab: str | Path | None = None,
     timeout: float = 300.0,
+    on_process: Callable[[subprocess.Popen[str]], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
+    work_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     from .blueprint import BLOCK_CATALOG
     from .model_edit import ModelEditDocument, edit_document_from_dict, validate_edit_document
@@ -667,6 +675,7 @@ def apply_model_edit_with_matlab(
         "input_model": str(source),
         "output_model": str(output),
         "edit": {**document.to_dict(), "operations": operations},
+        "work_dir": str(work_dir or source.parent),
     }
     status = find_matlab(matlab)
     if not status.available or not status.executable:
@@ -679,13 +688,19 @@ def apply_model_edit_with_matlab(
         request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
         runner_path.write_text(_edit_runner_source(request_path, result_path), encoding="utf-8")
         batch = f"run('{_matlab_quote(str(runner_path.resolve()))}')"
-        proc = subprocess.run(
+        proc = run_batch(
             [*_matlab_command(status.executable), "-batch", batch],
-            capture_output=True,
-            text=True,
             timeout=timeout,
-            check=False,
+            on_process=on_process,
+            cancelled=cancelled,
+            cwd=work_dir or source.parent,
         )
+        if cancelled and cancelled():
+            return {
+                "ok": False,
+                "cancelled": True,
+                "message": "Model edit cancelled; staged output discarded",
+            }
         if not result_path.exists():
             detail = (proc.stderr or proc.stdout or "MATLAB exited without an edit result").strip()
             raise RuntimeError(detail)

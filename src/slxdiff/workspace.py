@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-VISIBLE_SUFFIXES = {".m", ".slx"}
+VISIBLE_SUFFIXES = {".m", ".slx", ".slxpreview"}
 TEXT_SUFFIXES = {".m"}
 _IGNORED_DIRS = {
     ".git",

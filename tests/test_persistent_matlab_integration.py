@@ -78,6 +78,12 @@ def test_live_workspace_survives_commands_files_errors_and_clear(session, tmp_pa
     result = session.run_file(script, on_process=processes.append)
     assert result["ok"], result
     assert any(v["name"] == "file_counter" and v["preview"] == "2" for v in result["variables"])
+    script.write_text("saved_version = 17;\nfile_counter = slx_counter();\n", encoding="utf-8")
+    updated = session.run_file(script)
+    assert updated["ok"] and any(
+        v["name"] == "saved_version" and v["preview"] == "17" for v in updated["variables"]
+    ), updated
+    assert any(v["name"] == "file_counter" and v["preview"] == "3" for v in updated["variables"])
     (tmp_path / "section_helper.m").write_text(
         "function x = section_helper(x)\nx = x * 2;\nend\n", encoding="utf-8"
     )
@@ -85,7 +91,7 @@ def test_live_workspace_survives_commands_files_errors_and_clear(session, tmp_pa
         script, code="section_value = section_helper(Kp); section_counter = slx_counter();", start_line=8
     )
     assert section["ok"], section
-    assert any(v["name"] == "section_counter" and v["preview"] == "3" for v in section["variables"])
+    assert any(v["name"] == "section_counter" and v["preview"] == "4" for v in section["variables"])
     bad = session.run_file(script, code="error('slxstudio:Expected', 'test failure');", start_line=8)
     assert not bad["ok"] and not bad["state_lost"], bad
     assert bad["error"]["line"] == 8 and Path(bad["error"]["file"]) == script, bad
