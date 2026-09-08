@@ -1,6 +1,6 @@
 # SLX Studio 2.0 项目目标
 
-状态：**目标已确立；M0b、M1 已验收，M2 平台基础正在独立分支推进，2.0 仍未完成或发布。**
+状态：**目标已确立；M0b、M1、M2 平台基础已在独立分支本地验收，2.0 仍未完成或发布。**
 
 本目标依据维护者于 2026-09-07 提供的架构意见制定。
 实施细节、现有分支依赖和验收门槛见 [迁移总纲](docs/slx-studio-2-migration.md)。
@@ -63,7 +63,7 @@ Electron 将增加基础桌面运行时成本，因此不承诺与当前 WebView
 - [x] M0a：记录目标、当前基线、保留清单、架构决策和验收方案。
 - [x] M0b：审查并整合分散分支中的必要修复，形成可追溯的迁移基线。
 - [x] M1：Electron + Monaco 首个真实编辑闭环，带 Commands / Services 基础。
-- [ ] M2：模块化 Workbench、配置分层与受测的 Python JSON-RPC 适配。
+- [x] M2：模块化 Workbench、配置分层与受测的 Python JSON-RPC 适配（本地验收）。
 - [ ] M3：SLX Custom Editor 与已有 MATLAB 常驻能力接入同一工作台。
 - [ ] M4：独立 Extension Host、稳定的小型 API、首方扩展及可安装 Windows 验收。
 
@@ -92,7 +92,8 @@ Monaco 的语言着色不等于 MATLAB 语义补全；现有 tracepoints 不等�
 
 ## 当前接力点
 
-当前分支已完成 M0b 基线整合和 M1 编辑闭环；证据见
-[M1 验收记录](docs/slx-studio-2-m1-evidence.md)。下一实施项是 **M2 模块化
-Workbench、配置和服务协议**。保留 Python 源码位置和现有启动命令，再逐步迁移
-SLX 与运行面板。
+当前分支已完成 M0b 基线整合、M1 编辑闭环和 M2 平台基础；证据见
+[M1 验收记录](docs/slx-studio-2-m1-evidence.md)与
+[M2 基础验收记录](docs/slx-studio-2-m2-foundation.md)。下一实施项是 **M3
+SLX Custom Editor 与 MATLAB 常驻能力接入**。保留 Python 源码位置和现有启动
+命令，再逐步迁移 SLX 与运行面板。

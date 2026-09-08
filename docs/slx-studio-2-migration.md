@@ -1,6 +1,6 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b integration and M1 editing slice accepted locally; M2 in progress**. Updated: 2026-09-08.
+Status: **M0b, M1 and the M2 platform foundation accepted locally; M3 is next**. Updated: 2026-09-08.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document defines future implementation, not features available in the beta.
 
@@ -253,7 +253,7 @@ real MATLAB coverage.
 Rollback: continue using existing `slx-studio` / `slx-diff studio` commands.
 Keep the new launch command separately named until the migration is accepted.
 
-### M2 — Modular Workbench and Python service transport (foundation in progress)
+### M2 — Modular Workbench and Python service transport (foundation accepted locally)
 
 Deliver: workbench contributions, Settings, Problems/Output panel contracts,
 custom editor registration, JSON-RPC Python adapter and backend supervisor.
@@ -270,21 +270,28 @@ Acceptance:
 - Python CLI and legacy REST regression tests remain green; startup does not
   require a MATLAB installation, full recursive scan, extension host or network.
 
-The current M2 foundation adds `ConfigurationStore` (default < user < workspace,
+The M2 foundation adds `ConfigurationStore` (default < user < workspace,
 workspace-write and sensitive-key guards), persisted user/workspace settings,
 `ViewRegistry`, bounded `OutputService`/`ProblemsService`, and
-`CustomEditorRegistry`. The renderer now uses the registries for the Explorer,
-Output, settings dialog and `.m` text contributions, while all file access
-continues through the typed preload service. Selecting `.slx` now shows
-parser-derived block/connection counts in Output without executing
-MATLAB; structural `model/inspect` and `model/diff` services reuse the Python
-core. A graphical model viewport remains an M3 deliverable.
+`CustomEditorRegistry`. The renderer now uses a `WorkbenchContributionRegistry`
+to activate, deactivate and reload the Explorer, Output and `.m`/`.slx` editor
+contributions; registrations are disposed on deactivation and activation
+failures cannot leak partial state. All file access continues through the typed
+preload service. Selecting `.slx` shows parser-derived block/connection counts
+in Output without executing MATLAB; structural `model/inspect` and `model/diff`
+services reuse the Python core. A graphical model viewport remains an M3
+deliverable.
 The private Python JSON-RPC adapter and backend supervisor are covered by split,
-coalesced, malformed, crash and no-replay tests. The palette now provides an
+coalesced, malformed, crash and no-replay tests. The palette provides an
 explicit backend restart command, including a guard against concurrent process
-transitions. Problems navigation is now covered by the static diagnostics
-panel; the full contribution lifecycle remains open M2 work. Large model RPC responses currently
-fail at the 16 MiB frame limit; paginated model delivery remains outstanding.
+transitions. Problems navigation is covered by the static diagnostics panel.
+Model inspection and diff responses now expose bounded cursors and totals, with
+512-item and 2 MiB page limits, so large results do not need to fit in one 16 MiB
+frame.
+
+M2 is accepted locally on the exact code commit recorded in
+`docs/slx-studio-2-m2-foundation.md`; it has not been merged to `main` or
+packaged as a release. M3 is the next implementation slice.
 
 The foundation's exact test and resource record is
 [docs/slx-studio-2-m2-foundation.md](slx-studio-2-m2-foundation.md).

@@ -1,7 +1,7 @@
 # SLX Studio 2.0 M2 foundation evidence
 
-Status: **foundation implemented; M2 acceptance remains open.** Evidence is
-from commits `f2a9b38` and `1525ab5` on `codex/slx-studio-2-foundation`, Windows 11
+Status: **M2 platform foundation accepted locally; M3 is next.** Evidence is
+from commit `a495be6` (with the preceding foundation commits) on `codex/slx-studio-2-foundation`, Windows 11
 (`10.0.26200`, x64), 2026-09-08 local time.
 
 ## Implemented
@@ -11,11 +11,15 @@ from commits `f2a9b38` and `1525ab5` on `codex/slx-studio-2-foundation`, Windows
   choices cannot be replaced by a project setting.
 - `ViewRegistry`, bounded `OutputService` and `ProblemsService` provide the
   first Workbench contribution contracts with disposable listeners.
+- `WorkbenchContributionRegistry` owns activation, concurrent activation
+  coalescing, deactivation and failure cleanup for built-in contributions.
 - `CustomEditorRegistry` provides extension matching and priority. The desktop
   registers the MATLAB text editor and a read-only `.slx` static-summary
   contribution rather than showing a fake canvas.
 - The typed protocol exposes parser-backed `model/inspect` and `model/diff`
   calls. Static model inspection never starts MATLAB or executes callbacks.
+- Model inspect/diff pages are cursor-based, bounded to 512 items and 2 MiB per
+  result list, and include totals/next cursors for large-model clients.
 - Versioned user/workspace settings are persisted with schema validation, file
   hashes, atomic replacement and a bounded 64 KiB format. The explicit Python
   backend restart command rejects concurrent transitions and never replays work.
@@ -32,11 +36,11 @@ from commits `f2a9b38` and `1525ab5` on `codex/slx-studio-2-foundation`, Windows
 ## Evidence
 
 ```text
-python -m pytest -m "not matlab_integration" -ra   137 passed, 8 deselected
+python -m pytest tests -m "not matlab_integration" -o addopts= -ra  137 passed, 8 deselected
 python -m ruff check .                              All checks passed
-python -m ruff format --check .                     71 files already formatted
+python -m ruff format --check src tests             43 files already formatted
 npm run typecheck                                   passed
-npm run test:platform                               8 passed
+npm run test:platform                               9 passed
 npm run check:desktop                               passed (real Electron)
 ```
 
@@ -46,25 +50,27 @@ restarts the owned Python backend, and repeats the full M1 workflow including
 recovery and 100 disposal cycles. It does not start MATLAB, execute callbacks,
 parse a real user model, or claim M3 behavior.
 
-The exact `npm run measure:desktop` run at this commit reported:
+The exact `npm run measure:desktop` run at commit `a495be6ccf4d59fdf1225087bad674f7cc6d8cfe` reported:
 
 ```text
-median fresh-process → editor accepts input: 646.375 ms
-maximum:                                      680.52 ms
-maximum Electron private memory at ready:    275.1015625 MiB
-owned process-tree private memory at 30 s:    255.33984375 MiB
+median fresh-process → editor accepts input: 676.785 ms
+maximum:                                      734.17 ms
+maximum Electron private memory at ready:    273.890625 MiB
+owned process-tree private memory at 30 s:    253.62109375 MiB
 ```
 
 The raw report is the ignored local file
-`output/measurements/desktop-m2-foundation.json`; it records commit `f2a9b38`, the generated
+`output/measurements/desktop-m2-foundation.json`; it records commit `a495be6`, the generated
 fixture, OS, Node/Electron versions, warm-cache/instrumentation caveats and the
 owned process tree. These are local observations, not release guarantees.
 
-## Still required to close M2
+## M2 closure and rollback
 
-Paginated model responses and a real Workbench contribution lifecycle are
-still outstanding. Existing Python
-CLI/REST and the accepted M1 desktop slice remain the rollback paths.
+The paginated model protocol and real Workbench contribution lifecycle are now
+implemented and covered by Python, platform and Electron tests. Existing
+Python CLI/REST and the accepted M1 desktop slice remain the rollback paths.
+M2 is a local platform acceptance only; it does not claim a graphical Simulink
+viewport, interactive MATLAB debugging or real-model compatibility.
 
 ## Static model service follow-up
 
