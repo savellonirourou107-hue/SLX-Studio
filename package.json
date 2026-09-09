@@ -1,6 +1,6 @@
 {
   "name": "slx-studio-platform",
-  "version": "2.0.0-dev.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Opt-in SLX Studio desktop migration; Python CLI remains independent",
   "engines": {

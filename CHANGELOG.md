@@ -6,6 +6,19 @@
   variable edits, with explicit reset reporting, bounded live output, Windows
   console encoding support and owned process-tree cleanup; batch stays default.
 
+## 2.0.0 - 2026-09-09
+
+- Promoted the Electron + TypeScript + Monaco desktop to the stable 2.0 core.
+- Added a persistent MATLAB Command Window and `.m` execution path with bounded
+  streaming output, cancellation, diagnostics, figures and workspace state.
+- Added a static SLX model viewport, validated parameter edits, undo/redo,
+  conflict-checked atomic saves and isolated SimulationInput runs.
+- Added a trusted, demand-driven extension host with first-party MATLAB and
+  Simulink contributions, portable Windows packaging and CI installer smoke
+  coverage.
+- Revalidated the Python core, Electron package, Windows artifacts and real
+  MATLAB R2026a integration before the release merge.
+
 ## 1.0.0b3 - 2026-09-06
 
 - Added session-scoped, non-pausing MATLAB debug probes for `.m` runs. Click source line numbers to register probes and receive source-line plus visible-workspace snapshots in `debug_events`.

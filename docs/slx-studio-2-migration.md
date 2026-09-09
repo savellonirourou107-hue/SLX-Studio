@@ -1,26 +1,21 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b–M2 accepted locally; M3/M4 accepted on `codex/slx-studio-2-foundation` at `3c97ba4`**. Updated: 2026-09-09.
+Status: **M0b–M4 accepted for the `v2.0.0` release candidate**. Updated: 2026-09-09.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
-This document defines future implementation, not features available in the beta.
+This document records the completed 2.0 migration and its explicit boundaries.
 
 ## 1. Verified starting point
 
 The initial preparation branch was `codex/slx-studio-2-plan`, based on
 `484fd69e96dd9dc4fbcba18d5bdac34836a42453` (`codex/persistent-matlab-session`).
-The accepted integration and M1 branch is now
-`codex/slx-studio-2-foundation`, with the required fixes cherry-picked and no
-existing GitHub PR merged.
-The Python package is still `1.0.0b3`; no version bump or release is part of this charter.
+The accepted integration branch is `codex/slx-studio-2-foundation`; its
+required fixes are consolidated here rather than merged from the historical
+feature PRs one by one.
+The Python package and Electron desktop are versioned `2.0.0` for the release.
 
-On 2026-09-07, GitHub `main` still points to
-`c7d3e6a8c4a98eb159c01deef8c5fa4f9a9cb3da`.
-The persistent-worker change is [PR #20](https://github.com/savellonirourou107-hue/SLX-Studio/pull/20),
-which remains open and targets the debug-foundation branch, not `main`.
-Its [CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/34123616793)
-and [Windows build](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/34123617171)
-completed successfully for `484fd69`. The Windows workflow checks EXE/installer
-creation, not an interactive installed desktop workflow.
+The historical feature PRs remain provenance references; the release branch
+was validated as one coherent candidate. The Windows workflow checks
+EXE/installer creation, not an interactive installed desktop workflow.
 
 | Existing implementation | Disposition |
 | --- | --- |

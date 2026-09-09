@@ -10,21 +10,21 @@
 
 </div>
 
-![SLX Studio v1.0 Beta](docs/assets/slx-studio-v10-beta.png)
+![SLX Studio 2.0](docs/assets/slx-studio-v10-beta.png)
 
 [![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-> **状态：v1.0.0 Beta 3。** 现在是一个轻量 `.m + .slx` 工程 IDE：支持多标签编辑、按 `%%` 节运行、共享 Workspace 且可实时输出的 MATLAB Command Window、变量编辑、可停止的脚本/Command Window/SLX 仿真/参数扫描 Job、非暂停 MATLAB 调试探针、MATLAB Figure、SimulationOutput 曲线、崩溃恢复草稿、工程搜索和 SLX 图形编辑。执行 `.m`、创建/修改/仿真真实 `.slx` 仍需要本机 MATLAB/Simulink。
+> **状态：2.0.0 正式版。** SLX Studio 是轻量的 Model + Code + Simulation-first IDE：提供 Electron/TypeScript/Monaco 编辑、静态 `.slx` 检查、持久 MATLAB Command Window 与脚本 Job、增量输出、诊断、Figure、Workspace 状态、受校验的模型编辑、隔离仿真和可信首方扩展主机。执行 `.m`、创建/修改/仿真真实 `.slx` 仍需要本机 MATLAB/Simulink。
 
 ## 产品定位
 
-**下一代方向（开发中，未发布）：** 将 SLX Studio 逐步升级为面向 MATLAB / Simulink /
-控制工程的 Model + Code + Simulation-first IDE。采用 Electron + TypeScript +
-Monaco 工作台，保留轻量 Python 工程核心并逐步建立扩展机制。
-这不是已经发布的 2.0，也不承诺兼容 VS Code 插件。
+**2.0 产品方向：** 将 SLX Studio 定位为面向 MATLAB / Simulink / 控制工程的
+Model + Code + Simulation-first IDE。采用 Electron + TypeScript + Monaco 工作台，
+保留轻量 Python 工程核心与扩展机制；不承诺兼容 VS Code 插件，也不复制完整
+MATLAB Desktop。
 具体范围见 [2.0 项目目标](SLX_STUDIO_2_GOAL.md) 与
 [迁移顺序、资源预算和验收标准](docs/slx-studio-2-migration.md)。
-独立的 [2.0 开发版桌面](docs/slx-studio-2-desktop.md) 已具备经过真实 Electron
+独立的 [2.0 桌面](docs/slx-studio-2-desktop.md) 已具备经过真实 Electron
 本地验收的 Monaco 编辑闭环；模型与运行能力仍在迁移中。
 
 SLX Studio 不试图复制完整 MATLAB Desktop。它专门解决更轻量、频繁的工程循环：
@@ -43,7 +43,7 @@ SLX Studio 不试图复制完整 MATLAB Desktop。它专门解决更轻量、频
 
 - Python 3.10 或更高版本。
 - 没有 MATLAB 也可以进行静态 `.slx` 查看、Diff 和 Review。
-- 运行 `.m`、创建/编辑真实 `.slx` 以及仿真需要本机 MATLAB + Simulink。本 Beta 主要用 MATLAB R2026a 验证。
+- 运行 `.m`、创建/编辑真实 `.slx` 以及仿真需要本机 MATLAB + Simulink。2.0.0 主要用 MATLAB R2026a 验证。
 - Windows 用户可以直接使用打包后的 EXE，不需要另装 Python；运行脚本和写入真实模型仍需要 MATLAB/Simulink。
 
 ### 从源码安装
@@ -135,7 +135,7 @@ slx-diff diff before.slx after.slx
 
 ## `.m` 文件编辑器
 
-v1.0 Beta 的 `.m` 编辑器已经形成“编辑 → 运行 → 检查 → 再迭代”闭环：
+`.m` 编辑器已经形成“编辑 → 运行 → 检查 → 再迭代”闭环：
 
 - **多文件标签页**与未保存状态提示；
 - 行号与轻量 MATLAB 语法高亮；
@@ -174,7 +174,7 @@ MATLAB run complete           Kp  2.5   double 1x1
 
 没有 MATLAB 时可以轻量解析/查看 `.slx`；检测到本机 MATLAB/Simulink 后，同一画布进入真实编辑模式。
 
-### v1.0 Beta 图形交互
+### 传统 Workbench 图形交互
 
 - 点击 Block，在 Inspector 修改参数；
 - **直接拖动 Block**，保存后真实 Simulink `Position` 同步变化；
@@ -208,7 +208,7 @@ SLX Studio 负责轻量 UI、编辑意图和冲突保护；MATLAB 负责真实 `
 
 ## 运行、图形、扫参与工程导航
 
-v1.0 Beta 加入了一组更像工程 IDE 的高频操作：
+Workbench 加入了一组更像工程 IDE 的高频操作：
 
 ```text
 Ctrl+Enter       运行当前 %% Section / 选中代码
@@ -226,7 +226,7 @@ Ctrl+Shift+S     另存为
 
 ### Command Window 与共享 Workspace
 
-默认 batch 模式下，脚本、Section、Command Window 命令和变量编辑共享临时 Workspace checkpoint。使用 `slx-studio . --matlab-session persistent` 后，它们改为复用同一个独立 MATLAB worker，无需每次保存/恢复 MAT 文件。停止或超时会丢失内存状态；图形化 SLX 仿真和扫描仍是独立 batch 操作。这是可选的开发中功能，不增加运行时依赖；详见[配置、验证与限制](docs/persistent-matlab.md)。
+默认 batch 模式下，脚本、Section、Command Window 命令和变量编辑共享临时 Workspace checkpoint。使用 `slx-studio . --matlab-session persistent` 后，它们改为复用同一个独立 MATLAB worker，无需每次保存/恢复 MAT 文件。停止或超时会丢失内存状态；图形化 SLX 仿真和扫描仍是独立 batch 操作。这是可选的轻量运行模式，不增加运行时依赖；详见[配置、验证与限制](docs/persistent-matlab.md)。
 
 ```text
 运行 controller.m       → Kp = 2.5
@@ -326,7 +326,7 @@ slx-diff git-diff --base main --head HEAD
 
 ## 当前限制
 
-v1.0 Beta 仍然是“小型工程编辑器”，不是 MATLAB 替代品：
+2.0.0 仍然是“小型工程编辑器”，不是 MATLAB 替代品：
 
 - 暂无完整 MATLAB Language Server、可暂停 Debugger、交互式单步/调用栈 UI 和 Profiler；Workbench 已支持轻量非暂停断点探针：点击 `.m` 行号，运行脚本后查看命中的源行及当时可见的 Workspace 变量名；
 - Workspace Variables 已支持显式表达式修改，但还不是完整的表格式数组编辑器；

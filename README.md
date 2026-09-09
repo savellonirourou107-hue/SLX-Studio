@@ -10,21 +10,21 @@
 
 </div>
 
-![SLX Studio v1.0 Beta](docs/assets/slx-studio-v10-beta.png)
+![SLX Studio 2.0](docs/assets/slx-studio-v10-beta.png)
 
 [![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-> **Status: v1.0.0 Beta 3.** SLX Studio is now a lightweight `.m` + `.slx` engineering IDE: multi-tab editing, section execution, a MATLAB Command Window with shared workspace state and live output, editable workspace variables, cancellable script/Command Window/Simulink/sweep jobs, non-pausing MATLAB debug probes, MATLAB figures, SimulationOutput plots, parameter sweeps, crash-recovery drafts, project search and graphical SLX editing. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
+> **Status: 2.0.0 stable.** SLX Studio is a lightweight Model + Code + Simulation-first IDE: Electron/TypeScript/Monaco editing, static `.slx` inspection, persistent MATLAB Command Window and script jobs, bounded live output, diagnostics, figures, workspace state, validated model edits, isolated simulation runs and a trusted first-party extension host. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
 
 ## Why SLX Studio
 
-**Next major direction (in development):** a Model + Code + Simulation-first IDE with
-an Electron/TypeScript/Monaco desktop and an extensible workbench, preserving
-the dependency-light Python engineering core. This is a staged migration, not
-an already available 2.0 release or a promise of VS Code extension compatibility.
+**2.0 direction:** a Model + Code + Simulation-first IDE with an
+Electron/TypeScript/Monaco desktop and an extensible workbench, preserving the
+dependency-light Python engineering core. This is not a promise of VS Code
+extension compatibility or full MATLAB Desktop parity.
 See the [2.0 project goal](SLX_STUDIO_2_GOAL.md) and
 [migration/acceptance plan](docs/slx-studio-2-migration.md).
-The separate [2.0 development desktop](docs/slx-studio-2-desktop.md) now has a
+The [2.0 desktop](docs/slx-studio-2-desktop.md) has a
 locally validated Electron/Monaco editing slice, bounded static SLX model
 viewport, persistent MATLAB Command Window/script jobs, validated in-place
 model edits and a trusted first-party extension host. Exact graphical Simulink
@@ -47,7 +47,7 @@ The same lightweight workbench can move between code and block diagrams without 
 
 - Python 3.10 or newer.
 - MATLAB and Simulink are optional for static `.slx` viewing, diff and review.
-- A local MATLAB installation is required for running `.m`, creating or editing real `.slx` files, and simulation. MATLAB R2026a is the tested release for this beta.
+- A local MATLAB installation is required for running `.m`, creating or editing real `.slx` files, and simulation. MATLAB R2026a is the tested release for 2.0.0.
 - Windows users can run the packaged EXE without installing Python; MATLAB/Simulink is still required for execution and real model writes.
 
 ### Install from a clone
@@ -139,7 +139,7 @@ slx-diff diff before.slx after.slx
 
 ## `.m` editor
 
-The v1.0 Beta script editor supports a lightweight edit → run → inspect → iterate loop:
+The script editor supports a lightweight edit → run → inspect → iterate loop:
 
 - multi-file tabs with dirty-state indicators,
 - line numbers and lightweight MATLAB syntax highlighting,
@@ -178,10 +178,10 @@ Script execution is always user-triggered. Connecting an AI provider does not gr
 
 The legacy Workbench parses a model for lightweight viewing without MATLAB and,
 when explicitly enabled, can use a local MATLAB/Simulink installation for edits.
-The new 2.0 desktop currently keeps its static viewport read-only while that
-runtime path is migrated.
+The 2.0 desktop keeps static model inspection safe and bounded; edits and
+simulation go through the validated MATLAB bridge described below.
 
-### Editor interactions in v1.0 Beta
+### Legacy Workbench editor interactions
 
 - select blocks and edit exposed parameters,
 - **drag blocks** on the canvas and persist their Simulink `Position`,
@@ -217,7 +217,7 @@ The current catalog includes common blocks such as Inport, Outport, Step, Consta
 
 ## Run, plots, sweeps and project navigation
 
-The v1.0 Beta Workbench adds the small IDE conveniences that matter during iteration:
+The Workbench adds the small IDE conveniences that matter during iteration:
 
 ```text
 Ctrl+Enter       run current %% section / selection
@@ -348,7 +348,7 @@ See [`SECURITY.md`](SECURITY.md).
 
 ## Current limitations
 
-v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replacement.
+2.0.0 is intentionally a small engineering editor, not a full MATLAB replacement.
 
 - No full MATLAB language server, pausing debugger, interactive step/stack UI or profiler yet. Workbench `.m` files now support lightweight non-pausing breakpoint probes: click a line number, run the script, and inspect recorded source lines plus visible workspace variable names.
 - Workspace Variables supports explicit expression-based editing, but it is not yet a full spreadsheet-style array editor.

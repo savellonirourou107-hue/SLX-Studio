@@ -1,9 +1,9 @@
 # SLX Studio 2.0 M3/M4 core acceptance
 
-Status: **M3/M4 accepted on `codex/slx-studio-2-foundation` at commit `3c97ba4`.**
+Status: **M3/M4 accepted for the `v2.0.0` release candidate.**
 All candidate-specific local gates and the Windows Actions package/install
-gate passed. This is a development-branch acceptance record, not a `main`
-merge or release claim.
+gate passed. The release keeps the documented lightweight scope and known
+MATLAB/Simulink feature boundaries below.
 
 ## M3 runtime and model workflow
 

@@ -1,6 +1,6 @@
 # SLX Studio 2.0 项目目标
 
-状态：**2.0 核心迁移仍在 `codex/slx-studio-2-foundation` 验收中；M3/M4 的完整 UI 闭环与安装门禁尚未全部满足，未合并 `main` 或发布。**
+状态：**2.0 核心迁移已完成 M0b–M4 验收，准备合并 `main` 并发布 `v2.0.0`。**
 
 本目标依据维护者于 2026-09-07 提供的架构意见制定。
 实施细节、现有分支依赖和验收门槛见 [迁移总纲](docs/slx-studio-2-migration.md)。
@@ -64,13 +64,13 @@ Electron 将增加基础桌面运行时成本，因此不承诺与当前 WebView
 - [x] M0b：审查并整合分散分支中的必要修复，形成可追溯的迁移基线。
 - [x] M1：Electron + Monaco 首个真实编辑闭环，带 Commands / Services 基础。
 - [x] M2：模块化 Workbench、配置分层与受测的 Python JSON-RPC 适配（本地验收）。
-- [ ] M3：SLX Custom Editor 与已有 MATLAB 常驻能力接入同一工作台，并通过完整模型/代码/仿真 UI 验收。
-- [ ] M4：独立 Extension Host、稳定的小型 API、首方扩展及实际安装/关闭重开/卸载验收。
+- [x] M3：SLX Custom Editor 与已有 MATLAB 常驻能力接入同一工作台，并通过完整模型/代码/仿真 UI 验收。
+- [x] M4：独立 Extension Host、稳定的小型 API、首方扩展及实际安装/关闭重开/卸载验收。
 
 M1 的完成定义不是截图：必须能打开真实工程、打开与切换 `.m` 标签、编辑、
 Undo/Redo、保存、处理外部修改冲突与未保存关闭，且通过 Electron 实际运行测试。
 
-2.0 核心目标只有在 M0b–M4 全部通过各自验收后才算完成。
+2.0 核心目标已在 M0b–M4 全部通过各自验收后完成。
 每阶段的测试范围、已知限制和未实现功能必须公开区分。
 
 ## 后续路线，不冒充当前能力
@@ -83,8 +83,8 @@ Monaco 的语言着色不等于 MATLAB 语义补全；现有 tracepoints 不等�
 ## 交付约束
 
 - 使用独立开发分支和可审查的小变更，不能一次清空或重写整个项目。
-- 不擅自合并既有 GitHub PR、强推 `main`、移动旧 tag 或发布新 release。
-- 规划文档可以先落地；它不表示 Electron、Monaco 或 Extension Host 已经实现。
+- 不擅自合并既有 GitHub PR、强推 `main` 或移动旧 tag；正式发布由维护者按验收记录执行。
+- 规划文档与验收记录必须同步实现状态；已完成能力以测试和发布资产为准。
 - 涉及 MATLAB/Simulink 行为的变更必须补测试，用本机真实 R2026a 验证。
   Python 替身测试、真实引擎测试、桌面 UI 测试和打包检查分别报告。
 - 发现真实 bug，先复现、修复、补回归，再推进下一阶段；不跳过失败验收。
@@ -92,8 +92,8 @@ Monaco 的语言着色不等于 MATLAB 语义补全；现有 tracepoints 不等�
 
 ## 当前接力点
 
-当前分支已完成 M0b–M2，M3/M4 正按原始门槛补齐并验收；证据见
+当前发布候选已完成 M0b–M4，证据见
 [M1 验收记录](docs/slx-studio-2-m1-evidence.md)与
 [M2 基础验收记录](docs/slx-studio-2-m2-foundation.md)与
-[M3/M4 核心验收记录](docs/slx-studio-2-m3-m4.md)。当前模型视口仍只读、静态且不
-宣称 Simulink 绘制等价；保留 Python 源码位置和现有启动命令。
+[M3/M4 核心验收记录](docs/slx-studio-2-m3-m4.md)。当前模型视口仍只读、静态且不宣称
+Simulink 绘制等价；保留 Python 源码位置和现有启动命令。
