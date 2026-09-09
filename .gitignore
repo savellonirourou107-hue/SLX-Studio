@@ -5,8 +5,15 @@ __pycache__/
 .venv/
 venv/
 dist/
+release/
+dist-installer/
 build/
 *.egg-info/
 .DS_Store
 .idea/
 .vscode/
+node_modules/
+output/playwright/
+output/measurements/
+test-results/
+*.tsbuildinfo

@@ -45,13 +45,18 @@ It is skipped when neither `SLX_STUDIO_MATLAB` nor `SLX_DIFF_MATLAB` is configur
 
 ## `.m` workflow
 
+For repeated interactive execution, opt in with `--matlab-session persistent`.
+Commands, `.m` runs/sections and variable edits then share one live MATLAB
+workspace. **Stop discards that workspace**; graphical SLX operations remain
+independent batch jobs. See [configuration and limits](persistent-matlab.md).
+
 1. Open a script from the project tree.
 2. Edit and save with `Ctrl/Cmd+S`.
 3. Press `F5` or **Run** to execute the saved file through MATLAB.
 4. Use `Ctrl/Cmd+Enter` for the current `%%` section or selection.
 5. Inspect captured stdout/stderr, structured error locations, Workspace Variables and exported MATLAB Figures.
 
-Scripts, sections, Command Window commands and explicit variable edits share a temporary session checkpoint. The checkpoint is stored outside the project and removed when the Workbench closes. Running `.m` is arbitrary MATLAB code execution by design and is always user-triggered.
+In default batch mode, scripts, sections, Command Window commands and explicit variable edits share a temporary checkpoint outside the project, removed when the Workbench closes. Persistent mode keeps these operations in the same worker's memory instead. Running `.m` is arbitrary MATLAB code execution by design and is always user-triggered.
 
 ## `.slx` workflow
 
@@ -85,7 +90,11 @@ These commands parse bounded SLX ZIP/XML packages and do not execute callbacks, 
 
 ## Parameter sweeps and stopping jobs
 
-Select a supported block, open **Sweep**, enter bounded numeric values such as `1:0.5:5` or `1,2,3`, and start the run. The original parameter is restored after the sweep. `Shift+F5` stops the active script, simulation or sweep job. Command Window requests are synchronous and cannot currently be stopped independently.
+Select a supported block, open **Sweep**, enter bounded numeric values such as `1:0.5:5` or `1,2,3`, and start the run. The original parameter is restored after the sweep. `Shift+F5` stops the active script, simulation, sweep or Command Window job. Command Window output is polled incrementally while MATLAB is running; the legacy synchronous endpoint remains available for compatibility.
+
+## Lightweight MATLAB debug probes
+
+Click a line number in an open `.m` file to register a session-scoped probe. A normal script run inserts a temporary, non-pausing probe before that complete source line and returns `debug_events` with the source file, line number and visible base-workspace variable names. Probes reject comments, blank lines and continuation lines so they cannot silently change MATLAB statement structure. This is intentionally a diagnostic foundation, not a replacement for MATLAB's interactive `dbstop`/`dbstep`/`dbstack` debugger; no-pausing behavior keeps Workbench jobs safe in batch and no-desktop MATLAB sessions.
 
 ## AI and REST API
 

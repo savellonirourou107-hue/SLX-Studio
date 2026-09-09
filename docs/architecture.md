@@ -1,5 +1,10 @@
 # Architecture
 
+This document describes the existing beta implementation. The planned
+Electron/Monaco architecture and migration gates are in the
+[2.0 migration charter](slx-studio-2-migration.md); they have not replaced this
+runtime yet. The [project goal](../SLX_STUDIO_2_GOAL.md) is the refactor scope.
+
 SLX Studio is split into a lightweight editor shell and explicit execution bridges.
 
 ## Workbench
@@ -72,9 +77,21 @@ SLX edits use a session-scoped snapshot history. Before and after each accepted 
 matlab -batch "cd(...); run(...)"
 ```
 
-stdout and stderr are captured into the Workbench Console. The runner also writes a structured result envelope containing safe workspace-variable metadata and MATLAB error file/line information when available.
+stdout and stderr are captured into the Workbench Console. Script, simulation and sweep jobs return their final output, while Command Window jobs additionally expose bounded incremental stdout/stderr deltas through the status endpoint. The runner also writes a structured result envelope containing safe workspace-variable metadata and MATLAB error file/line information when available.
+
+For `.m` runs, the session-scoped breakpoint registry can request non-pausing tracepoints. The runner creates a temporary instrumented copy, records line/workspace-name events, and deletes it with the job directory. It never leaves `dbstop` state in a user MATLAB session and does not claim interactive debugger semantics.
 
 Running `.m` code is arbitrary code execution by definition and is not treated as a sandboxed action.
+
+### Optional persistent worker
+
+`--matlab-session persistent` replaces the Command Window and `.m` execution
+backend with one lazy, private, long-running MATLAB worker. A shared execution
+lock serializes commands, file/section runs and variable edits. Atomic JSON
+requests/results and bounded pipe output reuse the current Job API; live state
+is kept in MATLAB instead of restored from a MAT checkpoint. The batch backend
+remains the default. Graphical SLX bridges remain independent batch operations.
+See [persistent session lifecycle and limitations](persistent-matlab.md).
 
 ## Desktop shell
 

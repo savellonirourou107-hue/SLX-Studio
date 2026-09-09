@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slx-studio"
-version = "1.0.0b2"
+version = "2.0.0"
 description = "Lightweight MATLAB/Simulink engineering IDE for editing and running .m scripts and .slx models."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "SLX Studio contributors" }]
 keywords = ["simulink", "matlab", "slx", "git", "diff", "ai-agents", "model-based-design"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Environment :: Win32 (MS Windows)",
   "License :: OSI Approved :: MIT License",

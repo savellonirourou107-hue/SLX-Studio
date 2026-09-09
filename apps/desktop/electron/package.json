@@ -1,0 +1,7 @@
+{
+  "name": "slx-studio-desktop",
+  "productName": "SLX Studio",
+  "version": "2.0.0",
+  "private": true,
+  "main": "electron/main.cjs"
+}

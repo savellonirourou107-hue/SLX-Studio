@@ -10,13 +10,26 @@
 
 </div>
 
-![SLX Studio v1.0 Beta](docs/assets/slx-studio-v10-beta.png)
+![SLX Studio 2.0](docs/assets/slx-studio-v10-beta.png)
 
 [![CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/savellonirourou107-hue/SLX-Studio/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-> **Status: v1.0.0 Beta 2.** SLX Studio is now a lightweight `.m` + `.slx` engineering IDE: multi-tab editing, section execution, a MATLAB Command Window with shared workspace state, editable workspace variables, cancellable script/Simulink/sweep jobs, MATLAB figures, SimulationOutput plots, parameter sweeps, crash-recovery drafts, project search and graphical SLX editing. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
+> **Status: 2.0.0 stable.** SLX Studio is a lightweight Model + Code + Simulation-first IDE: Electron/TypeScript/Monaco editing, static `.slx` inspection, persistent MATLAB Command Window and script jobs, bounded live output, diagnostics, figures, workspace state, validated model edits, isolated simulation runs and a trusted first-party extension host. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
 
 ## Why SLX Studio
+
+**2.0 direction:** a Model + Code + Simulation-first IDE with an
+Electron/TypeScript/Monaco desktop and an extensible workbench, preserving the
+dependency-light Python engineering core. This is not a promise of VS Code
+extension compatibility or full MATLAB Desktop parity.
+See the [2.0 project goal](SLX_STUDIO_2_GOAL.md) and
+[migration/acceptance plan](docs/slx-studio-2-migration.md).
+The [2.0 desktop](docs/slx-studio-2-desktop.md) has a
+locally validated Electron/Monaco editing slice, bounded static SLX model
+viewport, persistent MATLAB Command Window/script jobs, validated in-place
+model edits and a trusted first-party extension host. Exact graphical Simulink
+editing remains in the legacy Workbench; see the
+[M3/M4 core acceptance](docs/slx-studio-2-m3-m4.md).
 
 SLX Studio is not trying to reproduce the full MATLAB desktop. It targets the small, frequent loop around a MATLAB/Simulink project:
 
@@ -34,7 +47,7 @@ The same lightweight workbench can move between code and block diagrams without 
 
 - Python 3.10 or newer.
 - MATLAB and Simulink are optional for static `.slx` viewing, diff and review.
-- A local MATLAB installation is required for running `.m`, creating or editing real `.slx` files, and simulation. MATLAB R2026a is the tested release for this beta.
+- A local MATLAB installation is required for running `.m`, creating or editing real `.slx` files, and simulation. MATLAB R2026a is the tested release for 2.0.0.
 - Windows users can run the packaged EXE without installing Python; MATLAB/Simulink is still required for execution and real model writes.
 
 ### Install from a clone
@@ -83,7 +96,7 @@ Without MATLAB, `inspect`, `diff`, `review`, `context`, `view` and `html` remain
 4. Open an `.slx` model. Drag blocks, edit exposed parameters, or connect an output port to an input port. Click **Apply in MATLAB** to write a real model.
 5. Run a simulation or open **Sweep**. Use `Shift+F5` to stop a running script, simulation or sweep.
 
-The Workbench keeps a session-scoped MATLAB workspace checkpoint. It is temporary, project-external and removed when the Workbench closes.
+By default, the Workbench keeps a temporary, project-external MATLAB workspace checkpoint, removed on close. Opt in to a live shared worker with `--matlab-session persistent`; see the [session guide](docs/persistent-matlab.md).
 
 ## CLI command reference
 
@@ -126,7 +139,7 @@ slx-diff diff before.slx after.slx
 
 ## `.m` editor
 
-The v1.0 Beta script editor supports a lightweight edit → run → inspect → iterate loop:
+The script editor supports a lightweight edit → run → inspect → iterate loop:
 
 - multi-file tabs with dirty-state indicators,
 - line numbers and lightweight MATLAB syntax highlighting,
@@ -135,7 +148,7 @@ The v1.0 Beta script editor supports a lightweight edit → run → inspect → 
 - real cancellable background MATLAB jobs for `.m` execution,
 - editor undo/redo and structured MATLAB error-line navigation,
 - captured stdout/stderr plus a **Workspace Variables** panel,
-- a MATLAB-style **Command Window** (`>>`) whose variables persist across background runs through a temporary session checkpoint,
+- a MATLAB-style **Command Window** (`>>`) with checkpoint-backed batch execution or an optional live persistent worker,
 - double-click editing for workspace variables using explicit MATLAB expressions,
 - autosaved recovery drafts for dirty `.m` tabs, stored outside the project tree,
 - embedded MATLAB Figure previews exported after execution,
@@ -163,9 +176,12 @@ Script execution is always user-triggered. Connecting an AI provider does not gr
 
 ![SLX Studio graphical editor](docs/assets/slx-studio-v08-slx-editor.png)
 
-SLX Studio parses a model for lightweight viewing without MATLAB. When a local MATLAB/Simulink installation is available, the same canvas becomes an editor.
+The legacy Workbench parses a model for lightweight viewing without MATLAB and,
+when explicitly enabled, can use a local MATLAB/Simulink installation for edits.
+The 2.0 desktop keeps static model inspection safe and bounded; edits and
+simulation go through the validated MATLAB bridge described below.
 
-### Editor interactions in v1.0 Beta
+### Legacy Workbench editor interactions
 
 - select blocks and edit exposed parameters,
 - **drag blocks** on the canvas and persist their Simulink `Position`,
@@ -201,7 +217,7 @@ The current catalog includes common blocks such as Inport, Outport, Step, Consta
 
 ## Run, plots, sweeps and project navigation
 
-The v1.0 Beta Workbench adds the small IDE conveniences that matter during iteration:
+The Workbench adds the small IDE conveniences that matter during iteration:
 
 ```text
 Ctrl+Enter       run current %% section / selection
@@ -215,9 +231,11 @@ Ctrl+Shift+S     Save As
 
 MATLAB Figures are captured after script execution and shown beside Workspace Variables. Supported numeric Simulink `timeseries` and `Simulink.SimulationData.Dataset` outputs are reduced to bounded plot payloads and rendered locally.
 
+The project tree uses a small session-scoped background index for visible `.m` and `.slx` files. The Workbench can render immediately while the first walk completes, refreshes the index after file writes, and the toolbar **Refresh** button forces a rebuild. Project search reuses the same index and lazily caches searchable model metadata, so repeated queries do not reparse unchanged `.slx` files. No database or extra runtime dependency is added.
+
 ### Command Window and shared workspace
 
-Scripts, sections, Command Window commands and variable edits share a session-scoped MATLAB workspace checkpoint. SLX Studio does **not** keep a heavyweight MATLAB desktop session embedded; instead, each explicit run inherits the checkpoint and writes the resulting user variables back. The checkpoint lives in a temporary session directory and is discarded when the Workbench closes.
+Scripts, sections, Command Window commands and variable edits share a temporary workspace checkpoint in the default batch mode. With `slx-studio . --matlab-session persistent`, they instead share one private, long-running MATLAB worker without per-command MAT save/load. Stop or timeout discards its in-memory state; graphical SLX simulation/sweep jobs remain independent batch operations. This opt-in development feature adds no runtime dependency. See [setup, limitations and validation](docs/persistent-matlab.md).
 
 ```text
 Run controller.m       -> Kp = 2.5
@@ -330,12 +348,12 @@ See [`SECURITY.md`](SECURITY.md).
 
 ## Current limitations
 
-v1.0 Beta is intentionally a small engineering editor, not a full MATLAB replacement.
+2.0.0 is intentionally a small engineering editor, not a full MATLAB replacement.
 
-- No full MATLAB language server, debugger, breakpoints or profiler yet.
+- No full MATLAB language server, pausing debugger, interactive step/stack UI or profiler yet. Workbench `.m` files now support lightweight non-pausing breakpoint probes: click a line number, run the script, and inspect recorded source lines plus visible workspace variable names.
 - Workspace Variables supports explicit expression-based editing, but it is not yet a full spreadsheet-style array editor.
-- Script, SLX simulation and parameter-sweep jobs are cancellable; Command Window commands are currently synchronous requests and are not independently stoppable.
-- MATLAB stdout/stderr is collected when a job completes rather than streamed live.
+- Script, SLX simulation, parameter-sweep and Command Window jobs are cancellable. Command Window output is exposed through a lightweight incremental polling API while MATLAB is running.
+- The legacy `/api/v1/workspace/command` endpoint remains synchronous for compatibility; the Workbench uses `/command/start`, `/command/status` and `/command/stop` for live console interaction.
 - SLX editing now renders explicit ports found in the model, but dynamic/conditional port semantics and advanced Simulink object types need broader adapters.
 - Static parsing reports `metadata.unsupported_features` for Stateflow, masks, variants, library links, model references, bus/data-type metadata, dynamic/conditional ports and BlockTypes outside the conservative catalog. Such structures remain visible for review, but are not claimed to be fully editable or semantically complete.
 - When a structure is reported as unsupported or only partially parsed, return to MATLAB/Simulink for authoritative parameter, port, compile, simulation and save validation. Static graph output is never a stability, safety or robustness proof.
@@ -361,7 +379,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-The v1.0 Beta regression suite currently contains 85 collected tests (including one opt-in MATLAB integration test; it is skipped unless an explicit MATLAB path is configured). The Python suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, section execution, cancellable MATLAB jobs, shared command-session checkpoints, workspace recovery, parameter sweeps and metrics, Figure payloads, SimulationOutput series extraction, project search, Save As, structured model edits/history, multi-port UI contracts, Workbench HTTP APIs, the read-only `doctor` diagnostics and compatibility-matrix schema.
+Run `python -m pytest -ra` for current test totals; licensed MATLAB tests are opt-in and Windows process-tree tests are platform-specific. The suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, project search, history, UI contracts and diagnostics.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 

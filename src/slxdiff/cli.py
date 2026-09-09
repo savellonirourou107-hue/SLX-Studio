@@ -84,6 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file"
     )
     studio_cmd.add_argument("--matlab", help="MATLAB executable path; defaults to PATH or SLX_DIFF_MATLAB")
+    studio_cmd.add_argument("--matlab-session", choices=("batch", "persistent"), default="batch")
     studio_cmd.add_argument("--host", default="127.0.0.1", help="Local bind address")
     studio_cmd.add_argument("--port", type=int, default=0, help="Local port; 0 chooses a free port")
     studio_cmd.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
@@ -94,6 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "path", type=Path, nargs="?", default=Path("."), help="Workspace folder, .m file, or .slx file"
     )
     serve_cmd.add_argument("--matlab", help="MATLAB executable path")
+    serve_cmd.add_argument("--matlab-session", choices=("batch", "persistent"), default="batch")
     serve_cmd.add_argument("--host", default="127.0.0.1")
     serve_cmd.add_argument("--port", type=int, default=8765)
     serve_cmd.add_argument("--token", help="Explicit API token; random by default")
@@ -319,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             run_workbench_server(
                 path=args.path,
                 matlab=args.matlab,
+                matlab_session=args.matlab_session,
                 host=args.host,
                 port=args.port,
                 open_browser=(args.command == "studio" and not getattr(args, "no_browser", False)),
@@ -382,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.fail_on_change and result.changed:
             return 1
         return 0
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (FileNotFoundError, TypeError, ValueError, RuntimeError) as exc:
         print(f"slx-diff: error: {exc}", file=sys.stderr)
         return 2
 

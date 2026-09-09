@@ -1,0 +1,12 @@
+{
+  "id": "sample.hello",
+  "apiVersion": 1,
+  "version": "1.0.0",
+  "main": "extension.mjs",
+  "activationEvents": ["onCommand:sample.hello"],
+  "contributes": {
+    "commands": [{ "command": "sample.hello", "title": "Sample: Hello SLX Studio" }],
+    "views": [{ "id": "sample.hello.view", "title": "Sample Inspector", "location": "sidebar" }],
+    "editors": [{ "id": "sample.hello.editor", "label": "Sample Preview", "extensions": [".slxpreview"] }]
+  }
+}

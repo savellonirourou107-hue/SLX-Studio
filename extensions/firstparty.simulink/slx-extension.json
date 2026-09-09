@@ -1,0 +1,10 @@
+{
+  "id": "firstparty.simulink", "apiVersion": 1, "version": "2.0.0", "main": "extension.mjs",
+  "activationEvents": ["onCommand:firstparty.simulink.edit", "onCommand:firstparty.simulink.simulate"],
+  "contributes": {
+    "commands": [
+      { "command": "firstparty.simulink.edit", "title": "Simulink: Edit Active Model (Extension)" },
+      { "command": "firstparty.simulink.simulate", "title": "Simulink: Simulate Active Model (Extension)" }
+    ], "views": [{ "id": "firstparty.simulink.results", "title": "Simulink Results", "location": "panel" }], "editors": []
+  }
+}

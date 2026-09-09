@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .debugger import BreakpointRegistry
 from .history import ModelHistory
 from .matlab_bridge import (
     apply_model_edit_with_matlab,
@@ -19,9 +20,10 @@ from .matlab_bridge import (
 )
 from .model_edit import edit_document_from_dict
 from .mrunner import MatlabRunManager, run_m_file
-from .msession import MatlabCommandSession
+from .msession import MatlabCommandManager, MatlabCommandSession
 from .parser import parse_slx
 from .patching import patch_from_dict
+from .persistent import PersistentMatlabSession
 from .server import StudioHandler, StudioServer
 from .simrunner import SimulationRunManager
 from .state import StudioState
@@ -29,12 +31,11 @@ from .studio import model_payload, render_studio_html
 from .sweep import SweepRunManager
 from .workbench import render_workbench_html
 from .workspace import (
+    WorkspaceIndex,
     copy_workspace_file,
     create_m_file,
-    list_workspace,
     read_text_file,
     resolve_workspace_path,
-    search_workspace,
     workspace_root,
     write_text_file,
 )
@@ -57,8 +58,19 @@ def _restore_model_snapshot(snapshot: Path, target: Path) -> None:
 
 class WorkbenchServer(StudioServer):
     def __init__(
-        self, address, handler, *, root: Path, initial_file: str | None, matlab: str | None, token: str
+        self,
+        address,
+        handler,
+        *,
+        root: Path,
+        initial_file: str | None,
+        matlab: str | None,
+        token: str,
+        matlab_session: str = "batch",
     ):
+        if matlab_session not in {"batch", "persistent"}:
+            raise ValueError("matlab_session must be batch or persistent")
+        self.matlab_session = matlab_session
         initial_model = None
         if initial_file and initial_file.lower().endswith(".slx"):
             initial_model = resolve_workspace_path(root, initial_file)
@@ -78,21 +90,30 @@ class WorkbenchServer(StudioServer):
         self.session_temp = tempfile.TemporaryDirectory(prefix="slx-studio-session-")
         self.session_root = Path(self.session_temp.name)
         self.workspace_checkpoint = self.session_root / "workspace.mat"
-        self.run_manager = MatlabRunManager(
-            matlab=matlab, workspace_file=self.workspace_checkpoint, execution_lock=self.execution_lock
-        )
-        self.command_session = MatlabCommandSession(
+        session_class = PersistentMatlabSession if matlab_session == "persistent" else MatlabCommandSession
+        session_options = {"temp_parent": self.session_root} if matlab_session == "persistent" else {}
+        self.command_session = session_class(
             work_dir=root,
             workspace_file=self.workspace_checkpoint,
             matlab=matlab,
             execution_lock=self.execution_lock,
+            **session_options,
         )
+        self.run_manager = MatlabRunManager(
+            matlab=matlab,
+            workspace_file=self.workspace_checkpoint,
+            execution_lock=self.execution_lock,
+            run_executor=self.command_session.run_file if matlab_session == "persistent" else None,
+        )
+        self.command_manager = MatlabCommandManager(self.command_session)
+        self.breakpoints = BreakpointRegistry(root)
         self.sweep_manager = SweepRunManager(matlab=matlab, execution_lock=self.execution_lock)
         self.simulation_manager = SimulationRunManager(
             matlab=matlab, history=self.model_history, execution_lock=self.execution_lock
         )
         self.state = StudioState()
         self.state.mark_recent(root)
+        self.workspace_index = WorkspaceIndex(root)
         # Parsing an SLX package is intentionally strict and can be expensive
         # for large models.  Keep a small stat-keyed cache for the live browser
         # session; writes explicitly invalidate it, while external edits are
@@ -126,6 +147,8 @@ class WorkbenchServer(StudioServer):
     def server_close(self) -> None:
         try:
             self.run_manager.stop_all()
+            self.command_manager.stop_all()
+            self.command_session.close()
             self.sweep_manager.stop_all()
             self.simulation_manager.stop_all()
             self.model_history.close()
@@ -149,6 +172,7 @@ class WorkbenchHandler(StudioHandler):
                     "root": str(self.server.workspace_root),
                     "initial_file": self.server.initial_file,
                     "api_version": "v1",
+                    "matlab_session": self.server.matlab_session,
                 }
             )
             self._send(HTTPStatus.OK, html.encode("utf-8"), "text/html; charset=utf-8")
@@ -181,11 +205,23 @@ class WorkbenchHandler(StudioHandler):
                 self._send(HTTPStatus.BAD_REQUEST, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
             return
 
+        if parsed.path == "/api/v1/workspace/session":
+            if not self._authorized():
+                self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
+                return
+            session = self.server.command_session
+            status = (
+                session.status() if isinstance(session, PersistentMatlabSession) else {"backend": "batch"}
+            )
+            self._send_json(HTTPStatus.OK, {"ok": True, **status})
+            return
+
         if parsed.path == "/api/v1/workspace":
             if not self._authorized():
                 self._send_json(HTTPStatus.FORBIDDEN, {"ok": False, "error": "forbidden"})
                 return
-            payload = list_workspace(self.server.workspace_root)
+            force = (parse_qs(parsed.query).get("refresh") or [""])[0].lower() in {"1", "true", "yes"}
+            payload = self.server.workspace_index.snapshot(force=force)
             payload["ok"] = True
             self._send_json(HTTPStatus.OK, payload)
             return
@@ -214,7 +250,11 @@ class WorkbenchHandler(StudioHandler):
             "/api/v1/workspace/run/start",
             "/api/v1/workspace/run/status",
             "/api/v1/workspace/run/stop",
+            "/api/v1/workspace/debug/breakpoints",
             "/api/v1/workspace/command",
+            "/api/v1/workspace/command/start",
+            "/api/v1/workspace/command/status",
+            "/api/v1/workspace/command/stop",
             "/api/v1/workspace/variables/set",
             "/api/v1/workspace/recovery/save",
             "/api/v1/workspace/recovery/clear",
@@ -271,6 +311,7 @@ class WorkbenchHandler(StudioHandler):
                 if not isinstance(content, str):
                     raise ValueError("content must be a string")
                 path = write_text_file(self.server.workspace_root, relative, content)
+                self.server.workspace_index.invalidate()
                 self.server.state.clear_recovery(self.server.workspace_root, self._relative(path))
                 self._send_json(
                     HTTPStatus.OK,
@@ -297,6 +338,7 @@ class WorkbenchHandler(StudioHandler):
                     path = write_text_file(self.server.workspace_root, destination, body["content"])
                 else:
                     path = copy_workspace_file(self.server.workspace_root, relative, destination)
+                self.server.workspace_index.invalidate()
                 self._send_json(
                     HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
                 )
@@ -304,12 +346,13 @@ class WorkbenchHandler(StudioHandler):
 
             if parsed.path == "/api/v1/workspace/search":
                 query = self._string_field(body, "query", required=True)
-                payload = search_workspace(self.server.workspace_root, query)
+                payload = self.server.workspace_index.search(query)
                 self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                 return
 
             if parsed.path == "/api/v1/workspace/new-m":
                 path = create_m_file(self.server.workspace_root, relative)
+                self.server.workspace_index.invalidate()
                 self._send_json(
                     HTTPStatus.OK, {"ok": True, "path": str(path), "relative_path": self._relative(path)}
                 )
@@ -319,6 +362,7 @@ class WorkbenchHandler(StudioHandler):
                 path = resolve_workspace_path(self.server.workspace_root, relative, must_exist=False)
                 with self.server.execution_lock:
                     result = create_empty_model_with_matlab(path, matlab=self.server.matlab)
+                self.server.workspace_index.invalidate()
                 result.update({"relative_path": self._relative(path)})
                 self._send_json(HTTPStatus.OK, result)
                 return
@@ -326,9 +370,12 @@ class WorkbenchHandler(StudioHandler):
             if parsed.path == "/api/v1/workspace/run-m":
                 path = resolve_workspace_path(self.server.workspace_root, relative)
                 with self.server.execution_lock:
-                    result = run_m_file(
-                        path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint
-                    )
+                    if isinstance(self.server.command_session, PersistentMatlabSession):
+                        result = self.server.command_session.run_file(path)
+                    else:
+                        result = run_m_file(
+                            path, matlab=self.server.matlab, workspace_file=self.server.workspace_checkpoint
+                        )
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
                 return
 
@@ -345,8 +392,27 @@ class WorkbenchHandler(StudioHandler):
                 ):
                     raise ValueError("start_line must be a positive integer")
                 start_line = raw_start_line
-                job = self.server.run_manager.start(path, code=code, start_line=start_line)
+                tracepoints = [] if code is not None else self.server.breakpoints.lines_for(path)
+                job = self.server.run_manager.start(
+                    path, code=code, start_line=start_line, tracepoints=tracepoints
+                )
                 self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/debug/breakpoints":
+                action = self._string_field(body, "action", default="list").strip().lower()
+                if action == "set":
+                    payload = self.server.breakpoints.set(relative, body.get("line"))
+                elif action == "clear":
+                    line = body.get("line")
+                    if line is not None and not isinstance(line, int):
+                        raise ValueError("breakpoint line must be an integer")
+                    payload = self.server.breakpoints.clear(relative, line)
+                elif action == "list":
+                    payload = self.server.breakpoints.list(relative or None)
+                else:
+                    raise ValueError("debug breakpoint action must be set, clear or list")
+                self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                 return
 
             if parsed.path == "/api/v1/workspace/run/status":
@@ -369,6 +435,41 @@ class WorkbenchHandler(StudioHandler):
                 code = self._string_field(body, "code", required=True)
                 result = self.server.command_session.execute(code)
                 self._send_json(HTTPStatus.OK, {"ok": True, "run": result})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/start":
+                code = self._string_field(body, "code", required=True)
+                job = self.server.command_manager.start(code)
+                self._send_json(HTTPStatus.ACCEPTED, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/status":
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                stdout_offset = body.get("stdout_offset", 0)
+                stderr_offset = body.get("stderr_offset", 0)
+                if (
+                    isinstance(stdout_offset, bool)
+                    or not isinstance(stdout_offset, int)
+                    or stdout_offset < 0
+                    or isinstance(stderr_offset, bool)
+                    or not isinstance(stderr_offset, int)
+                    or stderr_offset < 0
+                ):
+                    raise ValueError("output offsets must be non-negative integers")
+                job = self.server.command_manager.status(
+                    job_id, stdout_offset=stdout_offset, stderr_offset=stderr_offset
+                )
+                self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
+                return
+
+            if parsed.path == "/api/v1/workspace/command/stop":
+                job_id = self._string_field(body, "job_id", required=True).strip()
+                if not job_id:
+                    raise ValueError("job_id is required")
+                job = self.server.command_manager.stop(job_id)
+                self._send_json(HTTPStatus.OK, {"ok": True, "job": job})
                 return
 
             if parsed.path == "/api/v1/workspace/variables/set":
@@ -484,6 +585,7 @@ class WorkbenchHandler(StudioHandler):
                         history = self.server.model_history.redo(path)
                         action = "redo"
                     self.server.invalidate_model(path)
+                    self.server.workspace_index.invalidate()
                     refreshed = self.server.load_model(path)
                 self.server.model_path = path
                 self.server.output_path = path
@@ -536,6 +638,7 @@ class WorkbenchHandler(StudioHandler):
                             before_snapshot = None
                             history = self.server.model_history.status(path)
                         self.server.invalidate_model(path)
+                        self.server.workspace_index.invalidate()
                         refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:
@@ -570,6 +673,7 @@ class WorkbenchHandler(StudioHandler):
                         history = self.server.model_history.record(path, before_snapshot)
                         before_snapshot = None
                         self.server.invalidate_model(path)
+                        self.server.workspace_index.invalidate()
                         refreshed = self.server.load_model(path)
                 except Exception:
                     if before_snapshot is not None:
@@ -599,6 +703,7 @@ def serve_workbench(
     path: str | Path | None = None,
     *,
     matlab: str | None = None,
+    matlab_session: str = "batch",
     host: str = "127.0.0.1",
     port: int = 0,
     open_browser: bool = True,
@@ -609,7 +714,13 @@ def serve_workbench(
     root, initial = workspace_root(path)
     session_token = token or secrets.token_urlsafe(24)
     server = WorkbenchServer(
-        (host, port), WorkbenchHandler, root=root, initial_file=initial, matlab=matlab, token=session_token
+        (host, port),
+        WorkbenchHandler,
+        root=root,
+        initial_file=initial,
+        matlab=matlab,
+        token=session_token,
+        matlab_session=matlab_session,
     )
     actual_host, actual_port = server.server_address[:2]
     display_host = f"[{actual_host}]" if ":" in actual_host else actual_host

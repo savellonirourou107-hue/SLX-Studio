@@ -10,6 +10,40 @@ permissions:
   contents: read
 
 jobs:
+  electron-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install desktop dependencies
+        run: npm ci
+      - name: Platform and packaging regressions
+        run: npm run check:desktop
+      - name: Build and package Electron desktop
+        run: npm run package:electron
+      - name: Launch, save and reopen portable Electron package
+        run: npm run test:package
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build Electron installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\SLXStudio2.iss'
+      - name: Install, launch, reopen and uninstall Electron desktop
+        run: npm run test:installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SLXStudio-2-Windows-x64
+          path: |
+            release/SLXStudio-win32-x64
+            dist-installer/SLX-Studio-2-Setup-x64.exe
+
   windows-exe:
     runs-on: windows-latest
     steps:

@@ -1,5 +1,24 @@
 # Roadmap
 
+## Current direction — SLX Studio 2.0 (planned)
+
+The next major direction is a **Model + Code + Simulation-first IDE** built on
+an Electron/TypeScript/Monaco desktop, retaining the Python engineering core.
+See the [project goal](SLX_STUDIO_2_GOAL.md) and
+[migration charter](docs/slx-studio-2-migration.md) for scope, resource budgets,
+branch dependencies and executable acceptance criteria. This is not a released
+2.0 implementation; the beta below remains the compatibility baseline.
+
+- [x] M0a: record the goal, verified starting point and migration gates
+- [ ] M0b: review/integrate required open-branch fixes and validate the combined baseline
+- [ ] M1: real Electron + Monaco file-edit/save workflow with Commands and Services
+- [ ] M2: modular Workbench, configuration and Python JSON-RPC adapter
+- [ ] M3: SLX Custom Editor and shared MATLAB/model/simulation workflow
+- [ ] M4: lazy Extension Host, first-party extensions and Windows install acceptance
+
+Full LSP, a pausing debugger/profiler, remote execution, Marketplace and
+additional Terminal/Control/Git/AI extensions follow the core migration.
+
 ## v0.8 — Make it feel like a small real IDE ✅
 
 - [x] Multi-file `.m` / `.slx` tabs
@@ -43,12 +62,25 @@
 - [x] Windows EXE + installer workflow with opt-in `.m` / `.slx` file associations (CI smoke-tested)
 - [x] Compatibility matrix scaffold with a real R2026a core-bridge record
 - [x] Model overview metadata, large-subsystem rendering guard and Workbench parse cache
+- [x] Asynchronous session-scoped workspace index for large-project navigation
 - [ ] Compatibility test matrix across supported MATLAB releases
 - [x] Crash recovery / autosave
 - [ ] More Simulink libraries and multi-port semantics
 - [ ] Subsystem create/open/edit workflow
 - [ ] Model references and library links
 - [ ] Stable plugin interfaces for block catalogs, AI providers and analysis tools
+
+## Engineering iteration foundations
+
+- [x] Opt-in persistent MATLAB worker for Command Window, `.m` and variable edits
+- [ ] Extend the persistent backend to graphical SLX simulation and sweeps
+- [ ] Recovery/ownership after unexpected host process termination
+- [ ] Modular frontend separation (carried into the 2.0 TypeScript migration)
+- [ ] Packaged Windows UI end-to-end acceptance (beyond EXE artifact checks)
+- [ ] Control Lab built around explicit experiments and control metrics
+
+The initial persistent mode and its tested boundaries are described in
+[the session guide](docs/persistent-matlab.md).
 
 ## Optional AI layer
 

@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +42,20 @@ result = slxstudio_execute_command('{figure_q}', '{workspace_q}', '{work_q}', {c
 fid = fopen('{result_q}', 'w');
 if fid ~= -1, fprintf(fid, '%s', jsonencode(result)); fclose(fid); end
 if ~result.ok, error('slxstudio:CommandFailed', '%s', char(result.error.message)); end
+""" + _command_helpers_source()
 
+
+def _command_helpers_source() -> str:
+    """Shared execution/inspection code; an empty checkpoint keeps live state."""
+    return """
 function result = slxstudio_execute_command(figureDir, workspaceFile, workDir, commandText)
 result = struct('ok', false, 'stdout', '', 'variables', [], 'figures', [], 'error', struct());
 try
-    cd(workDir);
-    slxstudio_restore_base_workspace(workspaceFile);
-    result.stdout = evalc('evalin(''base'', commandText)');
+    if ~isempty(workDir), cd(workDir); end
+    if ~isempty(workspaceFile), slxstudio_restore_base_workspace(workspaceFile); end
+    % Execute directly so MATLAB flushes command output while the process runs.
+    % The Python runner captures this stream and exposes it through the command Job API.
+    evalin('base', commandText);
     result.ok = true;
 catch ME
     result.ok = false;
@@ -60,7 +69,7 @@ catch ME
     end
 end
 raw = evalin('base', 'whos');
-vars = struct('name', {{}}, 'class', {{}}, 'size', {{}}, 'bytes', {{}}, 'preview', {{}});
+vars = struct('name', {}, 'class', {}, 'size', {}, 'bytes', {}, 'preview', {});
 idx = 0;
 for k = 1:numel(raw)
     if ~isvarname(raw(k).name), continue; end
@@ -84,7 +93,7 @@ result.variables = vars;
 try
     if ~exist(figureDir, 'dir'), mkdir(figureDir); end
     handles = flipud(findall(groot, 'Type', 'figure'));
-    figs = struct('name', {{}}, 'path', {{}});
+    figs = struct('name', {}, 'path', {});
     for k = 1:min(numel(handles), 6)
         filePath = fullfile(figureDir, sprintf('figure-%02d.png', k));
         try
@@ -99,7 +108,9 @@ try
     result.figures = figs;
 catch
 end
-try, slxstudio_save_base_workspace(workspaceFile, raw); catch, end
+if ~isempty(workspaceFile)
+    try, slxstudio_save_base_workspace(workspaceFile, raw); catch, end
+end
 end
 
 function slxstudio_restore_base_workspace(workspaceFile)
@@ -109,7 +120,7 @@ try
     state = load(workspaceFile);
     names = fieldnames(state);
     for k = 1:numel(names)
-        name = names{{k}};
+        name = names{k};
         if isvarname(name), assignin('base', name, state.(name)); end
     end
 catch
@@ -151,11 +162,24 @@ class MatlabCommandSession:
         self.timeout = timeout
         self.execution_lock = execution_lock or threading.RLock()
 
-    def execute(self, command: str) -> dict[str, Any]:
+    def _validate_command(self, command: str) -> None:
         if not isinstance(command, str) or not command.strip():
             raise ValueError("MATLAB command must be non-empty")
         if len(command.encode("utf-8")) > _MAX_COMMAND_BYTES:
             raise ValueError("MATLAB command is too large")
+
+    def close(self) -> None:
+        """Batch jobs own their processes; no idle worker needs closing."""
+
+    def execute(
+        self,
+        command: str,
+        *,
+        on_process: Callable[[subprocess.Popen[str]], None] | None = None,
+        on_output: Callable[[str, str], None] | None = None,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        self._validate_command(command)
         status = find_matlab(self.matlab)
         if not status.available or not status.executable:
             raise RuntimeError(status.detail)
@@ -178,14 +202,61 @@ class MatlabCommandSession:
                     encoding="utf-8",
                 )
                 batch = f"run('{_matlab_quote(str(runner.resolve()))}')"
-                proc = subprocess.run(
+                proc = subprocess.Popen(
                     [*_matlab_command(status.executable), "-batch", batch],
                     cwd=self.work_dir,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.timeout,
-                    check=False,
+                    bufsize=1,
                 )
+                if on_process:
+                    on_process(proc)
+                stdout_chunks: list[str] = []
+                stderr_chunks: list[str] = []
+
+                def drain(stream, chunks: list[str], kind: str) -> None:
+                    if stream is None:
+                        return
+                    for chunk in iter(stream.readline, ""):
+                        chunks.append(chunk)
+                        if on_output:
+                            on_output(kind, chunk)
+                    stream.close()
+
+                readers = [
+                    threading.Thread(target=drain, args=(proc.stdout, stdout_chunks, "stdout"), daemon=True),
+                    threading.Thread(target=drain, args=(proc.stderr, stderr_chunks, "stderr"), daemon=True),
+                ]
+                for reader in readers:
+                    reader.start()
+                was_cancelled = False
+                deadline = time.monotonic() + self.timeout
+                while proc.poll() is None:
+                    if cancelled and cancelled():
+                        was_cancelled = True
+                        try:
+                            proc.terminate()
+                        except OSError:
+                            pass
+                        break
+                    if time.monotonic() >= deadline:
+                        proc.kill()
+                        for reader in readers:
+                            reader.join(timeout=2)
+                        raise RuntimeError(f"MATLAB command timed out after {self.timeout:g} seconds")
+                    time.sleep(0.02)
+                if proc.poll() is None:
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                for reader in readers:
+                    reader.join(timeout=2)
+                if cancelled and cancelled():
+                    was_cancelled = True
+                returncode = proc.returncode
                 metadata: dict[str, Any] = {}
                 if result_path.exists():
                     try:
@@ -196,11 +267,12 @@ class MatlabCommandSession:
                         metadata = {}
                 error = metadata.get("error") if isinstance(metadata.get("error"), dict) else {}
                 result = {
-                    "ok": proc.returncode == 0 and bool(metadata.get("ok", proc.returncode == 0)),
+                    "ok": returncode == 0 and bool(metadata.get("ok", returncode == 0)) and not was_cancelled,
+                    "cancelled": was_cancelled,
                     "command": command,
                     "elapsed_seconds": time.perf_counter() - started,
-                    "stdout": str(metadata.get("stdout") or proc.stdout or ""),
-                    "stderr": proc.stderr or "",
+                    "stdout": str(metadata.get("stdout") or "".join(stdout_chunks)),
+                    "stderr": str(metadata.get("stderr") or "".join(stderr_chunks)),
                     "variables": _normalize_variables(metadata.get("variables")),
                     "figures": _normalize_figures(metadata.get("figures"), root),
                     "error": {
@@ -214,7 +286,9 @@ class MatlabCommandSession:
                 }
                 if not result["ok"] and not result["error"]:
                     result["error"] = {
-                        "message": (proc.stderr or proc.stdout or "MATLAB command failed").strip(),
+                        "message": (
+                            "".join(stderr_chunks) or "".join(stdout_chunks) or "MATLAB command failed"
+                        ).strip(),
                         "identifier": "",
                         "line": 0,
                         "file": "",
@@ -231,3 +305,141 @@ class MatlabCommandSession:
         result = self.execute(f"{name} = {expression};")
         result["variable"] = name
         return result
+
+
+class MatlabCommandManager:
+    """Cancellable command jobs with bounded incremental stdout/stderr polling."""
+
+    def __init__(
+        self, session: MatlabCommandSession, *, max_retained: int = 24, retention_seconds: float = 900
+    ):
+        self.session = session
+        self.max_retained = max(1, int(max_retained))
+        self.retention_seconds = max(1.0, float(retention_seconds))
+        self._lock = threading.RLock()
+        self._jobs: dict[str, dict[str, Any]] = {}
+        self._active_job: str | None = None
+
+    def _prune_locked(self) -> None:
+        now = time.time()
+        completed = [
+            (job_id, job)
+            for job_id, job in self._jobs.items()
+            if job.get("state") != "running" and job.get("finished_at")
+        ]
+        keep = sorted(completed, key=lambda item: float(item[1].get("finished_at") or 0), reverse=True)[
+            : self.max_retained
+        ]
+        keep_ids = {job_id for job_id, _ in keep}
+        for job_id, job in completed:
+            if now - float(job.get("finished_at") or now) > self.retention_seconds or job_id not in keep_ids:
+                self._jobs.pop(job_id, None)
+
+    def start(self, command: str) -> dict[str, Any]:
+        self.session._validate_command(command)
+        with self._lock:
+            self._prune_locked()
+            if self._active_job:
+                active = self._jobs.get(self._active_job)
+                if active and active.get("state") == "running":
+                    raise RuntimeError("a MATLAB command is already active")
+            job_id = uuid.uuid4().hex
+            job: dict[str, Any] = {
+                "id": job_id,
+                "command": command,
+                "state": "running",
+                "started_at": time.time(),
+                "process": None,
+                "cancel_requested": False,
+                "stdout": "",
+                "stderr": "",
+                "result": None,
+                "error": None,
+            }
+            self._jobs[job_id] = job
+            self._active_job = job_id
+
+        def set_process(proc: subprocess.Popen[str]) -> None:
+            with self._lock:
+                job["process"] = proc
+                if job.get("cancel_requested") and proc.poll() is None:
+                    proc.terminate()
+
+        def append_output(kind: str, text: str) -> None:
+            with self._lock:
+                job[kind] += text
+
+        def worker() -> None:
+            try:
+                result = self.session.execute(
+                    command,
+                    on_process=set_process,
+                    on_output=append_output,
+                    cancelled=lambda: bool(job.get("cancel_requested")),
+                )
+                with self._lock:
+                    job["result"] = result
+                    job["state"] = "cancelled" if result.get("cancelled") else "finished"
+            except Exception as exc:  # noqa: BLE001 - surface worker failures through status
+                with self._lock:
+                    job["error"] = str(exc)
+                    job["state"] = "cancelled" if job.get("cancel_requested") else "failed"
+            finally:
+                with self._lock:
+                    job["process"] = None
+                    job["finished_at"] = time.time()
+                    if self._active_job == job_id:
+                        self._active_job = None
+
+        threading.Thread(target=worker, name=f"slxstudio-command-{job_id[:8]}", daemon=True).start()
+        return self.status(job_id)
+
+    def status(self, job_id: str, *, stdout_offset: int = 0, stderr_offset: int = 0) -> dict[str, Any]:
+        with self._lock:
+            self._prune_locked()
+            job = self._jobs.get(str(job_id))
+            if not job:
+                raise ValueError("unknown MATLAB command job")
+            stdout = str(job.get("stdout") or "")
+            stderr = str(job.get("stderr") or "")
+            out_start = max(0, min(int(stdout_offset), len(stdout)))
+            err_start = max(0, min(int(stderr_offset), len(stderr)))
+            payload: dict[str, Any] = {
+                "id": job["id"],
+                "command": job["command"],
+                "state": job["state"],
+                "started_at": job["started_at"],
+                "stdout_delta": stdout[out_start:],
+                "stderr_delta": stderr[err_start:],
+                "stdout_offset": len(stdout),
+                "stderr_offset": len(stderr),
+            }
+            if job.get("finished_at"):
+                payload["finished_at"] = job["finished_at"]
+            if job.get("result") is not None:
+                payload["result"] = job["result"]
+            if job.get("error"):
+                payload["error"] = job["error"]
+            return payload
+
+    def stop(self, job_id: str) -> dict[str, Any]:
+        with self._lock:
+            job = self._jobs.get(str(job_id))
+            if not job:
+                raise ValueError("unknown MATLAB command job")
+            if job.get("state") != "running":
+                return self.status(job_id)
+            job["cancel_requested"] = True
+            proc = job.get("process")
+            if isinstance(proc, subprocess.Popen) and proc.poll() is None:
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+            return self.status(job_id)
+
+    def stop_all(self) -> None:
+        with self._lock:
+            ids = [job_id for job_id, job in self._jobs.items() if job.get("state") == "running"]
+        for job_id in ids:
+            self.stop(job_id)

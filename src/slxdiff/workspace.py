@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
-VISIBLE_SUFFIXES = {".m", ".slx"}
+VISIBLE_SUFFIXES = {".m", ".slx", ".slxpreview"}
 TEXT_SUFFIXES = {".m"}
 _IGNORED_DIRS = {
     ".git",
@@ -18,8 +19,10 @@ _IGNORED_DIRS = {
     ".venv",
     "venv",
     "node_modules",
+    ".slx-studio",
 }
 _MAX_TEXT_BYTES = 4 * 1024 * 1024
+_MAX_SEARCH_DOCUMENTS = 64
 
 
 def workspace_root(path: str | Path | None) -> tuple[Path, str | None]:
@@ -49,8 +52,11 @@ def resolve_workspace_path(root: str | Path, relative: str | Path, *, must_exist
     return candidate
 
 
-def _walk(root: Path, *, max_files: int, max_depth: int) -> list[dict[str, Any]]:
+def _walk_indexed(
+    root: Path, *, max_files: int, max_depth: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     items: list[dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
     count = 0
 
     def visit(folder: Path, depth: int) -> list[dict[str, Any]]:
@@ -84,19 +90,259 @@ def _walk(root: Path, *, max_files: int, max_depth: int) -> list[dict[str, Any]]
             if entry.is_symlink() or entry.suffix.lower() not in VISIBLE_SUFFIXES:
                 continue
             count += 1
+            try:
+                stat = entry.stat()
+            except OSError:
+                continue
+            relative = entry.relative_to(root).as_posix()
+            kind = "matlab" if entry.suffix.lower() == ".m" else "simulink"
             children.append(
                 {
                     "type": "file",
                     "name": entry.name,
-                    "path": entry.relative_to(root).as_posix(),
-                    "kind": "matlab" if entry.suffix.lower() == ".m" else "simulink",
-                    "size": entry.stat().st_size,
+                    "path": relative,
+                    "kind": kind,
+                    "size": stat.st_size,
+                }
+            )
+            files.append(
+                {
+                    "path": relative,
+                    "kind": kind,
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
                 }
             )
         return children
 
     items = visit(root, 0)
-    return items
+    return items, files
+
+
+def _walk(root: Path, *, max_files: int, max_depth: int) -> list[dict[str, Any]]:
+    return _walk_indexed(root, max_files=max_files, max_depth=max_depth)[0]
+
+
+class WorkspaceIndex:
+    """Asynchronously build and cache the lightweight Workbench file tree.
+
+    The index is session-scoped and deliberately contains only visible `.m` and
+    `.slx` entries.  A first request can return immediately while the directory
+    walk continues in a daemon thread; explicit refreshes and Workbench writes
+    invalidate it without adding a persistent database or runtime dependency.
+    """
+
+    def __init__(self, root: str | Path, *, max_files: int = 2000, max_depth: int = 8) -> None:
+        self.root = Path(root).resolve()
+        if not self.root.is_dir():
+            raise ValueError("workspace root must be a directory")
+        self.max_files = max_files
+        self.max_depth = max_depth
+        self._lock = threading.RLock()
+        self._items: list[dict[str, Any]] = []
+        self._files: list[dict[str, Any]] = []
+        self._search_documents: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
+        self._state = "idle"
+        self._error = ""
+        self._generation = 0
+        self._refresh_pending = False
+        self._thread: threading.Thread | None = None
+        self._schedule_locked()
+
+    def _schedule_locked(self) -> None:
+        if self._state == "indexing":
+            self._refresh_pending = True
+            return
+        self._state = "indexing"
+        self._error = ""
+        self._generation += 1
+        generation = self._generation
+        self._thread = threading.Thread(
+            target=self._build, args=(generation,), name="slx-studio-workspace-index", daemon=True
+        )
+        self._thread.start()
+
+    def _build(self, generation: int) -> None:
+        try:
+            items, files = _walk_indexed(self.root, max_files=self.max_files, max_depth=self.max_depth)
+        except Exception as exc:  # noqa: BLE001 - report indexing failure through the API
+            with self._lock:
+                if generation == self._generation:
+                    self._state = "error"
+                    self._error = str(exc)
+                    if self._refresh_pending:
+                        self._refresh_pending = False
+                        self._schedule_locked()
+            return
+        with self._lock:
+            if generation != self._generation:
+                return
+            self._items = items
+            self._files = files
+            self._state = "ready"
+            self._error = ""
+            if self._refresh_pending:
+                self._refresh_pending = False
+                self._schedule_locked()
+
+    def invalidate(self) -> None:
+        """Schedule a fresh index after a write or an explicit user refresh."""
+
+        with self._lock:
+            self._search_documents.clear()
+            self._schedule_locked()
+
+    def _search_document(self, record: dict[str, Any], *, max_file_bytes: int) -> dict[str, Any] | None:
+        relative = str(record["path"])
+        try:
+            path = resolve_workspace_path(self.root, relative)
+            if (self.root / relative).is_symlink():
+                return None
+            stat = path.stat()
+        except (OSError, ValueError):
+            return None
+        # Apply each request's limit before looking up a shared document. A small
+        # request must neither reuse oversized text nor poison a later large one.
+        if str(record.get("kind")) == "matlab" and stat.st_size > max_file_bytes:
+            return None
+        signature = (int(stat.st_mtime_ns), int(stat.st_size))
+        with self._lock:
+            cached = self._search_documents.get(relative)
+            if cached is not None and cached[0] == signature:
+                return cached[1]
+
+        if str(record.get("kind")) == "matlab":
+            try:
+                document: dict[str, Any] = {"text": read_text_file(self.root, relative)}
+            except (OSError, UnicodeError, ValueError):
+                return None
+        else:
+            try:
+                from .parser import parse_slx
+
+                model = parse_slx(path)
+            except Exception:  # noqa: BLE001 - malformed SLX files are skipped during search
+                document = {"blocks": [], "signals": []}
+            else:
+                blocks = []
+                for block in model.blocks.values():
+                    haystack = " ".join(
+                        [block.name, block.path, block.block_type]
+                        + [f"{key} {value}" for key, value in block.parameters.items()]
+                    )
+                    blocks.append(
+                        {
+                            "haystack": haystack,
+                            "preview": f"{block.path or block.name} · {block.block_type}"[:240],
+                            "block_path": block.path,
+                        }
+                    )
+                signals = [
+                    {
+                        "haystack": f"{line.src} {line.dst} {line.name}",
+                        "preview": f"{line.src} → {line.dst}"[:240],
+                    }
+                    for line in model.lines
+                ]
+                document = {"blocks": blocks, "signals": signals}
+
+        with self._lock:
+            self._search_documents[relative] = (signature, document)
+            while len(self._search_documents) > _MAX_SEARCH_DOCUMENTS:
+                self._search_documents.pop(next(iter(self._search_documents)))
+        return document
+
+    def search(
+        self,
+        query: str,
+        *,
+        max_results: int = 100,
+        max_file_bytes: int = 1024 * 1024,
+    ) -> dict[str, Any]:
+        """Search the session index and lazily cache searchable model content."""
+
+        needle = str(query).strip()
+        if not needle:
+            return {"query": "", "results": []}
+        needle_fold = needle.casefold()
+        with self._lock:
+            records = list(self._files)
+            indexing = self._state == "indexing"
+        results: list[dict[str, Any]] = []
+
+        def add(item: dict[str, Any]) -> None:
+            if len(results) < max_results:
+                results.append(item)
+
+        for record in sorted(records, key=lambda item: str(item["path"]).casefold()):
+            if len(results) >= max_results:
+                break
+            relative = str(record["path"])
+            if needle_fold in relative.casefold():
+                add({"type": "file", "path": relative, "line": 0, "preview": relative})
+            if len(results) >= max_results:
+                continue
+            document = self._search_document(record, max_file_bytes=max_file_bytes)
+            if not document:
+                continue
+            text = document.get("text")
+            if isinstance(text, str):
+                for line_number, line in enumerate(text.splitlines(), start=1):
+                    if needle_fold in line.casefold():
+                        add(
+                            {
+                                "type": "match",
+                                "path": relative,
+                                "line": line_number,
+                                "preview": line.strip()[:240],
+                            }
+                        )
+                    if len(results) >= max_results:
+                        break
+                continue
+            for block in document.get("blocks", []):
+                if needle_fold in str(block["haystack"]).casefold():
+                    add(
+                        {
+                            "type": "block",
+                            "path": relative,
+                            "line": 0,
+                            "preview": block["preview"],
+                            "block_path": block["block_path"],
+                        }
+                    )
+                if len(results) >= max_results:
+                    break
+            if len(results) >= max_results:
+                continue
+            for signal in document.get("signals", []):
+                if needle_fold in str(signal["haystack"]).casefold():
+                    add(
+                        {
+                            "type": "signal",
+                            "path": relative,
+                            "line": 0,
+                            "preview": signal["preview"],
+                        }
+                    )
+                if len(results) >= max_results:
+                    break
+        return {"query": needle, "results": results, "indexing": indexing}
+
+    def snapshot(self, *, force: bool = False) -> dict[str, Any]:
+        with self._lock:
+            if force:
+                self._schedule_locked()
+            return {
+                "root": str(self.root),
+                "items": self._items,
+                "max_files": self.max_files,
+                "max_depth": self.max_depth,
+                "indexing": self._state == "indexing",
+                "index_state": self._state,
+                "index_error": self._error,
+                "index_generation": self._generation,
+            }
 
 
 def list_workspace(root: str | Path, *, max_files: int = 2000, max_depth: int = 8) -> dict[str, Any]:
