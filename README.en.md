@@ -16,6 +16,15 @@
 
 > **Status: 2.0.0 stable.** SLX Studio is a lightweight Model + Code + Simulation-first IDE: Electron/TypeScript/Monaco editing, static `.slx` inspection, persistent MATLAB Command Window and script jobs, bounded live output, diagnostics, figures, workspace state, validated model edits, isolated simulation runs and a trusted first-party extension host. MATLAB/Simulink is still required to execute `.m` files and to create, modify or simulate real `.slx` files.
 
+### Branch and version map
+
+- **`main`** is the default stable 2.0.0 line; reviewers and new work should start here.
+- The [`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0) contains the Windows, Python wheel and source assets for that line.
+- **`v1.0.0-beta.2` / `v1.0.0-beta.3`** are preserved historical tags for reproducing the old behavior; neither is the default branch.
+- **`codex/slx-studio-2-foundation`** is the completed 2.0 integration branch. Its work entered `main` through [PR #21](https://github.com/savellonirourou107-hue/SLX-Studio/pull/21); it is not an unreleased replacement mainline. The CLI patch-validation fix is merged through [PR #9](https://github.com/savellonirourou107-hue/SLX-Studio/pull/9).
+
+**Migration summary:** update to `main` or download `v2.0.0`. Existing `slx-diff` CLI and `slx-studio` / `slx-diff studio` legacy Workbench entry points remain available. Launch the new Electron desktop from the Windows release package or `npm run desktop -- <workspace>`; execution and simulation still require local MATLAB/Simulink. See the [bilingual migration guide](docs/slx-studio-2-migration.md#upgrade-to-2) for setup and boundaries.
+
 ## Why SLX Studio
 
 **2.0 direction:** a Model + Code + Simulation-first IDE with an
@@ -379,7 +388,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-Run `python -m pytest -ra` for current test totals; licensed MATLAB tests are opt-in and Windows process-tree tests are platform-specific. The suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, project search, history, UI contracts and diagnostics.
+Latest verification (2026-09-09, Windows, optional MATLAB integration tests not enabled): **148 passed, 9 expected skips**. Run `python -m pytest -ra` for totals in your environment; licensed MATLAB tests are opt-in and Windows process-tree tests are platform-specific. The suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, project search, history, UI contracts and diagnostics.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 
