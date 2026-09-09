@@ -1,11 +1,11 @@
-# SLX Studio 2.0 development desktop
+# SLX Studio 2.0 desktop
 
-This is a separately launched Electron preview on the
-`codex/slx-studio-2-foundation` branch. It does not replace the Python CLI or
-legacy Workbench. The current real workflow is `.m` editing, a bounded
-read-only `.slx` model viewport, explicit persistent MATLAB jobs and validated
-in-place model edits. Exact graphical Simulink editing remains in the legacy
-Workbench.
+This is the Electron desktop shipped in the `v2.0.0` release. It does not
+replace the Python CLI or legacy Workbench; it adds the Model + Code +
+Simulation workflow while keeping static inspection safe and bounded. The
+current workflow is `.m` editing, a read-only `.slx` model viewport, explicit
+persistent MATLAB jobs and validated in-place model edits. Exact graphical
+Simulink editing remains in the legacy Workbench.
 
 ## Run from source
 
@@ -112,7 +112,6 @@ screenshots live under ignored `output/` subdirectories. See
 ## Rollback and boundaries
 
 Continue using `slx-studio` / `slx-diff studio` for exact graphical model writes,
-simulation and the legacy Workbench. The Electron core now has a portable
-Windows package, but no release tag or main-branch replacement is implied by
-this development branch. The new viewport is static and approximate; it is not
-evidence of Simulink rendering parity.
+simulation and the legacy Workbench. The Electron core is available in the
+`v2.0.0` Windows package, but its viewport remains static and approximate; it is
+not evidence of Simulink rendering parity.

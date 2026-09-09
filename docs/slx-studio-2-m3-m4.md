@@ -1,6 +1,6 @@
 # SLX Studio 2.0 M3/M4 core acceptance
 
-Status: **M3/M4 accepted for the `v2.0.0` release candidate.**
+Status: **M3/M4 accepted and shipped in `main` at `v2.0.0`.**
 All candidate-specific local gates and the Windows Actions package/install
 gate passed. The release keeps the documented lightweight scope and known
 MATLAB/Simulink feature boundaries below.
@@ -88,7 +88,7 @@ remain supported rollback paths.
 ## Completion audit (2026-09-09)
 
 The original migration charter remains the acceptance authority. The full M3/M4
-candidate gate is now closed for this development branch:
+release gate is closed for the `v2.0.0` mainline:
 
 - Real R2026a Electron acceptance passed command streaming, variable editing,
   file/section Run in the shared persistent session, figure rendering,

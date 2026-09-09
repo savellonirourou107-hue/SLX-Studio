@@ -16,6 +16,15 @@
 
 > **状态：2.0.0 正式版。** SLX Studio 是轻量的 Model + Code + Simulation-first IDE：提供 Electron/TypeScript/Monaco 编辑、静态 `.slx` 检查、持久 MATLAB Command Window 与脚本 Job、增量输出、诊断、Figure、Workspace 状态、受校验的模型编辑、隔离仿真和可信首方扩展主机。执行 `.m`、创建/修改/仿真真实 `.slx` 仍需要本机 MATLAB/Simulink。
 
+### 分支与版本关系
+
+- **`main`** 是当前默认、稳定的 2.0.0 主线；评审和新开发都应从这里开始。
+- **[`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0)** 是对应的正式发布版本，包含 Windows、Python wheel 和源码资产。
+- **`v1.0.0-beta.2` / `v1.0.0-beta.3`** 是保留的历史版本 tag，用于复现旧版行为，不代表当前默认分支。
+- **`codex/slx-studio-2-foundation`** 是已经完成合并的 2.0 集成分支；其功能通过 [PR #21](https://github.com/savellonirourou107-hue/SLX-Studio/pull/21) 进入 `main`，不应被误认为尚未发布的替代主线。CLI patch 校验修复已通过 [PR #9](https://github.com/savellonirourou107-hue/SLX-Studio/pull/9) 合并。
+
+**迁移要点：** 更新到 `main` 或下载 `v2.0.0`；原有 `slx-diff` CLI 和 `slx-studio` / `slx-diff studio` 旧版 Workbench 入口继续保留。新 Electron 桌面从 Windows 发布包或 `npm run desktop -- <workspace>` 启动，执行与仿真仍需本机 MATLAB/Simulink。完整步骤和边界见[中英文迁移说明](docs/slx-studio-2-migration.md#upgrade-to-2)。
+
 ## 产品定位
 
 **2.0 产品方向：** 将 SLX Studio 定位为面向 MATLAB / Simulink / 控制工程的
@@ -357,7 +366,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-请运行 `python -m pytest -ra` 查看当前测试总数；真实 MATLAB 验收需显式配置路径，Windows 进程树测试仅在对应平台运行。覆盖范围包括 XML/归档安全、REST 输入校验、SLX Parser/Diff/Review、Patch、AI Provider、Workspace 隔离、分节运行、可停止任务、checkpoint、常驻 worker 生命周期及 Workbench HTTP 执行链、恢复草稿、扫描、Figure、工程搜索、历史记录、UI 契约和诊断。
+最近验证（2026-09-09，Windows，未启用可选 MATLAB 集成测试）：**148 个通过、9 个预期跳过**。请运行 `python -m pytest -ra` 查看当前环境的总数；真实 MATLAB 验收需显式配置路径，Windows 进程树测试仅在对应平台运行。覆盖范围包括 XML/归档安全、REST 输入校验、SLX Parser/Diff/Review、Patch、AI Provider、Workspace 隔离、分节运行、可停止任务、checkpoint、常驻 worker 生命周期及 Workbench HTTP 执行链、恢复草稿、扫描、Figure、工程搜索、历史记录、UI 契约和诊断。
 
 在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
 

@@ -1,6 +1,6 @@
 # SLX Studio 2.0 migration charter
 
-Status: **M0b–M4 accepted for the `v2.0.0` release candidate**. Updated: 2026-09-09.
+Status: **M0b–M4 accepted and shipped on `main` as `v2.0.0`**. Updated: 2026-09-09.
 The user-facing objective is [SLX Studio 2.0 项目目标](../SLX_STUDIO_2_GOAL.md).
 This document records the completed 2.0 migration and its explicit boundaries.
 
@@ -8,21 +8,22 @@ This document records the completed 2.0 migration and its explicit boundaries.
 
 The initial preparation branch was `codex/slx-studio-2-plan`, based on
 `484fd69e96dd9dc4fbcba18d5bdac34836a42453` (`codex/persistent-matlab-session`).
-The accepted integration branch is `codex/slx-studio-2-foundation`; its
-required fixes are consolidated here rather than merged from the historical
-feature PRs one by one.
+The accepted integration branch was `codex/slx-studio-2-foundation`; its
+required fixes are now consolidated on `main` and in the `v2.0.0` release.
+That branch is retained as historical provenance, not as a second source of
+truth. New work should branch from `main`.
 The Python package and Electron desktop are versioned `2.0.0` for the release.
 
 The historical feature PRs remain provenance references; the release branch
-was validated as one coherent candidate. The Windows workflow checks
-EXE/installer creation, not an interactive installed desktop workflow.
+was validated as one coherent candidate. The Windows package/installer gates
+and their limits are recorded in the [M3/M4 acceptance record](slx-studio-2-m3-m4.md).
 
 | Existing implementation | Disposition |
 | --- | --- |
 | `src/slxdiff/parser.py`, canonical model, diff/review/context | Preserve and reuse; keep inspection non-executing |
 | Workspace root guards, atomic writes, source hashes, history | Preserve; add new transport and UI regression coverage |
 | `studio.html` (105,929 bytes), `workbench.html` (72,084 bytes) | Legacy compatibility UI; stop adding new platform architecture here |
-| `desktop.py`, Workbench HTTP server, PyInstaller workflow | Remain runnable until a replacement passes its acceptance gate |
+| `desktop.py`, Workbench HTTP server, PyInstaller workflow | Remain runnable as the legacy compatibility path alongside the 2.0 desktop |
 | `persistent.py`, `msession.py`, job managers, process-tree cleanup | Reuse through the Electron MATLAB runtime; do not implement a second independent session system |
 | Graphical SLX write/simulation/sweep bridges | Still batch-based; shared-session migration is unfinished |
 | Existing MATLAB debug probes | Non-pausing only; no interactive debugger claim |
@@ -38,32 +39,35 @@ python -m ruff format --check .
 62 files already formatted
 ```
 
-No MATLAB runtime code changed during preparation, so real MATLAB acceptance
-was not rerun for this documentation-only step. Prior R2026a validation is
-described in [the persistent-session guide](persistent-matlab.md); it is not
-evidence for a future Electron application.
+These are historical preparation results, not the current suite size. On
+2026-09-09, `python -m pytest -ra` on Windows with optional MATLAB integration
+tests disabled reported **148 passed, 9 skipped**. Counts depend on the platform
+and whether the licensed integration gates are enabled.
 
-### Existing branch dependencies
+No MATLAB runtime code changed in this documentation update; MATLAB was not
+rerun for it. Real-runtime evidence and its scope are recorded separately in
+[the persistent-session guide](persistent-matlab.md) and the
+[M3/M4 acceptance record](slx-studio-2-m3-m4.md).
 
-These are observed PR relationships, not merge approval:
+### Current branch and release map
+
+`main` is now the release source of truth:
 
 ```text
-main
-├── #15 Command Window stream
-│   └── #17 non-pausing debug probes
-│       └── #20 persistent MATLAB  ← preparation base
-├── #7 startup performance
-│   └── #12 workspace index
-│       └── #18 index hardening
-├── #13 validated XML cache
-└── #9 CLI patch validation
+main (stable 2.0.0)
+├── v2.0.0 release
+├── codex/slx-studio-2-foundation (historical 2.0 integration branch)
+└── future feature branches (branch from main)
 ```
 
-M0b must review these branches, select the required changes for an integration
-branch, record commit provenance, resolve overlaps and rerun combined tests.
-In particular, do not lose indexing/caching fixes by assuming they are already
-in the persistent-worker branch. Integration-branch work is separate from
-merging GitHub PRs into `main`. Recheck this snapshot before acting on it.
+Historical implementation PRs #9, #13, #15, #17 and #20 remain linked for
+review provenance. Their accepted outcomes are included in `main`; an open
+historical branch must not be mistaken for an unreleased feature.
+
+M0b reviewed these branches, selected the required changes for one integration
+branch, recorded provenance, resolved overlaps and reran the combined tests.
+The resulting release is the only supported 2.0 baseline; use the historical
+PRs for context rather than merging their branches again.
 
 ## 2. Decisions and amendments to the proposal
 
@@ -214,12 +218,13 @@ replacement or new runtime dependency is introduced by this documentation step.
 - If integration changes MATLAB execution, rerun the real R2026a suite.
 - Inventory security behavior and old-UI workflows to prevent silent migration losses.
 
-The integration branch is `codex/slx-studio-2-foundation`. It retains the
-provenance of the indexing, cache, CLI validation and persistent-worker changes
-without merging their GitHub PRs into `main`. The combined lightweight gate is
-131 passed and 8 deselected optional MATLAB tests.
+The integration branch was `codex/slx-studio-2-foundation`. It retains the
+provenance of the indexing, cache, CLI validation and persistent-worker changes;
+their accepted outcomes are now in `main`. Its historical M0b lightweight gate
+was 131 passed and 8 deselected optional MATLAB tests; the current verification
+snapshot is listed in section 1 above.
 
-### M1 — Real Electron / Monaco editing slice (accepted locally)
+### M1 — Real Electron / Monaco editing slice (accepted and shipped)
 
 Deliver: an opt-in Electron app, offline Monaco assets/workers, Explorer,
 multi-file tabs, a simple status area, Commands and minimal typed services.
@@ -245,10 +250,11 @@ The implementation and actual Electron evidence are recorded in
 `438efe7`. The evidence is local development coverage, not Windows installer or
 real MATLAB coverage.
 
-Rollback: continue using existing `slx-studio` / `slx-diff studio` commands.
-Keep the new launch command separately named until the migration is accepted.
+Rollback: continue using existing `slx-studio` / `slx-diff studio` commands for
+the legacy Workbench. The 2.0 Electron launch command is now supported in the
+stable release and can be adopted workspace by workspace.
 
-### M2 — Modular Workbench and Python service transport (foundation accepted locally)
+### M2 — Modular Workbench and Python service transport (accepted and shipped)
 
 Deliver: workbench contributions, Settings, Problems/Output panel contracts,
 custom editor registration, JSON-RPC Python adapter and backend supervisor.
@@ -274,8 +280,8 @@ contributions; registrations are disposed on deactivation and activation
 failures cannot leak partial state. All file access continues through the typed
 preload service. Selecting `.slx` shows parser-derived block/connection counts
 in Output without executing MATLAB; structural `model/inspect` and `model/diff`
-services reuse the Python core. A graphical model viewport remains an M3
-deliverable.
+services reuse the Python core. The bounded static model viewport is included
+in the shipped M3 workflow.
 The private Python JSON-RPC adapter and backend supervisor are covered by split,
 coalesced, malformed, crash and no-replay tests. The palette provides an
 explicit backend restart command, including a guard against concurrent process
@@ -284,16 +290,15 @@ Model inspection and diff responses now expose bounded cursors and totals, with
 512-item and 2 MiB page limits, so large results do not need to fit in one 16 MiB
 frame.
 
-M2 is accepted locally on the exact code commit recorded in
-`docs/slx-studio-2-m2-foundation.md`; it has not been merged to `main` or
-packaged as a release. M3 is the next implementation slice.
+M2 is accepted on the exact code commit recorded in
+`docs/slx-studio-2-m2-foundation.md` and is included in the 2.0.0 release.
 
 The foundation's exact test and resource record is
 [docs/slx-studio-2-m2-foundation.md](slx-studio-2-m2-foundation.md).
 
 Rollback: switch the transport adapter/desktop entry, without reverting file formats.
 
-### M3 — Model + code + simulation workflow (acceptance in progress)
+### M3 — Model + code + simulation workflow (accepted and shipped)
 
 The first M3 slices are implemented: the typed `model/viewport` service and Electron
 custom editor provide bounded static SLX viewing with subsystem selection,
@@ -329,7 +334,7 @@ Evidence and test commands are recorded in
 [M3/M4 core acceptance](slx-studio-2-m3-m4.md). Rollback remains the explicit
 legacy/batch Workbench choice, retaining lifecycle warnings.
 
-### M4 — Extension platform and first installable 2.0 core (acceptance in progress)
+### M4 — Extension platform and first installable 2.0 core (accepted and shipped)
 
 Deliver: small versioned Extension API, private Node host protocol, local trusted
 extension loading and first-party MATLAB/Simulink contributions. Extend built-in
@@ -348,7 +353,7 @@ Acceptance:
 - Windows packaging includes required Python/UI assets without bundling MATLAB;
   EXE launch, installation, close/reopen and clean uninstall are tested.
 - Re-run legacy Python, protocol, Electron UI and real-MATLAB gates on the exact
-  candidate commit. Publish measured limits and known gaps, not parity claims.
+  release commit. Publish measured limits and known gaps, not parity claims.
 
 The trusted local host, first-party sample extension and portable Electron
 package are implemented. Inno Setup compilation is intentionally a Windows
@@ -402,6 +407,72 @@ commit, performance observations, compatibility risks and a rollback route.
 Fix genuine failures before progressing. Do not bundle unrelated PRs or claim
 an open stacked branch has shipped to `main`.
 
-The current preparation request creates no GitHub Issue, PR, tag or release and
-does not merge existing PRs. Publication and release operations remain explicit
-follow-up actions. Local objective and migration documents can be reviewed now.
+The 2.0.0 GitHub Release is published and `main` is the supported stable line.
+Future work should use a focused branch and PR based on `main`; do not revive
+the historical integration branch as a parallel release line.
+
+<a id="upgrade-to-2"></a>
+
+## 8. 从 1.x / Beta 迁移到 2.0 / Migrating from 1.x / Beta to 2.0
+
+### 中文
+
+迁移采用增量方式：原有 Python CLI 和旧版 Workbench 入口保留，Electron
+桌面提供新的 Model + Code + Simulation 工作流，不要求把旧工程转换成新格式。
+
+1. **更新来源。** 先提交或备份本地未提交修改，再更新到默认 `main`，或下载
+   [`v2.0.0` 正式版](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0)。
+   不必切回历史 `codex/slx-studio-2-foundation` 分支。
+2. **保留现有 CLI。** `slx-diff diff`、`review`、`context` 和 `git-diff` 命令保持
+   兼容；静态读取 `.slx` 不需要 MATLAB，现有脚本可继续使用。
+3. **选择桌面入口。** 使用 Windows 2.0 便携包或安装包；源码方式需要 Node.js
+   22.12+ 和 Python 3.10+，在仓库根目录执行 `npm ci`、`npm run build`，再执行
+   `npm run desktop -- <workspace>`。Python 不在 PATH 时需设置 `SLX_STUDIO_PYTHON`，
+   完整命令见[桌面使用说明](slx-studio-2-desktop.md#run-from-source)。
+4. **显式配置 MATLAB。** Electron 识别 `SLX_STUDIO_MATLAB` 或 `SLX_DIFF_MATLAB`；
+   仅在用户执行命令或脚本时启动持久 worker，打开文件不会启动 MATLAB。
+   旧版 Workbench 使用 `--matlab` 或 `SLX_DIFF_MATLAB` 配置路径；
+   `slx-diff studio <workspace> --matlab-session persistent` 显式启用持久会话，
+   默认仍为 batch 模式。仿真在独立 batch 会话中运行，不共享 Command Window 变量。
+5. **按能力选择回退路径。** 新桌面视口是只读静态预览；图形连线编辑、Save As 等
+   尚未迁移的操作继续使用旧版 `slx-studio` / `slx-diff studio`。完整 MATLAB
+   调试器、profiler、语义语言服务及 Simulink 原生编辑体验不在本版承诺范围内。
+
+2.0 不直接改写 SLX 私有 XML，不会在打开工程时自动执行代码，也不会自动激活
+工程内扩展。迁移关键工作流前请核对[兼容性矩阵](compatibility-matrix.md)和
+[已知边界](slx-studio-2-m3-m4.md)。
+
+### English
+
+The migration is intentionally additive. Existing Python and legacy Workbench
+entry points remain available, while the Electron desktop provides the 2.0
+Model + Code + Simulation workflow.
+
+1. **Update the source.** Commit or back up uncommitted work, then update to the
+   default `main` branch or download
+   the [`v2.0.0` release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0).
+   There is no need to switch back to the historical integration branch.
+2. **Keep using the CLI unchanged.** `slx-diff diff`, `review`, `context` and
+   `git-diff` do not require MATLAB and remain compatible with existing scripts.
+3. **Choose a desktop path.** Use the Windows 2.0 portable/installer package,
+   or run the Electron desktop from source with Node.js 22.12+ and Python 3.10+:
+   `npm ci`, `npm run build`, then `npm run desktop -- <workspace>` from the
+   repository root. Set `SLX_STUDIO_PYTHON` if Python is not on PATH; see the
+   [source launch guide](slx-studio-2-desktop.md#run-from-source) for full commands.
+4. **Configure MATLAB explicitly when needed.** Electron accepts
+   `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB` and starts its persistent worker only
+   on an explicit command or script run, not on file open. The legacy Workbench
+   accepts `--matlab` or `SLX_DIFF_MATLAB`; use
+   `slx-diff studio <workspace> --matlab-session persistent` to opt in, with batch
+   mode remaining its default. Simulation uses an independent batch session
+   and does not share Command Window variables.
+5. **Keep a fallback for unmigrated operations.** The new viewport is static
+   and read-only. Graphical wiring and Save As remain in the legacy
+   `slx-studio` / `slx-diff studio` path. A full MATLAB debugger, profiler,
+   semantic language service and native Simulink editing parity are not part
+   of this release's scope.
+
+The 2.0 desktop does not rewrite private SLX XML, silently execute a
+workspace, or auto-activate workspace extensions. Review the [compatibility
+matrix](compatibility-matrix.md) and [known boundaries](slx-studio-2-m3-m4.md)
+before moving a safety- or release-critical workflow.
