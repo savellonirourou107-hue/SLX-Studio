@@ -10,11 +10,11 @@ branch dependencies and executable acceptance criteria. This is not a released
 2.0 implementation; the beta below remains the compatibility baseline.
 
 - [x] M0a: record the goal, verified starting point and migration gates
-- [ ] M0b: review/integrate required open-branch fixes and validate the combined baseline
-- [ ] M1: real Electron + Monaco file-edit/save workflow with Commands and Services
-- [ ] M2: modular Workbench, configuration and Python JSON-RPC adapter
-- [ ] M3: SLX Custom Editor and shared MATLAB/model/simulation workflow
-- [ ] M4: lazy Extension Host, first-party extensions and Windows install acceptance
+- [x] M0b: review/integrate required open-branch fixes and validate the combined baseline
+- [x] M1: real Electron + Monaco file-edit/save workflow with Commands and Services
+- [x] M2: modular Workbench, configuration and Python JSON-RPC adapter
+- [x] M3: SLX Custom Editor and shared MATLAB/model/simulation workflow
+- [x] M4: lazy Extension Host, first-party extensions and Windows install acceptance
 
 Full LSP, a pausing debugger/profiler, remote execution, Marketplace and
 additional Terminal/Control/Git/AI extensions follow the core migration.
@@ -86,8 +86,8 @@ The initial persistent mode and its tested boundaries are described in
 
 - [x] OpenAI / DeepSeek / Kimi / MiniMax / GLM / Qwen / custom endpoints
 - [x] Structured model tools and validated blueprints
-- [ ] `.m` code assistant with explicit diff preview before applying edits
-- [ ] MCP server for external coding agents
+- [x] `.m` code assistant with explicit diff preview before applying edits
+- [x] MCP server for external coding agents
 - [ ] Local Ollama / LM Studio presets
 - [ ] Provider capability discovery
 

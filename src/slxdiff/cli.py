@@ -124,6 +124,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     doctor_cmd.add_argument("--matlab", help="MATLAB executable path")
     doctor_cmd.add_argument("--format", choices=("text", "json"), default="text")
+
+    mcp_cmd = sub.add_parser("mcp", help="Run the Model Context Protocol (MCP) server over stdio")
+    mcp_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Workspace root directory; defaults to current directory",
+    )
     return parser
 
 
@@ -316,6 +324,11 @@ def main(argv: list[str] | None = None) -> int:
             output, code = _doctor(args.path, matlab=args.matlab, output_format=args.format)
             print(output)
             return code
+
+        if args.command == "mcp":
+            from .mcp import run_mcp_server
+
+            return run_mcp_server(root=args.root)
 
         if args.command in {"studio", "serve"}:
             run_workbench_server(

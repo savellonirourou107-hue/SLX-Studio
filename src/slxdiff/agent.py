@@ -21,6 +21,7 @@ from .blueprint import (
     catalog_payload,
     validate_automatic_parameter_value,
 )
+from .m_diff import generate_m_diff_preview
 from .matlab_bridge import build_blueprint_with_matlab, find_matlab
 from .model import Model
 from .parser import parse_slx
@@ -309,8 +310,10 @@ class ToolRuntime:
         build_output: str | Path | None = None,
         allow_build: bool = False,
         execution_lock: threading.RLock | None = None,
+        workspace_root: str | Path | None = None,
     ):
         self.model_path = Path(model_path).resolve() if model_path else None
+        self.workspace_root = Path(workspace_root).resolve() if workspace_root else None
         self.model: Model | None = parse_slx(self.model_path) if self.model_path else None
         self.matlab = matlab
         self.build_output = Path(build_output).resolve() if build_output else None
@@ -384,6 +387,29 @@ class ToolRuntime:
                 "submit_blueprint",
                 "Submit a complete safe model blueprint for validation and visual preview. Use this to design a new model.",
                 blueprint_tool_schema(),
+            ),
+            _tool(
+                "propose_m_edit",
+                "Generate a unified diff preview for a proposed MATLAB .m script edit. This does not write to disk; applying the edit requires explicit user confirmation.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path to the .m file within the workspace.",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Proposed new text content of the .m file.",
+                        },
+                        "base_sha256": {
+                            "type": "string",
+                            "description": "Optional SHA-256 hash of original content for conflict detection.",
+                        },
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": False,
+                },
             ),
         ]
         if self.allow_build:
@@ -531,6 +557,15 @@ class ToolRuntime:
                     self.blueprint, output_path=output, matlab=self.matlab
                 )
             return self.build_result
+        if name == "propose_m_edit":
+            path = str(arguments.get("path", "")).strip()
+            if not path:
+                raise ValueError("path is required")
+            content = str(arguments.get("content", ""))
+            base_sha = arguments.get("base_sha256")
+            base_sha256 = str(base_sha).strip() if base_sha else None
+            root = self.workspace_root or (self.model_path.parent if self.model_path else Path.cwd())
+            return generate_m_diff_preview(root, path, content, base_sha256=base_sha256)
         raise ValueError(f"unknown tool {name!r}")
 
     def patch_document(self) -> PatchDocument | None:

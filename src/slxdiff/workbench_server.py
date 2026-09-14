@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .debugger import BreakpointRegistry
 from .history import ModelHistory
+from .m_diff import apply_m_edit, generate_m_diff_preview
 from .matlab_bridge import (
     apply_model_edit_with_matlab,
     apply_patch_with_matlab,
@@ -269,6 +270,8 @@ class WorkbenchHandler(StudioHandler):
             "/api/v1/workspace/history",
             "/api/v1/workspace/undo",
             "/api/v1/workspace/redo",
+            "/api/v1/workspace/m-edit/preview",
+            "/api/v1/workspace/m-edit/apply",
         }
         if parsed.path not in workspace_routes:
             super().do_POST()
@@ -322,6 +325,38 @@ class WorkbenchHandler(StudioHandler):
                         "bytes": len(content.encode("utf-8")),
                     },
                 )
+                return
+
+            if parsed.path == "/api/v1/workspace/m-edit/preview":
+                content = body.get("content")
+                if not isinstance(content, str):
+                    raise TypeError("content must be a string")
+                base_sha256 = body.get("base_sha256")
+                if base_sha256 is not None and not isinstance(base_sha256, str):
+                    raise TypeError("base_sha256 must be a string")
+                preview = generate_m_diff_preview(
+                    self.server.workspace_root,
+                    relative,
+                    content,
+                    base_sha256=base_sha256,
+                )
+                self._send_json(HTTPStatus.OK, preview)
+                return
+
+            if parsed.path == "/api/v1/workspace/m-edit/apply":
+                content = body.get("content")
+                if not isinstance(content, str):
+                    raise TypeError("content must be a string")
+                expected_sha256 = self._string_field(body, "expected_sha256", required=True)
+                result = apply_m_edit(
+                    self.server.workspace_root,
+                    relative,
+                    content,
+                    expected_sha256=expected_sha256,
+                )
+                self.server.workspace_index.invalidate()
+                self.server.state.clear_recovery(self.server.workspace_root, result["relative_path"])
+                self._send_json(HTTPStatus.OK, result)
                 return
 
             if parsed.path == "/api/v1/workspace/save-as":
