@@ -21,10 +21,87 @@ const { endpoint, position, scene } = await loadTypeScript('packages/model/geome
 const { ConfigurationFiles } = await loadTypeScript('apps/desktop/electron/configuration.ts');
 const { ExtensionHostManager } = await loadTypeScript('apps/desktop/electron/extensions.ts');
 const { matlabSection } = await loadTypeScript('packages/editor/sections.ts');
+const { MATLAB_CATALOG, MATLAB_SYMBOLS } = await loadTypeScript('packages/editor/matlab-catalog.ts');
+const { extractMatlabSymbols, matlabCallContext, matlabCode, MatlabSymbolCache, MAX_SYMBOL_SOURCE_CHARS, MAX_LOCAL_SYMBOLS } = await loadTypeScript('packages/editor/matlab-language.ts');
 const frame = value => {
   const payload = Buffer.from(JSON.stringify(value));
   return Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]);
 };
+
+test('MATLAB offline catalog identifies products and includes real parameter signatures', () => {
+  assert.equal(new Set(MATLAB_CATALOG.map(item => item.name)).size, MATLAB_CATALOG.length);
+  for (const item of MATLAB_CATALOG) {
+    assert.ok(item.documentation && item.signatures.length);
+    for (const signature of item.signatures) for (const parameter of signature.parameters) assert.ok(signature.label.includes(parameter));
+  }
+  assert.equal(MATLAB_SYMBOLS.get('zeros').product, 'MATLAB');
+  assert.equal(MATLAB_SYMBOLS.get('sim').product, 'Simulink');
+  assert.equal(MATLAB_SYMBOLS.get('tf').product, 'Control System Toolbox');
+  assert.equal(MATLAB_SYMBOLS.get('linearize').product, 'Simulink Control Design');
+  assert.deepEqual(MATLAB_SYMBOLS.get('plot').signatures[0].parameters, ['X', 'Y']);
+});
+
+test('MATLAB lexical symbols ignore strings/comments and bound document/symbol counts', () => {
+  const source = `% hidden = 1;\ntext = 'fake = 2';\n%{\nblocked = 3;\n%}\nKp = 2;\nfor i = 1:5\nend\nfunction [y, err] = local_fn(x, gain)\ny = x;\nend\nobj.field = 1;\n`;
+  const symbols = extractMatlabSymbols(source);
+  assert.deepEqual(new Set(symbols.map(item => item.name)), new Set(['text', 'Kp', 'i', 'y', 'err', 'local_fn', 'x', 'gain']));
+  assert.equal(symbols.find(item => item.name === 'local_fn').kind, 'function');
+  assert.equal(symbols.find(item => item.name === 'x').kind, 'parameter');
+  assert.deepEqual(extractMatlabSymbols('x'.repeat(MAX_SYMBOL_SOURCE_CHARS + 1)), []);
+  assert.equal(extractMatlabSymbols(Array.from({ length: 1500 }, (_, i) => `value${i} = 1;`).join('\n')).length, MAX_LOCAL_SYMBOLS);
+  const astral = `message = '😀';\nreal_variable = 1;`;
+  assert.equal(matlabCode(astral).code.length, astral.length);
+  assert.ok(extractMatlabSymbols(astral).some(item => item.name === 'real_variable'));
+  assert.ok(extractMatlabSymbols(`y = A'; z = 1;`).some(item => item.name === 'z'));
+});
+
+test('MATLAB signature context counts only immediate call arguments', () => {
+  for (const [source, name, parameter] of [
+    ['plot(', 'plot', 0], ['plot(x,', 'plot', 1],
+    ['plot([1,2], tf([1], [1,2]),', 'plot', 2],
+    ['plot(x, tf([1],', 'tf', 1],
+    ["plot('a,b',", 'plot', 1], ["plot(x',", 'plot', 1],
+    ['plot(x, ... comment\n', 'plot', 1],
+    ['plot({1, 2},', 'plot', 1],
+  ]) assert.deepEqual(matlabCallContext(source), { name, parameter });
+  for (const source of ['plot(x)', '% plot(', "disp('plot(", 'obj.plot(', 'plot(]']) assert.equal(matlabCallContext(source), null);
+});
+
+test('MATLAB symbol cache debounces by version, avoids scans on reads, and releases listeners', async () => {
+  class Model {
+    text = 'first = 1;'; version = 1; reads = 0; changes = new Set(); disposals = new Set();
+    getValue() { this.reads++; return this.text; }
+    getValueLength() { return this.text.length; }
+    getVersionId() { return this.version; }
+    onDidChangeContent(fn) { this.changes.add(fn); return { dispose: () => this.changes.delete(fn) }; }
+    onWillDispose(fn) { this.disposals.add(fn); return { dispose: () => this.disposals.delete(fn) }; }
+    edit(text) { this.text = text; this.version++; for (const fn of this.changes) fn(); }
+    dispose() { for (const fn of [...this.disposals]) fn(); }
+  }
+  const cache = new MatlabSymbolCache(20);
+  const model = new Model();
+  try {
+    cache.track(model); cache.track(model);
+    assert.equal(model.reads, 1);
+    for (let i = 0; i < 20; i++) { model.edit(`value${i} = 2;`); cache.read(model); }
+    assert.equal(model.reads, 1, 'typing and completions do not synchronously rescan');
+    await new Promise(resolve => setTimeout(resolve, 60));
+    assert.equal(model.reads, 2);
+    assert.deepEqual(cache.read(model).map(item => item.name), ['value19']);
+    for (const fn of model.changes) fn();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    assert.equal(model.reads, 2, 'unchanged version is not scanned twice');
+    model.edit('pending = 1;'); model.dispose();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    assert.equal(model.reads, 2);
+    assert.equal(model.changes.size + model.disposals.size + cache.size, 0);
+    const large = new Model(); large.text = 'x'.repeat(MAX_SYMBOL_SOURCE_CHARS + 1);
+    cache.track(large); assert.equal(large.reads, 0);
+    for (let i = 0; i < 100; i++) { const item = new Model(); cache.track(item); item.dispose(); }
+    assert.equal(cache.size, 1);
+    large.dispose(); assert.equal(cache.size, 0);
+  } finally { cache.dispose(); }
+});
 
 test('console chunks preserve non-newline output while retaining a bounded tail', () => {
   const output = new OutputService(3, 20);

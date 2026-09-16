@@ -52,6 +52,7 @@ export class DocumentEditors {
         fontFamily: 'Consolas, "Cascadia Code", monospace', minimap: { enabled: this.options.minimap },
         padding: { top: 12 }, scrollBeyondLastLine: false, tabSize: 4,
         ariaLabel: 'MATLAB code editor', fixedOverflowWidgets: true,
+        wordBasedSuggestions: 'off',
       });
       this.editor = editor;
       editor.onDidChangeCursorPosition(() => this.changed());
@@ -180,7 +181,7 @@ export class DocumentEditors {
   }
   position(): string {
     const position = this.editor?.getPosition();
-    return this.active && position ? `Ln ${position.lineNumber}, Col ${position.column} · ${this.active.base.eol} · MATLAB (syntax only)` : 'Ready';
+    return this.active && position ? `Ln ${position.lineNumber}, Col ${position.column} · ${this.active.base.eol} · MATLAB (lightweight assistance, not LSP)` : 'Ready';
   }
   section(): { path: string; code: string; startLine: number; endLine: number } {
     if (!this.active || !this.editor) throw new Error('Open a MATLAB file first');
