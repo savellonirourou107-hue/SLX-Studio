@@ -5,6 +5,8 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from slxdiff.mcp import McpServer, run_mcp_server
 
 
@@ -215,3 +217,88 @@ def test_run_mcp_server_stream() -> None:
     data = json.loads(result_line)
     assert data["id"] == 1
     assert data["result"] == {}
+
+
+@pytest.mark.parametrize(
+    ("tool", "path_key"),
+    [
+        ("slx_inspect_model", "path"),
+        ("slx_diff_models", "left_path"),
+        ("slx_diff_models", "right_path"),
+        ("slx_review_intelligence", "left_path"),
+        ("slx_review_intelligence", "right_path"),
+    ],
+)
+def test_mcp_rejects_absolute_workspace_escape(tmp_path: Path, tool: str, path_key: str) -> None:
+    workspace = tmp_path / "workspace"
+    create_test_slx(workspace / "safe.slx")
+    outside = tmp_path / "workspace-other" / "private.slx"
+    create_test_slx(outside)
+    arguments = {"path": "safe.slx", "left_path": "safe.slx", "right_path": "safe.slx"}
+    arguments[path_key] = str(outside)
+    with pytest.raises(ValueError, match="workspace root"):
+        McpServer(workspace).call_tool(tool, arguments)
+
+
+def test_mcp_absolute_path_inside_workspace_is_allowed(tmp_path: Path) -> None:
+    model = tmp_path / "model.slx"
+    create_test_slx(model)
+    assert McpServer(tmp_path).call_tool("slx_inspect_model", {"path": str(model)})["isError"] is False
+
+
+def test_mcp_rejects_symlink_escape(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "private.slx"
+    create_test_slx(outside)
+    link = workspace / "linked.slx"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation requires platform support/privilege")
+    server = McpServer(workspace)
+    for supplied_path in (str(link), "linked.slx", "../private.slx"):
+        with pytest.raises(ValueError, match="workspace root"):
+            server.call_tool("slx_inspect_model", {"path": supplied_path})
+
+
+@pytest.mark.parametrize(
+    "payload", [[], None, 42, "request", {"id": 1}, {"jsonrpc": "1.0", "id": 1, "method": "ping"}]
+)
+def test_mcp_invalid_envelope_returns_protocol_error(payload: object) -> None:
+    response = json.loads(McpServer().process_message(json.dumps(payload)))
+    assert response["error"]["code"] == -32600
+
+
+@pytest.mark.parametrize("params", [[], "params", False, 12])
+def test_mcp_invalid_params_returns_protocol_error(params: object) -> None:
+    response = json.loads(
+        McpServer().process_message(
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params})
+        )
+    )
+    assert response["error"]["code"] == -32602
+
+
+@pytest.mark.parametrize("binary", [False, True])
+def test_mcp_oversized_line_is_bounded_and_next_request_survives(binary: bool) -> None:
+    from slxdiff.mcp import MAX_REQUEST_BYTES
+
+    ping = json.dumps({"jsonrpc": "2.0", "id": 7, "method": "ping"})
+    source = '"' + "x" * (MAX_REQUEST_BYTES + 5) + '"\n' + ping + "\n"
+    reader = io.BytesIO(source.encode()) if binary else io.StringIO(source)
+    writer = io.BytesIO() if binary else io.StringIO()
+    run_mcp_server(in_stream=reader, out_stream=writer)
+    responses = [json.loads(line) for line in writer.getvalue().splitlines()]
+    assert len(responses) == 2
+    assert responses[0]["error"]["code"] == -32600
+    assert responses[1] == {"jsonrpc": "2.0", "id": 7, "result": {}}
+
+
+def test_mcp_invalid_utf8_does_not_stop_stream() -> None:
+    reader = io.BytesIO(b'\xff\n{"jsonrpc":"2.0","id":2,"method":"ping"}\n')
+    writer = io.BytesIO()
+    run_mcp_server(in_stream=reader, out_stream=writer)
+    responses = [json.loads(line) for line in writer.getvalue().splitlines()]
+    assert responses[0]["error"]["code"] == -32700
+    assert responses[1]["result"] == {}
