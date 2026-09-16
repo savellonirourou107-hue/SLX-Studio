@@ -36,6 +36,11 @@ an unconditional overwrite. Reload from Disk is explicit. Dirty tab/window
 close offers Save, Discard or Cancel, and recovery drafts can be restored after
 restart. Mixed/legacy line endings open read-only to avoid silent conversion.
 
+Source builds after `v2.0.0` also provide [lightweight MATLAB assistance](matlab-intelligence.md):
+Ctrl+Space completion, hover documentation/product labels, live signature hints,
+and a bounded, debounced cache of current-document lexical symbols. It does not
+start MATLAB and is not a semantic LSP. These additions are not in the old release binaries.
+
 The `Settings: Show Effective Configuration` command displays the current
 schema-backed configuration. `Settings: Edit Configuration` persists the font
 size and minimap settings through the typed service. User settings live in the
@@ -74,6 +79,10 @@ variables, figures, tracepoints, diagnostics and session-loss state are
 summarized in Output/Problems. The `Simulink: Apply Validated Model Edit…`
 command accepts the existing JSON edit contract and routes it through MATLAB;
 it saves in place and reloads the static viewport.
+
+Plain [Subsystem creation and same-scope child wiring](subsystem-workflow.md) now
+use that edit contract. Empty Subsystems remain selectable in the viewport.
+Control Lab is still a [scoped design](control-lab-plan.md), not an implemented extension.
 
 `Extensions: List/Activate/Deactivate…` manages trusted application
 extensions. The sample extension contributes a command, sidebar view and

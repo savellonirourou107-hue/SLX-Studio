@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Restricted MCP absolute and relative paths to the workspace, bounded incoming
+  messages to 1 MiB, and retained stream synchronization after invalid input.
+- Preserved Windows MATLAB batch-console diagnostics using the system code page
+  instead of corrupting Chinese startup/error messages as UTF-8.
+- Added plain Subsystem editing with canonical BlockTypes, distinct virtual
+  hierarchy identities, empty-container navigation, same-scope connections and
+  MATLAB-only writes. Kept Subsystems out of the flat Blueprint capability.
+- Added offline Monaco MATLAB completions, product-aware hover, signature help
+  and version-cached, debounced lexical symbols with disposal/size limits.
+- Defined the future Control Lab's bounded Python-lite / MATLAB backend contract;
+  this plan does not implement the Control Lab or close Issue #6.
 - Added opt-in persistent MATLAB execution for commands, `.m` runs/sections and
   variable edits, with explicit reset reporting, bounded live output, Windows
   console encoding support and owned process-tree cleanup; batch stays default.

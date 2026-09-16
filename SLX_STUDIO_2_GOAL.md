@@ -2,6 +2,10 @@
 
 状态：**2.0 核心迁移已完成 M0b–M4 验收，已合并 `main` 并发布 `v2.0.0`。**
 
+后续源码迭代：MCP workspace 隔离、普通 Subsystem 编辑和 Monaco 轻量编辑辅助，
+见[2026-09-16 验收记录](docs/2026-09-16-acceptance.md)。这不代表完整 LSP；
+[Control Lab](docs/control-lab-plan.md) 先冻结双后端和数值能力边界，尚未实现。
+
 本目标依据维护者于 2026-09-07 提供的架构意见制定。
 实施细节、现有分支依赖和验收门槛见 [迁移总纲](docs/slx-studio-2-migration.md)。
 
