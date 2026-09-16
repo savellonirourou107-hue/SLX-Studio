@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import re
 import stat
-from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from .documents import DocumentConflict, document_path
+from .model import system_groups
 from .parser import parse_slx
-from .slx_path import parent_path
 
 MAX_VIEW_BLOCKS = 160
 MAX_VIEW_LINES = 512
@@ -66,20 +65,18 @@ def model_viewport(
     if expected_sha256 is not None and expected_sha256 != version:
         raise DocumentConflict("Model changed on disk; reload before navigating further.")
 
-    grouped = defaultdict(list)
-    for block in model.blocks.values():
-        grouped[block.system_id].append(block)
+    grouped = system_groups(model)
     systems = sorted(
         (
-            {"id": identifier, "label": parent_path(blocks[0].path) or "Root", "blocks": len(blocks)}
-            for identifier, blocks in grouped.items()
+            {"id": identifier, "label": scope or "Root", "blocks": len(blocks)}
+            for identifier, (scope, blocks) in grouped.items()
         ),
         key=lambda item: (item["label"] != "Root", item["label"].casefold(), item["id"]),
     )
     selected_system = system_id if system_id is not None else (systems[0]["id"] if systems else "")
     if selected_system not in grouped and systems:
         raise ValueError("unknown model subsystem")
-    system_blocks = grouped[selected_system]
+    system_blocks = grouped[selected_system][1]
     search = query.casefold().strip()
     matches = sorted(
         (

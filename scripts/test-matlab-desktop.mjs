@@ -138,6 +138,31 @@ try {
   await waitFor(async () => (await page.locator('.model-view').getAttribute('data-sha256')) === beforeModelSha, 'model undo restores exact source hash');
   await page.getByRole('button', { name: 'Redo model edit', exact: true }).click();
   await waitFor(async () => (await page.locator('.model-view').getAttribute('data-sha256')) === afterModelSha, 'model redo restores edited source hash');
+  // Exercise hierarchical edits through the actual Electron command and real bridge.
+  const subsystemEdit = {
+    schema_version: '0.1', model_name: 'rpc_model', source_sha256: afterModelSha,
+    operations: [
+      { op: 'add_block', block_type: 'subsystem', name: 'Controller', parent: '' },
+      { op: 'add_block', block_type: 'inport', name: 'In1', parent: 'Controller', parameters: { Port: '1' } },
+      { op: 'add_block', block_type: 'gain', name: 'InnerGain', parent: 'Controller', parameters: { Gain: '2' } },
+      { op: 'add_block', block_type: 'outport', name: 'Out1', parent: 'Controller', parameters: { Port: '1' } },
+      { op: 'add_line', system_path: 'Controller', src_path: 'Controller/In1', dst_path: 'Controller/InnerGain' },
+      { op: 'add_line', system_path: 'Controller', src_path: 'Controller/InnerGain', dst_path: 'Controller/Out1' },
+    ],
+  };
+  await page.getByRole('button', { name: 'Edit and Save…', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Model edit JSON', exact: true }).fill(JSON.stringify(subsystemEdit));
+  await page.getByRole('button', { name: 'Apply and Save', exact: true }).click();
+  await waitFor(async () => (await page.locator('.model-view').getAttribute('data-sha256')) !== afterModelSha, 'subsystem edit saves and reloads', 180_000);
+  await page.getByRole('button', { name: 'Inspect Controller', exact: true }).waitFor();
+  const subsystemOption = await page.getByRole('combobox', { name: 'Model subsystem' }).locator('option').filter({ hasText: 'Controller' }).getAttribute('value');
+  assert.ok(subsystemOption);
+  await page.getByRole('combobox', { name: 'Model subsystem' }).selectOption(subsystemOption);
+  await page.getByRole('button', { name: 'Inspect Controller/InnerGain', exact: true }).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button').count(), 3);
+  await page.getByText(/2\/2 connections/).waitFor();
+  await page.getByRole('button', { name: 'Undo model edit', exact: true }).click();
+  await waitFor(async () => (await page.locator('.model-view').getAttribute('data-sha256')) === afterModelSha, 'subsystem Undo restores the exact pre-container model');
   await page.getByRole('button', { name: 'Simulate…', exact: true }).click();
   await page.getByRole('textbox', { name: 'Simulation stop time', exact: true }).fill('1');
   await page.getByRole('button', { name: 'Run simulation', exact: true }).click();
@@ -154,7 +179,7 @@ try {
   await page.getByRole('button', { name: 'Edit and Save…', exact: true }).click();
   await page.getByRole('button', { name: 'Apply and Save', exact: true }).click();
   await waitFor(async () => (await page.locator('#output').textContent()).includes('source model changed'), 'external model conflict is reported without overwrite');
-  console.log('PASS: real R2026a + Electron command stream, variable edit, file/section shared session, rendered figure, diagnostic navigation, cancellation/no replay, staged model edit/undo/redo, independent simulation and conflict guard.');
+  console.log('PASS: real R2026a + Electron command stream, variable edit, file/section shared session, rendered figure, diagnostic navigation, cancellation/no replay, staged model edit/undo/redo, Subsystem creation/navigation/internal wiring, independent simulation and conflict guard.');
 } catch (error) {
   if (page && !page.isClosed()) {
     console.error(await page.locator('body').ariaSnapshot());

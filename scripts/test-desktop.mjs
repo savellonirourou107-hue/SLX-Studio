@@ -24,6 +24,11 @@ execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
   path.join(workspace, 'model.slx'),
   modelXml,
 ], { windowsHide: true });
+execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
+  '-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1], "w"); z.writestr("simulink/systems/system_root.xml", sys.argv[2]); z.close()',
+  path.join(workspace, 'empty-subsystem.slx'),
+  '<System><Block BlockType="SubSystem" Name="Empty" SID="1"><System/></Block></System>',
+], { windowsHide: true });
 const largeXmlPath = path.join(testRoot, 'large-system.xml');
 const largeBlocks = Array.from({ length: 1000 }, (_, index) => `<Block BlockType="Gain" Name="Block${String(index).padStart(4, '0')}" SID="${index + 1}"><P Name="Position">[${20 + (index % 10) * 130} ${40 + Math.floor(index / 10) * 70} ${80 + (index % 10) * 130} ${70 + Math.floor(index / 10) * 70}]</P></Block>`).join('');
 const largeLines = Array.from({ length: 999 }, (_, index) => `<Line><P Name="Src">${index + 1}#out:1</P><P Name="Dst">${index + 2}#in:1</P></Line>`).join('');
@@ -85,6 +90,34 @@ try {
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.slx.invoke), 'undefined');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
+  console.log('STEP MATLAB lightweight intelligence');
+  await replaceText('local_gain = 2;\nplo');
+  await page.keyboard.press('Control+Space');
+  await page.locator('.suggest-widget.visible').waitFor();
+  assert.match(await page.locator('.suggest-widget.visible').textContent(), /plot/);
+  await page.keyboard.press('Escape');
+  await replaceText('local_gain = 2;\nlocal_');
+  await new Promise(resolve => setTimeout(resolve, 350));
+  await page.keyboard.press('Control+Space');
+  await page.locator('.suggest-widget.visible').waitFor();
+  assert.match(await page.locator('.suggest-widget.visible').textContent(), /local_gain/);
+  await page.keyboard.press('Escape');
+  await replaceText('tf([1], [1 1]);\n');
+  await page.locator('.view-line span').filter({ hasText: /^tf$/ }).first().hover();
+  await page.locator('.monaco-hover').filter({ hasText: 'Requires: Control System Toolbox' }).waitFor();
+  await page.screenshot({ path: path.join(artifactRoot, 'matlab-intelligence-hover.png') });
+  await page.keyboard.press('Escape');
+  await replaceText('plot');
+  await page.keyboard.type('(');
+  await page.locator('.parameter-hints-widget.visible').waitFor();
+  assert.equal(await page.locator('.parameter-hints-widget .parameter.active').textContent(), 'X');
+  await page.keyboard.type('x,');
+  await waitFor(async () => await page.locator('.parameter-hints-widget .parameter.active').textContent() === 'Y', 'comma highlights the second signature parameter');
+  await page.screenshot({ path: path.join(artifactRoot, 'matlab-intelligence-signature.png') });
+  await page.keyboard.press('Escape');
+  await replaceText('gain = 1;\n');
+  await page.keyboard.press('Control+s');
+  console.log('PASS: completion, cached local symbols, toolbox hover and live signature popup.');
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'SLX static model view is exposed through the custom editor contribution');
   assert.match(await page.getByRole('log').textContent(), /2 blocks, 1 connections/);
@@ -102,6 +135,13 @@ try {
   await waitFor(async () => await page.getByRole('button', { name: 'Inspect Gain', exact: true }).count() === 0, 'model search filters the bounded outline');
   assert.equal(await page.getByRole('button', { name: 'Inspect Gain', exact: true }).count(), 0, 'model search filters the bounded outline');
   await page.getByRole('textbox', { name: 'Find model blocks' }).fill('');
+  await page.getByRole('treeitem', { name: 'empty-subsystem.slx', exact: true }).click();
+  await page.getByRole('button', { name: 'Inspect Empty', exact: true }).waitFor();
+  await page.getByRole('combobox', { name: 'Model subsystem' }).selectOption('empty:Empty');
+  await page.getByText('No matching blocks.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button').count(), 0);
+  console.log('PASS: an empty Subsystem remains navigable without fabricating a block.');
+  await page.getByRole('button', { name: 'Close empty-subsystem.slx', exact: true }).click();
   await page.getByRole('treeitem', { name: 'large.slx', exact: true }).click();
   await waitFor(async () => await page.getByRole('button', { name: 'Next blocks', exact: true }).isEnabled(), 'large model viewport exposes a bounded next page');
   assert.equal(await page.getByRole('group', { name: 'Static model canvas' }).getByRole('button').count(), 160, 'large model rendering is bounded to one page');
@@ -255,6 +295,8 @@ try {
   assert.ok(monacoAsset);
   const remainingModels = await page.evaluate(async asset => (await import(new URL(`./${asset}`, location.href))).monaco.editor.getModels().length, monacoAsset);
   assert.equal(remainingModels, 0, '100 open/close cycles dispose Monaco models');
+  const retainedSymbolCaches = await page.evaluate(async asset => (await import(new URL(`./${asset}`, location.href))).matlabIntelligence.cachedModels, monacoAsset);
+  assert.equal(retainedSymbolCaches, 0, '100 open/close cycles dispose MATLAB symbol caches and listeners');
   console.log('PASS: 100 editor open/close cycles leave no retained Monaco models.');
 } catch (error) {
   if (page && !page.isClosed()) {

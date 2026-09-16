@@ -86,9 +86,21 @@ class BlockSpec:
     block_type: str
     parameters: frozenset[str]
     description: str
+    allow_blueprint: bool = True
+    allow_model_edit: bool = True
+    container: bool = False
 
 
 BLOCK_CATALOG: dict[str, BlockSpec] = {
+    "subsystem": BlockSpec(
+        "subsystem",
+        "simulink/Ports & Subsystems/Subsystem",
+        "SubSystem",
+        frozenset(),
+        "Empty virtual subsystem (model editor only)",
+        allow_blueprint=False,
+        container=True,
+    ),
     "inport": BlockSpec(
         "inport",
         "simulink/Ports & Subsystems/In1",
@@ -365,7 +377,7 @@ def blueprint_from_dict(payload: dict[str, Any]) -> ModelBlueprint:
             raise ValueError(f"duplicate block id {block_id!r}")
         ids.add(block_id)
         block_type = _text(raw.get("type", ""), field=f"blocks[{index}].type", max_chars=64)
-        if block_type not in BLOCK_CATALOG:
+        if block_type not in BLOCK_CATALOG or not BLOCK_CATALOG[block_type].allow_blueprint:
             raise ValueError(f"unsupported blueprint block type {block_type!r}")
         name = _text(raw.get("name", ""), field=f"blocks[{index}].name", max_chars=128).strip()
         if not name or "/" in name:
@@ -443,6 +455,8 @@ def blueprint_from_dict(payload: dict[str, Any]) -> ModelBlueprint:
 
 def blueprint_to_model(blueprint: ModelBlueprint) -> Model:
     """Create an in-memory preview model without MATLAB or SLX serialization."""
+    # Public typed callers must obey the same capability boundary as JSON callers.
+    blueprint = blueprint_from_dict(blueprint.to_dict())
     model = Model(name=blueprint.model_name)
     id_to_path: dict[str, str] = {}
     for index, item in enumerate(blueprint.blocks, start=1):
@@ -473,15 +487,21 @@ def blueprint_to_model(blueprint: ModelBlueprint) -> Model:
     return model
 
 
-def catalog_payload() -> dict[str, Any]:
+def catalog_payload(*, capability: str = "blueprint") -> dict[str, Any]:
+    if capability not in {"blueprint", "model_edit"}:
+        raise ValueError("unknown catalog capability")
     return {
         key: {
             "key": spec.key,
             "block_type": spec.block_type,
             "description": spec.description,
             "parameters": sorted(spec.parameters),
+            "allow_blueprint": spec.allow_blueprint,
+            "allow_model_edit": spec.allow_model_edit,
+            "container": spec.container,
         }
         for key, spec in sorted(BLOCK_CATALOG.items())
+        if (spec.allow_blueprint if capability == "blueprint" else spec.allow_model_edit)
     }
 
 
@@ -499,7 +519,7 @@ def blueprint_tool_schema() -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "id": {"type": "string"},
-                        "type": {"type": "string", "enum": sorted(BLOCK_CATALOG)},
+                        "type": {"type": "string", "enum": sorted(catalog_payload())},
                         "name": {"type": "string"},
                         "position": {
                             "type": "array",

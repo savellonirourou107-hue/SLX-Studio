@@ -98,7 +98,7 @@ def edit_document_from_dict(payload: dict[str, Any]) -> ModelEditDocument:
             )
         elif op == "add_block":
             block_type = _text(raw.get("block_type", ""), field="block_type", max_chars=64)
-            if block_type not in BLOCK_CATALOG:
+            if block_type not in BLOCK_CATALOG or not BLOCK_CATALOG[block_type].allow_model_edit:
                 raise ValueError(f"unsupported block type {block_type!r}")
             name = _text(raw.get("name", ""), field="name", max_chars=128).strip()
             if not _NAME_RE.fullmatch(name):
@@ -165,8 +165,11 @@ def _endpoint_parts(endpoint: str) -> tuple[str, str, int] | None:
 def _replace_path_prefix(path: str, old: str, new: str) -> str:
     if path == old:
         return new
-    prefix = f"{old}/"
-    return f"{new}{path[len(old) :]}" if path.startswith(prefix) else path
+    return f"{new}{path[len(old) :]}" if _is_descendant(path, old) else path
+
+
+def _is_descendant(path: str, parent: str) -> bool:
+    return path.startswith(f"{parent}/") and len(parent) in separator_indexes(path)
 
 
 def _replace_endpoint_prefix(endpoint: str, old: str, new: str) -> str:
@@ -178,6 +181,10 @@ def _replace_endpoint_prefix(endpoint: str, old: str, new: str) -> str:
 
 
 def _declared_port_count(block: Block, direction: str) -> int | None:
+    ports = block.parameters.get("Ports", "")
+    if re.fullmatch(r"\s*\[\s*\d+(?:[\s,]+\d+)+\s*\]\s*", ports):
+        counts = [int(value) for value in re.findall(r"\d+", ports)]
+        return counts[0 if direction == "in" else 1]
     names = (
         ("NumInputPorts", "Inputs", "Ports") if direction == "in" else ("NumOutputPorts", "Outputs", "Ports")
     )
@@ -189,7 +196,18 @@ def _declared_port_count(block: Block, direction: str) -> int | None:
         if match:
             count = int(match.group(1))
             return max(0, count)
-    return None
+    fixed = {
+        "Inport": (0, 1),
+        "Outport": (1, 0),
+        "Gain": (1, 1),
+        "Saturate": (1, 1),
+        "TransferFcn": (1, 1),
+        "UnitDelay": (1, 1),
+        "Constant": (0, 1),
+        "Step": (0, 1),
+        "ToWorkspace": (1, 0),
+    }.get(block.block_type)
+    return fixed[0 if direction == "in" else 1] if fixed else None
 
 
 def validate_edit_document(document: ModelEditDocument, model: Model, *, source_path: str | Path) -> None:
@@ -202,11 +220,39 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
     # Keep a virtual view while validating so rename/add/delete operations have
     # deterministic effects on every subsequent operation in one document.
     virtual_lines: set[Line] = set(model.lines)
+    virtual_systems: dict[str, str] = {}
+    for block in blocks.values():
+        virtual_systems.setdefault(parent_path(block.path), block.system_id)
+    virtual_systems.setdefault("", "pending-system:root")
+    system_serial = 0
+
+    def add_virtual_system(path: str) -> None:
+        nonlocal system_serial
+        if path not in virtual_systems:
+            system_serial += 1
+            virtual_systems[path] = f"pending-system:{system_serial}:{path}"
+
+    for block in blocks.values():
+        if block.block_type == "SubSystem":
+            add_virtual_system(block.path)
 
     def require_block(path: str) -> Block:
         block = blocks.get(path)
         if block is None:
             raise ValueError(f"block no longer exists: {path}")
+        return block
+
+    def require_subsystem(path: str) -> Block:
+        block = require_block(path)
+        if block.block_type != "SubSystem":
+            raise ValueError("parent/context must be a Subsystem; MATLAB further validation is required")
+        if (
+            block.parameters.get("Mask") == "on"
+            or block.parameters.get("MaskType")
+            or block.parameters.get("ReferenceBlock")
+            or block.parameters.get("Variant") == "on"
+        ):
+            raise ValueError("masked, linked or variant Subsystems require MATLAB further validation")
         return block
 
     def endpoint_block(path: str, *, role: str) -> Block:
@@ -230,15 +276,11 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
         if src.system_id != dst.system_id:
             raise ValueError("connection endpoints must belong to the same Simulink system")
         if system_path:
-            prefix = f"{system_path}/"
-            if not (src_path.startswith(prefix) and dst_path.startswith(prefix)):
-                raise ValueError("connection endpoint is outside the requested system context")
-        else:
-            root_system = next(
-                (item.system_id for item in model.blocks.values() if not separator_indexes(item.path)), None
-            )
-            if root_system is not None and src.system_id != root_system:
-                raise ValueError("nested connection requires its explicit Subsystem context")
+            require_subsystem(system_path)
+        if parent_path(src_path) != system_path or parent_path(dst_path) != system_path:
+            raise ValueError("connection endpoints require their immediate Subsystem context")
+        if src.system_id != virtual_systems[system_path]:
+            raise ValueError("connection endpoint is outside the requested system context")
 
     def line_key(line: Line) -> tuple[str, str, int, str, int] | None:
         src = _endpoint_parts(line.src)
@@ -249,7 +291,7 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
             return None
         return (line.system_id, src[0], src[2], dst[0], dst[2])
 
-    for op in document.operations:
+    for op_index, op in enumerate(document.operations):
         kind = op["op"]
         if kind == "set_param":
             block = require_block(op["block_path"])
@@ -271,30 +313,21 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
         elif kind == "add_block":
             path = join_path(op["parent"], op["name"])
             if op["parent"]:
-                parent = require_block(op["parent"])
-                if parent.block_type != "SubSystem":
-                    raise ValueError(
-                        "add_block parent must be a Subsystem; MATLAB further validation is required"
-                    )
+                require_subsystem(op["parent"])
             if path in blocks:
                 raise ValueError(f"block already exists: {path}")
-            if op["parent"]:
-                # Child blocks parsed from a nested System carry the nested
-                # system id; use it for subsequent in-subsystem connections.
-                system_id = next(
-                    (item.system_id for item in blocks.values() if item.path.startswith(f"{op['parent']}/")),
-                    blocks[op["parent"]].system_id,
-                )
-            else:
-                system_id = next((item.system_id for item in blocks.values()), "__pending_root__")
+            spec = BLOCK_CATALOG[op["block_type"]]
+            system_id = virtual_systems[op["parent"]]
             blocks[path] = Block(
                 system_id=system_id,
-                sid=f"pending-{len(blocks) + 1}",
+                sid=f"pending-block:{op_index}",
                 name=op["name"],
-                block_type=op["block_type"].title() if op["block_type"] != "saturation" else "Saturate",
+                block_type=spec.block_type,
                 path=path,
                 parameters={"Position": str(op["position"]), **dict(op.get("parameters", {}))},
             )
+            if spec.container:
+                add_virtual_system(path)
         elif kind in {"delete_block", "rename_block", "move_block"}:
             path = op["block_path"]
             block = require_block(path)
@@ -320,7 +353,7 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
                 if kind == "rename_block":
                     parent = parent_path(path)
                     renamed = join_path(parent, op["new_name"])
-                    affected = [item for item in blocks if item == path or item.startswith(f"{path}/")]
+                    affected = [item for item in blocks if item == path or _is_descendant(item, path)]
                     if renamed in blocks and renamed not in affected:
                         raise ValueError(f"block already exists: {renamed}")
                     moved: dict[str, Block] = {}
@@ -337,6 +370,10 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
                             dict(item.parameters),
                         )
                     blocks.update(moved)
+                    virtual_systems = {
+                        _replace_path_prefix(scope, path, renamed): identifier
+                        for scope, identifier in virtual_systems.items()
+                    }
                     virtual_lines = {
                         Line(
                             line.system_id,
@@ -347,9 +384,14 @@ def validate_edit_document(document: ModelEditDocument, model: Model, *, source_
                         for line in virtual_lines
                     }
                 else:
-                    affected = [item for item in blocks if item == path or item.startswith(f"{path}/")]
+                    affected = [item for item in blocks if item == path or _is_descendant(item, path)]
                     for item in affected:
                         blocks.pop(item, None)
+                    virtual_systems = {
+                        scope: identifier
+                        for scope, identifier in virtual_systems.items()
+                        if scope != path and not _is_descendant(scope, path)
+                    }
                     virtual_lines = {
                         line
                         for line in virtual_lines

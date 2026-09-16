@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import tempfile
 import webbrowser
-from collections import defaultdict
 from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
@@ -12,7 +11,7 @@ from .agent import provider_catalog_payload
 from .blueprint import catalog_payload
 from .context import build_agent_context
 from .diff import compare_models
-from .model import Block, Model
+from .model import Block, Model, system_groups
 from .parser import parse_slx
 from .patching import PATCH_SCHEMA_VERSION
 from .review import build_review_report, review_to_dict
@@ -40,9 +39,7 @@ def _system_label(blocks: list[Block], system_id: str) -> str:
 
 
 def _model_payload(model: Model) -> dict:
-    grouped: dict[str, list[Block]] = defaultdict(list)
-    for block in model.blocks.values():
-        grouped[block.system_id].append(block)
+    grouped = system_groups(model)
 
     metadata = dict(model.metadata)
     type_counts = metadata.get("block_type_counts")
@@ -60,13 +57,14 @@ def _model_payload(model: Model) -> dict:
     }
 
     systems = []
-    for system_id, blocks in sorted(
-        grouped.items(), key=lambda item: _system_label(item[1], item[0]).lower()
+    for system_id, (system_path, blocks) in sorted(
+        grouped.items(), key=lambda item: (item[1][0] != "", item[1][0].casefold())
     ):
         systems.append(
             {
                 "id": system_id,
-                "label": _system_label(blocks, system_id),
+                "label": _system_label(blocks, system_id) if blocks else system_path or "Root",
+                "path": system_path,
                 "block_count": len(blocks),
             }
         )
@@ -180,7 +178,7 @@ def render_studio_html(
         "source_sha256": target.metadata.get("sha256", ""),
         "bridge": bridge or {"enabled": False},
         "providers": provider_catalog_payload(),
-        "block_catalog": catalog_payload(),
+        "block_catalog": catalog_payload(capability="model_edit"),
     }
     if compare_to is None:
         payload = {"mode": "model", "model": _model_payload(model), "editor": editor}

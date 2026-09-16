@@ -497,7 +497,9 @@ def build_blueprint_with_matlab(
     """Build a validated SLX Studio blueprint using a restricted MATLAB command set."""
     from .blueprint import BLOCK_CATALOG, ModelBlueprint, blueprint_from_dict
 
-    document = blueprint if isinstance(blueprint, ModelBlueprint) else blueprint_from_dict(blueprint)
+    document = blueprint_from_dict(
+        blueprint.to_dict() if isinstance(blueprint, ModelBlueprint) else blueprint
+    )
     output = Path(output_path).resolve()
     if output.suffix.lower() != ".slx":
         raise ValueError("blueprint output path must end in .slx")
@@ -552,9 +554,11 @@ try
     loadedName = get_param(h, 'Name');
     ops = req.edit.operations;
     if ~isempty(ops)
-        if iscell(ops), ops = [ops{{:}}]; end
+        % Heterogeneous JSON operations have different fields. Do not join
+        % their structs: MATLAB cannot concatenate dissimilar structures.
+        if ~iscell(ops), ops = num2cell(ops); end
         for k = 1:numel(ops)
-            op = ops(k);
+            op = ops{{k}};
             kind = char(op.op);
             if strcmp(kind, 'set_param')
                 target = loadedName;
@@ -576,6 +580,11 @@ try
                 destination = [loadedName '/' char(op.name)];
                 if ~isempty(parent), destination = [loadedName '/' parent '/' char(op.name)]; end
                 add_block(char(op.library), destination);
+                if isfield(op, 'empty_container') && op.empty_container
+                    % Only the freshly created catalog Subsystem is cleared.
+                    % Existing user subsystems are never cleared implicitly.
+                    Simulink.SubSystem.deleteContents(destination);
+                end
                 set_param(destination, 'Position', double(op.position(:)'));
                 if isfield(op, 'parameters')
                     names = fieldnames(op.parameters);
@@ -664,7 +673,9 @@ def apply_model_edit_with_matlab(
     for raw in document.operations:
         op = dict(raw)
         if op["op"] == "add_block":
-            op["library"] = BLOCK_CATALOG[op["block_type"]].library
+            spec = BLOCK_CATALOG[op["block_type"]]
+            op["library"] = spec.library
+            op["empty_container"] = spec.container
         elif op["op"] in {"add_line", "delete_line"}:
             system_path = op.get("system_path", "")
             op["src_local"] = relative_to_system(op["src_path"], system_path)
