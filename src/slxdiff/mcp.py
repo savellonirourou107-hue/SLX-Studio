@@ -323,7 +323,9 @@ class McpServer:
                 {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {exc}"}}
             )
         response = self.handle_request(payload)
-        return json.dumps(response, ensure_ascii=False) if response is not None else None
+        # Escaped lone surrogates are accepted by Python's JSON decoder. Keep
+        # them escaped so a response ID cannot break UTF-8 stdout encoding.
+        return json.dumps(response, ensure_ascii=True) if response is not None else None
 
 
 def run_mcp_server(
