@@ -318,7 +318,7 @@ class McpServer:
             return None
         try:
             payload = json.loads(stripped)
-        except (json.JSONDecodeError, RecursionError) as exc:
+        except (ValueError, RecursionError) as exc:
             return json.dumps(
                 {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {exc}"}}
             )

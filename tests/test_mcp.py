@@ -302,3 +302,14 @@ def test_mcp_invalid_utf8_does_not_stop_stream() -> None:
     responses = [json.loads(line) for line in writer.getvalue().splitlines()]
     assert responses[0]["error"]["code"] == -32700
     assert responses[1]["result"] == {}
+
+
+def test_mcp_integer_decoder_limit_does_not_stop_stream() -> None:
+    # Modern Python raises ValueError (not JSONDecodeError) for oversized ints.
+    # Older Python decodes it, then correctly rejects the non-object envelope.
+    reader = io.StringIO("9" * 5000 + '\n{"jsonrpc":"2.0","id":2,"method":"ping"}\n')
+    writer = io.StringIO()
+    run_mcp_server(in_stream=reader, out_stream=writer)
+    responses = [json.loads(line) for line in writer.getvalue().splitlines()]
+    assert responses[0]["error"]["code"] in {-32600, -32700}
+    assert responses[1]["result"] == {}
