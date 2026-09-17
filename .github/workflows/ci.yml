@@ -57,6 +57,11 @@ jobs:
         run: npm run test:platform
       - name: Build desktop assets
         run: npm run build
+      - name: Enable Chromium user namespaces on Ubuntu 24.04
+        run: |
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Test real Electron workbench
         run: xvfb-run -a npm run test:desktop
 
