@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
 const MAX_FRAME = 16 * 1024 * 1024;
+const MAX_PENDING_WRITE_BYTES = 32 * 1024 * 1024;
 
 export class FrameDecoder {
   private buffer = Buffer.alloc(0);
@@ -37,9 +38,10 @@ export class FrameDecoder {
 
 export class PythonBackend extends EventEmitter {
   private readonly child: ChildProcessWithoutNullStreams;
-  private readonly pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; bytes: number }>();
   private id = 0;
   private closed = false;
+  private pendingWriteBytes = 0;
   private shutdownTimer?: NodeJS.Timeout;
   constructor(python: string, workspace: string, sourceRoot: string, state: string) {
     super();
@@ -56,6 +58,7 @@ export class PythonBackend extends EventEmitter {
           if (!message || message.jsonrpc !== '2.0' || typeof message.id !== 'number' || !this.pending.has(message.id)) throw new Error('Unexpected backend response');
           const request = this.pending.get(message.id)!;
           this.pending.delete(message.id);
+          this.pendingWriteBytes -= request.bytes;
           clearTimeout(request.timer);
           if (message.error) request.reject(Object.assign(new Error(message.error.message), { kind: message.error.data?.kind }));
           else request.resolve(message.result);
@@ -74,10 +77,13 @@ export class PythonBackend extends EventEmitter {
     const id = ++this.id;
     const payload = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id, method, params }), 'utf8');
     if (payload.length > MAX_FRAME) return Promise.reject(new Error('Request exceeds the frame size limit'));
+    const frame = Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]);
+    if (this.pendingWriteBytes + frame.length > MAX_PENDING_WRITE_BYTES) return Promise.reject(new Error('Backend write queue exceeded; wait for pending requests to finish'));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error('Python request timed out; not replayed.')), 30_000);
-      this.pending.set(id, { resolve, reject, timer });
-      this.child.stdin.write(Buffer.concat([Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`), payload]));
+      this.pendingWriteBytes += frame.length;
+      this.pending.set(id, { resolve, reject, timer, bytes: frame.length });
+      this.child.stdin.write(frame, error => { if (error) this.fail(error); });
     });
   }
   private stopOwnedTree(): void {
@@ -94,6 +100,7 @@ export class PythonBackend extends EventEmitter {
     this.closed = true;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
+    this.pendingWriteBytes = 0;
     this.child.stdin.end();
     // EOF lets Backend.serve finally close its owned MATLAB session. Killing
     // Python immediately here used to bypass that cleanup and orphan MATLAB.
