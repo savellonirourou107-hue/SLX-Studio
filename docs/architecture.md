@@ -1,124 +1,130 @@
 # Architecture
 
-This document describes the existing beta implementation. The planned
-Electron/Monaco architecture and migration gates are in the
-[2.0 migration charter](slx-studio-2-migration.md); they have not replaced this
-runtime yet. The [project goal](../SLX_STUDIO_2_GOAL.md) is the refactor scope.
+This document describes the **current SLX Studio 2.0 architecture on `main`**.
+The historical migration rationale and acceptance gates remain in the
+[2.0 migration charter](slx-studio-2-migration.md), while the
+[project goal](../SLX_STUDIO_2_GOAL.md) defines product boundaries.
 
-SLX Studio is split into a lightweight editor shell and explicit execution bridges.
+SLX Studio is a Model + Code + Simulation-first engineering IDE with a
+TypeScript/Electron desktop and a dependency-light Python engineering core.
+The legacy pywebview/browser Workbench remains a compatibility path; new
+platform architecture belongs in the Electron workbench.
 
-## Workbench
+## Layered runtime
 
 ```text
-workspace folder
-├── *.m   -> text editor -> atomic save -> MATLAB -batch -> Console
-└── *.slx -> safe parser -> canonical graph -> graphical editor
-                                      |
-                                      +-> structured edit intent
-                                      +-> optional AI tools
-                                      +-> optional Git/review tools
+Electron main process
+  ├── restricted preload API
+  │     └── renderer / Workbench
+  │           ├── Monaco text editors
+  │           ├── SLX custom editor
+  │           ├── Commands / Settings / Problems / Output
+  │           └── trusted first-party extension contributions
+  ├── private framed JSON-RPC over stdio
+  │     └── Python `src/slxdiff` backend
+  │           ├── static SLX parser / diff / validation
+  │           ├── workspace and document services
+  │           └── explicit MATLAB runtime/model jobs
+  └── separate Node extension host
 ```
 
-The Workbench owns file navigation, text editing, the graphical canvas, Inspector and Console. Workspace APIs are constrained to the selected root.
+The renderer has no raw Node.js, filesystem, shell, or arbitrary IPC access.
+Electron validates the sender and payload of privileged requests. Python is
+started only after a workspace is opened; MATLAB remains explicit and opt-in.
 
-## SLX read path
+## Code and workspace path
+
+Text documents are opened through root-scoped backend services and represented
+by managed Monaco models. Save uses conflict detection and atomic replacement.
+Dirty state, draft recovery, Undo/Redo, tab lifetime, and external-change
+handling are owned by the desktop editor layer rather than ad hoc DOM state.
+
+Workspace settings follow `default < user < workspace` precedence. Sensitive
+runtime configuration is not workspace-writable. Directory listing, document
+reads, model inspection, and writes are constrained to the selected workspace.
+
+## SLX static read path
 
 1. Open `.slx` as a ZIP package.
-2. Apply archive/XML safety limits.
-3. Locate Simulink system XML.
-4. Normalize blocks, parameters and signal endpoints.
-5. Record conservative `metadata.unsupported_features` diagnostics for structures that are only partially understood (for example Stateflow, masks, variants, links, model references, bus metadata and dynamic ports).
-6. Render the canonical graph without starting MATLAB.
+2. Apply archive entry, aggregate XML, and per-member size limits.
+3. Reject DTD/entity declarations before XML parsing.
+4. Locate Simulink system XML and normalize blocks, parameters, subsystems, and signal endpoints.
+5. Record conservative `metadata.unsupported_features` diagnostics for partially understood structures.
+6. Return bounded/paginated canonical data to the renderer without starting MATLAB.
 
-This read path powers viewing, diff, review and AI context.
+Static inspection powers model viewing, semantic diff, review, agent context,
+and safe navigation. It does **not** execute callbacks or embedded code and is
+not claimed to be equivalent to Simulink's own rendering or object model.
 
 ## SLX write path
 
-The browser does not directly serialize private SLX internals.
-
-Parameter edits are staged with source SHA-256 and before-value checks. Structural edits use a separate validated edit document.
-
-Supported v0.8 structural operations include:
+The desktop never rewrites private SLX XML directly. User-approved edits flow
+through validated intent and the MATLAB/Simulink programmatic APIs:
 
 ```text
-add_block
-rename_block
-delete_block
-add_line
-delete_line
-move_block
+explicit edit intent
+  -> Python validation
+  -> source SHA-256 / before-value conflict checks
+  -> isolated MATLAB/Simulink operation
+  -> official API calls (`set_param`, block/line operations, `save_system`)
+  -> reload canonical model
 ```
 
-After validation, the MATLAB bridge translates those operations into MATLAB/Simulink programmatic APIs and calls `save_system`.
+Plain Subsystem editing is supported within the validated transaction boundary
+covered by the 2026-09-16 acceptance record. Complex masks, variants, library
+links, model references, Stateflow, specialized blocks, and dynamic semantics
+remain compatibility work rather than inferred support.
 
-```text
-Studio edit intent
-      |
-Python validation
-      |
-source hash / conflict checks
-      |
-MATLAB bridge
-      |
-add_block / set_param / delete_block / add_line / delete_line / Position
-      |
-save_system
-```
+## MATLAB execution
 
-## Workbench history
+MATLAB execution is arbitrary user-code execution by definition and is never
+triggered by merely opening a project or model. The desktop uses the existing
+project-scoped persistent worker for Command Window and `.m` runs, with bounded
+stdout/stderr deltas, cancellation, structured result metadata, and explicit
+session-loss reporting. Side-effecting requests are not replayed after failure.
 
-SLX edits use a session-scoped snapshot history. Before and after each accepted structural or parameter edit, the Workbench records a temporary model snapshot and source hash. Undo/redo refuses to overwrite the file if another program changed the model on disk after the history record was created.
+Graphical model edits/simulation use validated model jobs and preserve source
+hash checks. Real MATLAB/Simulink remains authoritative for programmatic edits,
+compilation, simulation, figure export, and saving.
 
-## `.m` execution path
+## Desktop transport and failure isolation
 
-`.m` files are normal text files. Save uses atomic file replacement. Run is explicitly user-triggered and invokes:
+The Python transport uses JSON-RPC 2.0 messages framed by `Content-Length` over
+private stdio. Frames, headers, concurrent requests, result pages, and queued
+write bytes are bounded. Malformed framing, oversized messages, process crashes,
+and timeouts fail pending work rather than silently retrying it.
 
-```text
-matlab -batch "cd(...); run(...)"
-```
+The Node extension host is a responsiveness boundary, not an OS security
+sandbox. Trusted extensions activate lazily, run outside the renderer, expose a
+small declarative contribution surface, and can be terminated/restarted without
+freezing the editor. Third-party distribution requires separate trust and
+installation hardening before it can be treated as a general marketplace.
 
-stdout and stderr are captured into the Workbench Console. Script, simulation and sweep jobs return their final output, while Command Window jobs additionally expose bounded incremental stdout/stderr deltas through the status endpoint. The runner also writes a structured result envelope containing safe workspace-variable metadata and MATLAB error file/line information when available.
+## Security invariants
 
-For `.m` runs, the session-scoped breakpoint registry can request non-pausing tracepoints. The runner creates a temporary instrumented copy, records line/workspace-name events, and deletes it with the job directory. It never leaves `dbstop` state in a user MATLAB session and does not claim interactive debugger semantics.
+- `contextIsolation: true`, renderer sandboxing, no renderer Node integration.
+- Local packaged assets only; navigation/window creation/webviews are denied.
+- Workspace-root guards and symlink/junction checks on privileged file paths.
+- No static `.slx` inspection callback execution.
+- No implicit MATLAB start, task execution, AI network request, or extension activation on open.
+- Bounded RPC, process output, settings files, archive parsing, and UI result pages.
+- Secrets and runtime executable paths are not trusted from workspace settings.
 
-Running `.m` code is arbitrary code execution by definition and is not treated as a sandboxed action.
+See [SECURITY.md](../SECURITY.md) and the migration charter for the threat model
+and explicit non-goals.
 
-### Optional persistent worker
+## Testing and release evidence
 
-`--matlab-session persistent` replaces the Command Window and `.m` execution
-backend with one lazy, private, long-running MATLAB worker. A shared execution
-lock serializes commands, file/section runs and variable edits. Atomic JSON
-requests/results and bounded pipe output reuse the current Job API; live state
-is kept in MATLAB instead of restored from a MAT checkpoint. The batch backend
-remains the default. Graphical SLX bridges remain independent batch operations.
-See [persistent session lifecycle and limitations](persistent-matlab.md).
+Validation is deliberately split by boundary:
 
-## Desktop shell
+- Python unit/regression tests and Ruff checks.
+- TypeScript type checking and Node platform/protocol tests.
+- Real Electron interaction tests.
+- Optional real MATLAB/Simulink R2026a integration tests.
+- Windows portable package and installer acceptance.
 
-`slx-studio` starts the loopback Workbench server. With pywebview installed it opens inside a desktop WebView; otherwise it opens the system browser.
-
-The Windows CI workflow bundles the package and UI into `SLXStudio.exe` with PyInstaller.
-
-## Optional AI layer
-
-AI providers consume a constrained tool surface for model inspection, structure analysis, staged edits and validated blueprints. They do not automatically inherit the user-triggered `.m` execution capability.
-
-## Optional Git/review layer
-
-The original semantic diff pipeline remains dependency-light and non-executing:
-
-```text
-before/after SLX -> canonical graphs -> semantic diff -> review intelligence -> Git/AI context
-```
-
-This is useful, but it is a secondary capability of the editor rather than the primary product boundary.
-
-## Compatibility and validation boundary
-
-The parser's canonical graph is intentionally smaller than the full Simulink
-object model. Unsupported-feature metadata is advisory: it prevents callers
-from mistaking a partial view for a complete semantic model. MATLAB/Simulink
-R2026a remains authoritative for `set_param`, structural edits, compilation,
-simulation, figure export and `save_system`. The optional
-`tests/test_matlab_r2026a_integration.py` entry point is skipped unless the
-caller explicitly configures `SLX_STUDIO_MATLAB` or `SLX_DIFF_MATLAB`.
+A skipped licensed-runtime test is not counted as a pass. The latest verified
+Subsystem/MATLAB editor-assistance evidence is recorded in
+[2026-09-16 acceptance](2026-09-16-acceptance.md). Compatibility claims remain
+narrower than the full Simulink feature set and must expand through reproducible
+fixtures and real-runtime evidence.
