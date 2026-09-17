@@ -1,13 +1,17 @@
 # Roadmap
 
-## Current direction — SLX Studio 2.0 (planned)
+## Current direction — SLX Studio 2.x
 
-The next major direction is a **Model + Code + Simulation-first IDE** built on
-an Electron/TypeScript/Monaco desktop, retaining the Python engineering core.
-See the [project goal](SLX_STUDIO_2_GOAL.md) and
-[migration charter](docs/slx-studio-2-migration.md) for scope, resource budgets,
-branch dependencies and executable acceptance criteria. This is not a released
-2.0 implementation; the beta below remains the compatibility baseline.
+**SLX Studio 2.0 is shipped on `main` and released as `v2.0.0`.** The current
+focus is hardening the desktop platform, expanding verified Simulink/MATLAB
+coverage, and adding engineering capabilities without weakening the static
+inspection and explicit-execution boundaries.
+
+The product direction remains a **Model + Code + Simulation-first IDE** built on
+Electron/TypeScript/Monaco while retaining the dependency-light Python core.
+See the [project goal](SLX_STUDIO_2_GOAL.md),
+[migration charter](docs/slx-studio-2-migration.md), and
+[current architecture](docs/architecture.md) for scope and acceptance rules.
 
 - [x] M0a: record the goal, verified starting point and migration gates
 - [x] M0b: review/integrate required open-branch fixes and validate the combined baseline
@@ -16,8 +20,9 @@ branch dependencies and executable acceptance criteria. This is not a released
 - [x] M3: SLX Custom Editor and shared MATLAB/model/simulation workflow
 - [x] M4: lazy Extension Host, first-party extensions and Windows install acceptance
 
-Full LSP, a pausing debugger/profiler, remote execution, Marketplace and
-additional Terminal/Control/Git/AI extensions follow the core migration.
+Full MATLAB LSP semantics, a pausing debugger/profiler, remote execution,
+Marketplace, richer Terminal/Git/AI integration, and Control Lab remain
+post-2.0 capabilities and must keep explicit capability boundaries.
 
 ## v0.8 — Make it feel like a small real IDE ✅
 
@@ -58,29 +63,32 @@ additional Terminal/Control/Git/AI extensions follow the core migration.
 - [x] Cancellable SLX simulations and parameter sweeps
 - [x] Parameter sweep overlay + convenience metrics
 - [x] Read-only `slx-diff doctor` environment/workspace diagnostics
-
 - [x] Windows EXE + installer workflow with opt-in `.m` / `.slx` file associations (CI smoke-tested)
 - [x] Compatibility matrix scaffold with a real R2026a core-bridge record
 - [x] Model overview metadata, large-subsystem rendering guard and Workbench parse cache
 - [x] Asynchronous session-scoped workspace index for large-project navigation
-- [ ] Compatibility test matrix across supported MATLAB releases
 - [x] Crash recovery / autosave
-- [ ] More Simulink libraries and multi-port semantics
-- [ ] Subsystem create/open/edit workflow
+
+## 2.x engineering priorities
+
+- [ ] Expand the compatibility matrix across supported MATLAB/Simulink releases
+- [ ] Broaden verified Simulink libraries and multi-port semantics
+- [x] Plain Subsystem navigation and validated edit transactions
+- [ ] Complete Subsystem create/open/edit UX for broader real-world models
 - [ ] Model references and library links
-- [ ] Stable plugin interfaces for block catalogs, AI providers and analysis tools
-
-## Engineering iteration foundations
-
-- [x] Opt-in persistent MATLAB worker for Command Window, `.m` and variable edits
-- [ ] Extend the persistent backend to graphical SLX simulation and sweeps
+- [ ] Stateflow, masks, variants and bus/data-type metadata
+- [ ] Extend persistent MATLAB ownership to more graphical simulation/sweep paths
 - [ ] Recovery/ownership after unexpected host process termination
-- [ ] Modular frontend separation (carried into the 2.0 TypeScript migration)
-- [ ] Packaged Windows UI end-to-end acceptance (beyond EXE artifact checks)
+- [x] Modular TypeScript frontend separation
+- [x] Packaged Windows Electron install/launch/reopen/uninstall acceptance
+- [ ] Stable third-party plugin installation/trust boundary and distribution story
 - [ ] Control Lab built around explicit experiments and control metrics
+- [ ] Performance regression budget for large workspaces/models in CI or reproducible local gates
 
 The initial persistent mode and its tested boundaries are described in
-[the session guide](docs/persistent-matlab.md).
+[the session guide](docs/persistent-matlab.md). Subsystem and lightweight MATLAB
+editor-assistance evidence is in
+[the 2026-09-16 acceptance record](docs/2026-09-16-acceptance.md).
 
 ## Optional AI layer
 
@@ -90,6 +98,7 @@ The initial persistent mode and its tested boundaries are described in
 - [x] MCP server for external coding agents
 - [ ] Local Ollama / LM Studio presets
 - [ ] Provider capability discovery
+- [ ] Explicit per-provider capability/permission UI in the 2.x desktop
 
 ## Optional Git / review layer
 
@@ -100,6 +109,19 @@ The initial persistent mode and its tested boundaries are described in
 - [x] GitHub Action
 - [ ] Review notes anchored to model SIDs
 - [ ] Three-way model edit conflict UI
+- [ ] First-class Git status/diff workflow in the Electron desktop
+
+## Control engineering
+
+The Control Lab is intentionally **not yet implemented**. Its numerical and
+backend contract is frozen first so the UI cannot imply unsupported analysis.
+See [docs/control-lab-plan.md](docs/control-lab-plan.md) and Issue #6.
+
+- [ ] Control Core M0 bounded SISO analysis kernels
+- [ ] Real MATLAB differential validation and provenance
+- [ ] Control Lab extension with Step/Bode/Nyquist/metrics
+- [ ] Explicit SLX I/O + operating-point linearization
+- [ ] State-space analysis, LQR/MPC and domain workflows after the core gates
 
 ## Advanced Simulink compatibility
 
