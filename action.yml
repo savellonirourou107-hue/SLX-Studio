@@ -100,7 +100,7 @@ runs:
 
     - name: Create or update PR comment
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       continue-on-error: true
       env:
         REPORT_PATH: ${{ steps.review.outputs.report-path }}
