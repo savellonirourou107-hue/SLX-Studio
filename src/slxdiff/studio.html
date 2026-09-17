@@ -661,6 +661,8 @@
 
   function parentPath(path) { const text=String(path||''); const indexes=pathSeparatorIndexes(text); return indexes.length?text.slice(0,indexes[indexes.length-1]):''; }
   function currentSystemPath() {
+    const system=allSystems().find(item=>item.id===currentSystemId());
+    if(system&&typeof system.path==='string')return system.path;
     const blocks=blocksForSystem(currentSystemId()); if(!blocks.length)return '';
     const parents=[...new Set(blocks.map(b=>parentPath(b.path)))]; return parents.length===1?parents[0]:'';
   }
@@ -948,6 +950,8 @@
   }
   function openSubsystem(block) {
     if(!block)return false;
+    const system=allSystems().find(item=>item.path===block.path);
+    if(system){systemSelect.value=system.id;selectedId=null;render();return true;}
     const target=[...systemSelect.options].find(o=>o.textContent.replace(/ \(\d+\)$/,'')===block.path || o.textContent.replace(/ \(\d+\)$/,'')===block.name);
     if(!target)return false;
     systemSelect.value=target.value;selectedId=null;render();return true;

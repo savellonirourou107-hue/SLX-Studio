@@ -19,11 +19,21 @@
 ### Branch and version map
 
 - **`main`** is the default stable 2.0.0 line; reviewers and new work should start here.
-- The [`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0) contains the Windows, Python wheel and source assets for that line.
+- The [`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0) is a frozen snapshot with Windows, Python wheel and source assets; later source improvements do not automatically update those binaries.
 - **`v1.0.0-beta.2` / `v1.0.0-beta.3`** are preserved historical tags for reproducing the old behavior; neither is the default branch.
 - **`codex/slx-studio-2-foundation`** is the completed 2.0 integration branch. Its work entered `main` through [PR #21](https://github.com/savellonirourou107-hue/SLX-Studio/pull/21); it is not an unreleased replacement mainline. The CLI patch-validation fix is merged through [PR #9](https://github.com/savellonirourou107-hue/SLX-Studio/pull/9).
 
 **Migration summary:** update to `main` or download `v2.0.0`. Existing `slx-diff` CLI and `slx-studio` / `slx-diff studio` legacy Workbench entry points remain available. Launch the new Electron desktop from the Windows release package or `npm run desktop -- <workspace>`; execution and simulation still require local MATLAB/Simulink. See the [bilingual migration guide](docs/slx-studio-2-migration.md#upgrade-to-2) for setup and boundaries.
+
+### Latest source improvements (2026-09-16)
+
+- **Security:** relative and absolute MCP paths stay inside the workspace; requests are bounded to 1 MiB, with recovery after malformed or oversized messages.
+- **[Subsystem editing](docs/subsystem-workflow.md):** plain containers, child blocks, same-scope wiring and empty-container navigation, retaining MATLAB saves, history and conflict checks. This is not general complex-model or hierarchical Blueprint support.
+- **[MATLAB assistance](docs/matlab-intelligence.md):** offline Electron/Monaco completions, hover, signature help and bounded lexical symbol caching, not a full LSP.
+- **[Control Lab plan](docs/control-lab-plan.md):** explicit Python-lite / MATLAB backends and numerical acceptance boundaries. Not implemented yet; Issue #6 remains open.
+
+These are source changes **after `v2.0.0`**; the release tag and existing binaries
+are unchanged. See the [verification record](docs/2026-09-16-acceptance.md).
 
 ## Why SLX Studio
 
@@ -224,6 +234,10 @@ This keeps the browser UI lightweight while MATLAB remains responsible for seria
 
 The current catalog includes common blocks such as Inport, Outport, Step, Constant, Gain, Sum, Saturation, Integrator, Discrete-Time Integrator, Transfer Function, Unit Delay, Mux, Scope and To Workspace. The catalog is extensible without hard-coding every block into the UI.
 
+Latest source also includes plain Subsystems for model-edit only; see the
+[Subsystem workflow](docs/subsystem-workflow.md). The flat AI Blueprint catalog
+continues to reject Subsystems.
+
 ## Run, plots, sweeps and project navigation
 
 The Workbench adds the small IDE conveniences that matter during iteration:
@@ -388,7 +402,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-Latest verification (2026-09-09, Windows, optional MATLAB integration tests not enabled): **148 passed, 9 expected skips**. Run `python -m pytest -ra` for totals in your environment; licensed MATLAB tests are opt-in and Windows process-tree tests are platform-specific. The suite covers XML/archive hardening, REST schema errors, SLX parsing/diff/review, patching, AI blueprints/providers, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, project search, history, UI contracts and diagnostics.
+Current source totals and separate real R2026a, Electron and packaging results are in the [2026-09-16 acceptance record](docs/2026-09-16-acceptance.md). The **148 passed, 9 skipped** result from 2026-09-09 is historical, not today's total. Run `python -m pytest -ra` for your environment; licensed MATLAB tests are opt-in and skips are not passes. Coverage includes XML/archive hardening, MCP workspace/message limits, REST validation, SLX parsing/diff/review, patching, blueprints, Subsystem hierarchy, workspace isolation, sections, cancellable jobs, checkpoints, persistent worker lifecycle and Workbench HTTP execution, recovery, sweeps, figures, search, history, UI contracts and diagnostics.
 
 For a licensed MATLAB R2026a + Simulink installation, run the real-runtime check explicitly:
 

@@ -11,6 +11,7 @@ claim of full Simulink compatibility.
 | Static parser | N/A | `PASS` | Bounded ZIP/XML parsing, diff, review, context and API contracts using synthetic fixtures |
 | Fake MATLAB | N/A | `PASS` | Subprocess protocol, cancellation, workspace checkpoint and bridge errors |
 | Real MATLAB + Simulink | R2026a | `PASS` | Reduced block/line edits, `save_system`, `sim`, Figure export and workspace checkpoint |
+| Real MATLAB + Electron | R2026a | `PASS` | Plain Subsystem create/save/reparse/reload, child wiring, rename/delete/history/conflict and actual desktop navigation; [2026-09-16 evidence](2026-09-16-acceptance.md) |
 | Real MATLAB + Simulink | R2025b and earlier | `NOT_EVALUATED` | No reviewed real-runtime result yet |
 
 The machine-readable source is [`compatibility-matrix.json`](compatibility-matrix.json). A test validates its schema and prevents an unqualified release from being represented as verified.

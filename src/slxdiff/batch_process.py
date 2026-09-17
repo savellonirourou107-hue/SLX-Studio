@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import codecs
+import locale
 import os
 import subprocess
 import threading
 import time
 
 from .worker_process import WorkerProcess
+
+
+def _console_encoding():
+    # MATLAB's Windows console uses the system code page, not its UTF-8 JSON files.
+    return (
+        getattr(locale, "getencoding", lambda: locale.getpreferredencoding(False))()
+        if os.name == "nt"
+        else "utf-8"
+    )
 
 
 def run_batch(command, *, timeout, cwd=None, on_process=None, cancelled=None):
@@ -23,12 +33,13 @@ def run_batch(command, *, timeout, cwd=None, on_process=None, cancelled=None):
     limit = 1_048_576
 
     def read(name, pipe):
-        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        decoder = codecs.getincrementaldecoder(_console_encoding())("replace")
         try:
             while chunk := os.read(pipe.fileno(), 4096):
                 text = decoder.decode(chunk)
                 remaining = max(0, limit - len(output[name]))
                 output[name] += text[:remaining]
+            output[name] += decoder.decode(b"", final=True)[: max(0, limit - len(output[name]))]
         finally:
             pipe.close()
 

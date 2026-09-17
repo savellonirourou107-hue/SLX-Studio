@@ -19,11 +19,21 @@
 ### 分支与版本关系
 
 - **`main`** 是当前默认、稳定的 2.0.0 主线；评审和新开发都应从这里开始。
-- **[`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0)** 是对应的正式发布版本，包含 Windows、Python wheel 和源码资产。
+- **[`v2.0.0` Release](https://github.com/savellonirourou107-hue/SLX-Studio/releases/tag/v2.0.0)** 是冻结的正式发布快照，包含 Windows、Python wheel 和源码资产；后续源码改进不会自动更新这些安装包。
 - **`v1.0.0-beta.2` / `v1.0.0-beta.3`** 是保留的历史版本 tag，用于复现旧版行为，不代表当前默认分支。
 - **`codex/slx-studio-2-foundation`** 是已经完成合并的 2.0 集成分支；其功能通过 [PR #21](https://github.com/savellonirourou107-hue/SLX-Studio/pull/21) 进入 `main`，不应被误认为尚未发布的替代主线。CLI patch 校验修复已通过 [PR #9](https://github.com/savellonirourou107-hue/SLX-Studio/pull/9) 合并。
 
 **迁移要点：** 更新到 `main` 或下载 `v2.0.0`；原有 `slx-diff` CLI 和 `slx-studio` / `slx-diff studio` 旧版 Workbench 入口继续保留。新 Electron 桌面从 Windows 发布包或 `npm run desktop -- <workspace>` 启动，执行与仿真仍需本机 MATLAB/Simulink。完整步骤和边界见[中英文迁移说明](docs/slx-studio-2-migration.md#upgrade-to-2)。
+
+### 最新源码改进（2026-09-16）
+
+- **安全**：MCP 的相对/绝对路径统一限制在 workspace 内；请求限制为 1 MiB，损坏或超限消息不会破坏后续请求。
+- **[Subsystem 编辑](docs/subsystem-workflow.md)**：支持普通子系统创建、内部模块与同层连线、空容器导航，保留 MATLAB 保存、Undo/Redo 和文件冲突检查；不扩展为任意复杂模型或 Blueprint 层级支持。
+- **[MATLAB 编辑辅助](docs/matlab-intelligence.md)**：Electron/Monaco 新增离线补全、悬停、参数提示与有界本地符号缓存，不是完整 LSP。
+- **[Control Lab 计划](docs/control-lab-plan.md)**：明确 Python-lite / MATLAB 双后端与数值验收边界，尚未实现，Issue #6 继续开放。
+
+以上是 `v2.0.0` **之后的源码能力**；原 Release tag 和二进制没有替换。
+分项验收见[本轮验证记录](docs/2026-09-16-acceptance.md)。
 
 ## 产品定位
 
@@ -215,6 +225,8 @@ SLX Studio 负责轻量 UI、编辑意图和冲突保护；MATLAB 负责真实 `
 
 首批安全目录包含 Inport、Outport、Step、Constant、Gain、Sum、Saturation、Integrator、Discrete-Time Integrator、Transfer Function、Unit Delay、Mux、Scope、To Workspace 等常用模块。后续通过 catalog 扩展，而不是把所有逻辑写死在前端。
 
+最新源码还支持仅用于 model-edit 的普通 Subsystem；详见[创建子系统与内部连线](docs/subsystem-workflow.md)。AI Blueprint 的平面 catalog 不包含 Subsystem。
+
 ## 运行、图形、扫参与工程导航
 
 Workbench 加入了一组更像工程 IDE 的高频操作：
@@ -366,7 +378,7 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-最近验证（2026-09-09，Windows，未启用可选 MATLAB 集成测试）：**148 个通过、9 个预期跳过**。请运行 `python -m pytest -ra` 查看当前环境的总数；真实 MATLAB 验收需显式配置路径，Windows 进程树测试仅在对应平台运行。覆盖范围包括 XML/归档安全、REST 输入校验、SLX Parser/Diff/Review、Patch、AI Provider、Workspace 隔离、分节运行、可停止任务、checkpoint、常驻 worker 生命周期及 Workbench HTTP 执行链、恢复草稿、扫描、Figure、工程搜索、历史记录、UI 契约和诊断。
+本轮源码的精确测试数量、真实 R2026a、Electron 和打包结果统一记录在[2026-09-16 验收记录](docs/2026-09-16-acceptance.md)。2026-09-09 的 **148 个通过、9 个跳过**仅为历史快照，不代表当前总数。请运行 `python -m pytest -ra` 查看当前环境结果；真实 MATLAB 测试需显式配置路径，跳过不计通过。覆盖范围包括 XML/归档安全、MCP workspace 隔离与消息限制、REST 输入校验、SLX Parser/Diff/Review、Patch、Blueprint、Subsystem 层级、Workspace 隔离、分节运行、可停止任务、checkpoint、常驻 worker 生命周期及 Workbench HTTP 执行链、恢复草稿、扫描、Figure、工程搜索、历史记录、UI 契约和诊断。
 
 在安装了 MATLAB R2026a + Simulink 的机器上显式运行真实验收：
 

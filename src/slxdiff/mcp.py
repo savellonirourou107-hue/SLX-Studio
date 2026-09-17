@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
 from dataclasses import asdict
@@ -15,6 +16,11 @@ from .review import build_review_report, render_review_markdown
 from .workspace import read_text_file, resolve_workspace_path, search_workspace
 
 PROTOCOL_VERSION = "2024-11-05"
+MAX_REQUEST_BYTES = 1024 * 1024
+
+
+def _error(code: int, message: str, msg_id: Any = None) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
 
 class McpServer:
@@ -36,7 +42,7 @@ class McpServer:
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Relative or absolute path to the .slx file.",
+                            "description": "Relative or absolute path to an .slx file within the workspace root.",
                         }
                     },
                     "required": ["path"],
@@ -125,7 +131,9 @@ class McpServer:
             resolved = p.resolve()
         else:
             resolved = resolve_workspace_path(self.root, path_str)
-        if not resolved.exists():
+        if not resolved.is_relative_to(self.root):
+            raise ValueError("model path escapes the workspace root")
+        if not resolved.is_file():
             raise FileNotFoundError(f"model file not found: {path_str}")
         if resolved.suffix.lower() != ".slx":
             raise ValueError(f"file is not an .slx model: {path_str}")
@@ -160,8 +168,9 @@ class McpServer:
             if not left_path or not right_path:
                 raise ValueError("left_path and right_path are required")
             include_layout = bool(arguments.get("include_layout", False))
-            old = parse_slx(self._resolve_slx(left_path))
-            new = parse_slx(self._resolve_slx(right_path))
+            left_model, right_model = self._resolve_slx(left_path), self._resolve_slx(right_path)
+            old = parse_slx(left_model)
+            new = parse_slx(right_model)
             result = compare_models(old, new, include_layout=include_layout)
             diff_text = render_markdown(result)
             return {
@@ -174,8 +183,9 @@ class McpServer:
             right_path = str(arguments.get("right_path", "")).strip()
             if not left_path or not right_path:
                 raise ValueError("left_path and right_path are required")
-            old = parse_slx(self._resolve_slx(left_path))
-            new = parse_slx(self._resolve_slx(right_path))
+            left_model, right_model = self._resolve_slx(left_path), self._resolve_slx(right_path)
+            old = parse_slx(left_model)
+            new = parse_slx(right_model)
             report = build_review_report(old, new)
             review_md = render_review_markdown(report)
             return {
@@ -225,17 +235,30 @@ class McpServer:
 
         raise ValueError(f"unknown tool: {name}")
 
-    def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
+    def handle_request(self, request: Any) -> dict[str, Any] | None:
         """Handle a single parsed JSON-RPC 2.0 request or notification."""
+        if not isinstance(request, dict):
+            return _error(-32600, "Request must be a JSON object")
         msg_id = request.get("id")
         method = request.get("method", "")
-        params = request.get("params") or {}
+        if (
+            request.get("jsonrpc") != "2.0"
+            or not isinstance(method, str)
+            or not method
+            or isinstance(msg_id, bool)
+            or (msg_id is not None and not isinstance(msg_id, (str, int)))
+        ):
+            return _error(-32600, "Invalid JSON-RPC 2.0 request")
 
         # Handle notifications (no id)
-        if msg_id is None:
+        if "id" not in request:
             if method == "notifications/initialized":
                 return None
             return None
+
+        params = request.get("params", {})
+        if not isinstance(params, dict):
+            return _error(-32602, "params must be a JSON object", msg_id)
 
         if method == "initialize":
             return {
@@ -265,7 +288,7 @@ class McpServer:
 
         if method == "tools/call":
             tool_name = str(params.get("name", ""))
-            arguments = params.get("arguments") or {}
+            arguments = params.get("arguments", {})
             try:
                 res = self.call_tool(tool_name, arguments)
                 return {"jsonrpc": "2.0", "id": msg_id, "result": res}
@@ -288,17 +311,21 @@ class McpServer:
 
     def process_message(self, raw_line: str) -> str | None:
         """Process a raw JSON-RPC string and return the serialized JSON response string if any."""
+        if len(raw_line) > MAX_REQUEST_BYTES or len(raw_line.encode("utf-8")) > MAX_REQUEST_BYTES:
+            return json.dumps(_error(-32600, "Request exceeds the 1 MiB limit"))
         stripped = raw_line.strip()
         if not stripped:
             return None
         try:
             payload = json.loads(stripped)
-        except json.JSONDecodeError as exc:
+        except (ValueError, RecursionError) as exc:
             return json.dumps(
                 {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {exc}"}}
             )
         response = self.handle_request(payload)
-        return json.dumps(response, ensure_ascii=False) if response is not None else None
+        # Escaped lone surrogates are accepted by Python's JSON decoder. Keep
+        # them escaped so a response ID cannot break UTF-8 stdout encoding.
+        return json.dumps(response, ensure_ascii=True) if response is not None else None
 
 
 def run_mcp_server(
@@ -309,22 +336,32 @@ def run_mcp_server(
 ) -> int:
     """Run the MCP server reading line-delimited JSON-RPC from in_stream and writing to out_stream."""
     server = McpServer(root=root)
-    reader = in_stream or sys.stdin
-    writer = out_stream or sys.stdout
+    reader = in_stream if in_stream is not None else sys.stdin.buffer
+    writer = out_stream if out_stream is not None else sys.stdout.buffer
 
-    for line in reader:
-        if isinstance(line, bytes):
-            line = line.decode("utf-8", errors="replace")
-        response_str = server.process_message(line)
+    while True:
+        line = reader.readline(MAX_REQUEST_BYTES + 1)
+        if not line:
+            break
+        newline = b"\n" if isinstance(line, bytes) else "\n"
+        if len(line) > MAX_REQUEST_BYTES:
+            # Drain only the oversized frame, never buffer it or consume the
+            # next request. Text streams get an additional UTF-8 byte check.
+            while not line.endswith(newline):
+                line = reader.readline(MAX_REQUEST_BYTES + 1)
+                if not line:
+                    break
+            response_str = json.dumps(_error(-32600, "Request exceeds the 1 MiB limit"))
+        else:
+            try:
+                decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+                response_str = server.process_message(decoded)
+            except UnicodeError:
+                response_str = json.dumps(_error(-32700, "Request must be valid UTF-8"))
         if response_str:
-            if hasattr(writer, "buffer"):
-                writer.write(response_str + "\n")
-                writer.flush()
-            else:
-                writer.write(
-                    (response_str + "\n").encode("utf-8")
-                    if isinstance(writer, BinaryIO)
-                    else response_str + "\n"
-                )
-                writer.flush()
+            output = response_str + "\n"
+            writer.write(
+                output.encode("utf-8") if isinstance(writer, (io.BufferedIOBase, io.RawIOBase)) else output
+            )
+            writer.flush()
     return 0
