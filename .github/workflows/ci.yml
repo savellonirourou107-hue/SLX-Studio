@@ -39,13 +39,16 @@ jobs:
 
   desktop-platform:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - name: Install desktop dependencies
         run: npm ci
       - name: Type-check desktop
@@ -54,6 +57,8 @@ jobs:
         run: npm run test:platform
       - name: Build desktop assets
         run: npm run build
+      - name: Test real Electron workbench
+        run: xvfb-run -a npm run test:desktop
 
   windows-session:
     runs-on: windows-latest
