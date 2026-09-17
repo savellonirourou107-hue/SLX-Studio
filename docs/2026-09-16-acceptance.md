@@ -17,7 +17,8 @@ Windows MATLAB console 修复：`bee767a`（最终运行代码候选）。
 | 实际 Electron | PASS | 补全弹窗、本地变量、工具箱 hover、实时参数高亮、空容器导航、原有编辑保存/恢复/扩展失效工作流；100 次开关后无保留 TextModel/符号缓存 |
 | 实际 R2026a | **11 passed**，440.61 s | 覆盖本轮旧桥接回归与 Subsystem 事务；只代表已覆盖模型/版本 |
 | R2026a + Electron | **PASS** | `npm run test:matlab-desktop`；不是上方无 MATLAB 的 Electron 测试 |
-| Windows 打包/安装 | 待执行 | 本机 UI 测试不等于 EXE/installer 验收 |
+| Windows 打包/安装 | **PASS**，Run `35127966783` | 两个 job 均成功；Electron 包真实安装、启动、重开与卸载通过 |
+| GitHub CI | **PASS**，Run `35127939191` | Python 3.10–3.14 + Windows session；GitHub hosted CI 未运行 MATLAB |
 
 MATLAB 库默认探针实际观察到普通 Subsystem 含 In1、Out1、1 条连接。
 新增容器通过官方 API 清理默认内容后，再按事务添加显式子块。
@@ -41,6 +42,17 @@ MATLAB 库默认探针实际观察到普通 Subsystem 含 In1、Out1、1 条连�
   将许可失败算作跳过的逻辑；完整门槛重新执行，原始失败 JUnit 保留在本地。
 - 最终完整序列为 **11 passed**；随后实际 Electron + MATLAB 联验也通过。
 
+### GitHub evidence
+
+- [PR #24](https://github.com/savellonirourou107-hue/SLX-Studio/pull/24)
+- [CI](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/35127939191)：
+  Linux Python 3.12 示例为 `204 passed, 15 skipped`；平台差异不与 Windows 总数混加。
+- [Build Windows desktop](https://github.com/savellonirourou107-hue/SLX-Studio/actions/runs/35127966783)：
+  `windows-exe` 1m18s；`electron-windows` 4m50s。构建目标为 `921cc5e`，
+  后续仅补验收文档；未发布新 Release，也未移动旧 tag。
+- 非阻断 warning：既有 `actions/upload-artifact@v4` 使用 Node 20 声明，runner
+  将其切换至 Node 24；两个上传步骤实际均成功。
+
 ## 轻量性
 
 Python 强制运行依赖仍为零，Node 依赖清单未增加条目；没有引入语言服务器、
@@ -61,6 +73,11 @@ Python 强制运行依赖仍为零，Node 依赖清单未增加条目；没有�
 这是一次本机资源验收，不是相对旧版的提速声明或大工程性能保证。
 10 次原始 ready 时间（ms）：`826.75, 802.90, 790.24, 772.82, 773.03,
 811.10, 777.50, 819.15, 820.78, 798.19`。
+
+Actions 的 Electron 合并 artifact 为 277,759,781 bytes（264.89 MiB），同时包含
+portable 目录和 installer；旧版合并 artifact 为 36,989,299 bytes（35.28 MiB）。
+前者超过 250 MiB 的单 artifact 目标，不能声称所有体积预算已达标。
+单独分发包压缩大小和安装占用本轮未另测；本轮已达标的是启动/空闲内存和依赖边界。
 
 ## 复现命令
 

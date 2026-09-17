@@ -1,7 +1,7 @@
 {
   "schema_version": "1",
   "project_version": "2.0.0",
-  "last_updated": "2026-09-09",
+  "last_updated": "2026-09-16",
   "records": [
     {
       "id": "python-static-parser",
@@ -38,6 +38,18 @@
       "command": "SLX_STUDIO_MATLAB=<path-to-matlab.exe> python -m pytest -ra -m matlab_integration",
       "scope": "set_param, add_block, delete_block, add_line, delete_line, save_system, sim, Figure export and workspace checkpoint on a reduced model.",
       "limitations": "Does not establish complete compatibility for Stateflow, masks, variants, links, model references, buses or specialized toolbox blocks."
+    },
+    {
+      "id": "matlab-r2026a-plain-subsystem",
+      "evidence_class": "real_matlab",
+      "status": "PASS",
+      "verified_commit": "bee767a3f2b4e1c4278ef9a6a9618c073f4b19e4",
+      "matlab_release": "R2026a",
+      "simulink_release": "R2026a",
+      "test": "tests/test_subsystem_r2026a.py and scripts/test-matlab-desktop.mjs",
+      "command": "SLX_STUDIO_MATLAB=<path-to-matlab.exe> python -m pytest -ra -m matlab_integration; npm run test:matlab-desktop",
+      "scope": "Plain Subsystem creation, same-scope child blocks and wiring, save/reparse/reload, rename/delete, exact-byte history and external hash conflicts; actual Electron creation/navigation and undo.",
+      "limitations": "Reduced synthetic models only, not masked/variant/linked/conditional Subsystem support. Earlier local sequences hit MATLAB startup Error 5001; the final 11-test suite and real desktop gate passed. See 2026-09-16-acceptance.md."
     },
     {
       "id": "matlab-other-releases",
