@@ -80,7 +80,7 @@ def _git(root: Path, *args: str, max_bytes: int = _MAX_GIT_OUTPUT) -> bytes:
                     process.kill()
                     return
                 output.extend(chunk)
-        except Exception as exc:  # pragma: no cover - defensive pipe failure
+        except (OSError, ValueError) as exc:  # pragma: no cover - defensive pipe failure
             reader_error = exc
             process.kill()
 
