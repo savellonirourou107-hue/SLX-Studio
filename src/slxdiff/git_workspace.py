@@ -308,7 +308,7 @@ def _text_diff(root: Path, relative: str, entry: dict[str, Any] | None) -> dict[
 
 def _slx_diff(root: Path, relative: str, entry: dict[str, Any] | None) -> dict[str, Any]:
     current = root / relative
-    deleted = entry is not None and entry.get("worktree") == "D"
+    deleted = entry is not None and (entry.get("index") == "D" or entry.get("worktree") == "D")
     added = entry is not None and (entry.get("untracked") or entry.get("index") == "A")
     old_path = str(entry.get("old_path") or relative) if entry else relative
 
