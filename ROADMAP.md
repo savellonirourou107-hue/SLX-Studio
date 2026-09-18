@@ -110,7 +110,8 @@ editor-assistance evidence is in
 - [x] GitHub Action
 - [ ] Review notes anchored to model SIDs
 - [ ] Three-way model edit conflict UI
-- [ ] First-class Git status/diff workflow in the Electron desktop
+- [x] Read-only Git status/diff workflow for changed `.m` / semantic `.slx` files in Electron
+- [ ] Git stage/unstage/commit workflow with explicit write confirmation
 
 ## Control engineering
 
