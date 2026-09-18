@@ -17,7 +17,7 @@ from .model_runtime import ModelRuntime
 from .model_view import model_viewport
 from .parser import parse_slx
 from .process_ownership import own_backend_process_tree
-from .workspace import workspace_root
+from .workspace import WorkspaceIndex, workspace_root
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
 MODEL_PAGE_MAX_ITEMS = 512
@@ -236,6 +236,35 @@ class Backend:
         self.root, self.initial_file = workspace_root(root)
         self._matlab = MatlabRuntime(self.root)
         self._models = ModelRuntime(self.root)
+        self._index = WorkspaceIndex(self.root)
+
+    def search_workspace(
+        self,
+        query: str,
+        max_results: int = 100,
+        max_file_bytes: int = 1024 * 1024,
+    ) -> dict[str, Any]:
+        if not isinstance(query, str) or not query.strip() or len(query) > 200:
+            raise ValueError("search query must be 1-200 characters")
+        if (
+            isinstance(max_results, bool)
+            or not isinstance(max_results, int)
+            or not 1 <= max_results <= 200
+        ):
+            raise ValueError("max_results must be an integer from 1 to 200")
+        if (
+            isinstance(max_file_bytes, bool)
+            or not isinstance(max_file_bytes, int)
+            or not 1 <= max_file_bytes <= 4 * 1024 * 1024
+        ):
+            raise ValueError("max_file_bytes must be an integer from 1 to 4194304")
+        return self._index.search(
+            query, max_results=max_results, max_file_bytes=max_file_bytes
+        )
+
+    def refresh_workspace_index(self) -> dict[str, bool]:
+        self._index.invalidate()
+        return {"indexing": True}
 
     def close(self) -> None:
         self._models.close()
@@ -266,6 +295,8 @@ class Backend:
         methods = {
             "initialize": self.initialize,
             "workspace/listDirectory": lambda **params: list_directory(self.root, **params),
+            "workspace/search": lambda **params: self.search_workspace(**params),
+            "workspace/index/refresh": lambda **params: self.refresh_workspace_index(),
             "document/read": lambda **params: read_document(self.root, **params),
             "document/save": lambda **params: save_document(self.root, **params),
             "model/inspect": lambda **params: inspect_model(self.root, **params),
@@ -332,6 +363,8 @@ class Backend:
             "initial_file": self.initial_file,
             "capabilities": [
                 "workspace.listDirectory",
+                "workspace.search",
+                "workspace.index.refresh",
                 "document.read",
                 "document.save",
                 "model/inspect",
