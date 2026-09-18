@@ -99,6 +99,13 @@ try {
   assert.match(await sourceHit.textContent(), /gain = 1/);
   await sourceHit.click();
   await page.getByRole('tab', { name: 'control.m', selected: true }).waitFor();
+  console.log('STEP constant-time dirty tracking');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.insertText('%');
+  await waitFor(async () => (await page.getByRole('tab', { selected: true }).textContent()).includes('●'), 'edit marks the MATLAB tab dirty');
+  await page.keyboard.press('Control+Z');
+  await waitFor(async () => !(await page.getByRole('tab', { selected: true }).textContent()).includes('●'), 'undo back to saved Monaco version clears dirty state');
+  assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n');
 
   await page.keyboard.press('Control+P');
   await page.getByRole('textbox', { name: 'Search workspace' }).fill('VariantControl');
