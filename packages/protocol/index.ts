@@ -34,6 +34,46 @@ export interface WorkspaceSearchResponse {
   results: readonly WorkspaceSearchResult[];
   indexing: boolean;
 }
+export interface GitStatusEntry {
+  path: string;
+  old_path: string | null;
+  index: string;
+  worktree: string;
+  kind: 'matlab' | 'simulink';
+  untracked: boolean;
+}
+export interface GitStatusResponse {
+  available: boolean;
+  detail: string;
+  branch: string;
+  head: string | null;
+  entries: readonly GitStatusEntry[];
+  ignored_other: number;
+  truncated: boolean;
+}
+export interface GitTextDiff {
+  kind: 'text';
+  path: string;
+  diff: string;
+  truncated: boolean;
+}
+export interface GitSlxDiff {
+  kind: 'slx';
+  path: string;
+  change_count: number;
+  added_blocks: readonly string[];
+  removed_blocks: readonly string[];
+  changed_blocks: readonly {
+    path: string;
+    before_name: string;
+    after_name: string;
+    parameter_changes: readonly string[];
+  }[];
+  added_lines: number;
+  removed_lines: number;
+  truncated: boolean;
+}
+export type GitDiffResponse = GitTextDiff | GitSlxDiff;
 export interface ModelBlock { system_id: string; sid: string; name: string; block_type: string; path: string; parameters: Readonly<Record<string, string>>; }
 export interface ModelLine { system_id: string; src: string; dst: string; name: string; }
 export interface ModelInspectOptions { blockCursor?: number; lineCursor?: number; pageSize?: number; }
@@ -108,6 +148,8 @@ export interface DesktopAPI {
   listDirectory(path: string, cursor: number): Promise<Result<DirectoryPage>>;
   searchWorkspace(query: string, options?: { maxResults?: number; maxFileBytes?: number }): Promise<Result<WorkspaceSearchResponse>>;
   refreshWorkspaceIndex(): Promise<Result<{ indexing: boolean }>>;
+  gitStatus(): Promise<Result<GitStatusResponse>>;
+  gitDiff(path: string): Promise<Result<GitDiffResponse>>;
   readDocument(path: string): Promise<Result<DocumentSnapshot>>;
   saveDocument(path: string, content: string, hash: string, bom: boolean): Promise<Result<DocumentSnapshot>>;
   inspectModel(path: string, options?: ModelInspectOptions): Promise<Result<ModelSnapshot>>;
