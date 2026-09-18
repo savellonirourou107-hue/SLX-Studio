@@ -47,6 +47,8 @@ def _git(root: Path, *args: str, max_bytes: int = _MAX_GIT_OUTPUT) -> bytes:
         "diff.external=",
         "-c",
         "submodule.recurse=false",
+        "-c",
+        "status.relativePaths=true",
         *args,
     ]
     try:
@@ -129,6 +131,13 @@ def _repository_available(root: Path) -> tuple[bool, str]:
     if not top.strip():
         return False, "workspace is not inside a Git repository"
     return True, "Git repository detected"
+
+
+def _repo_path(root: Path, relative: str) -> str:
+    prefix = _git(root, "rev-parse", "--show-prefix", max_bytes=16 * 1024).decode(
+        "utf-8", errors="strict"
+    )
+    return f"{prefix}{relative}"
 
 
 def _head(root: Path) -> str | None:
@@ -306,7 +315,7 @@ def _slx_diff(root: Path, relative: str, entry: dict[str, Any] | None) -> dict[s
     if added or _head(root) is None:
         old = _empty_model(relative)
     else:
-        old_blob = _git(root, "show", f"HEAD:{old_path}", max_bytes=_MAX_SLX_BLOB)
+        old_blob = _git(root, "show", f"HEAD:{_repo_path(root, old_path)}", max_bytes=_MAX_SLX_BLOB)
         old = parse_slx_bytes(old_blob, name=old_path)
 
     if deleted:
