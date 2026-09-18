@@ -111,6 +111,22 @@ small declarative contribution surface, and can be terminated/restarted without
 freezing the editor. Third-party distribution requires separate trust and
 installation hardening before it can be treated as a general marketplace.
 
+## Read-only source control
+
+The Electron workbench exposes Git status only for changed `.m` and `.slx`
+paths inside the selected workspace. Git commands are executed by the Python
+backend with shell invocation disabled, terminal prompting/pagers disabled,
+workspace-relative literal pathspecs, fsmonitor disabled, submodule recursion
+disabled, wall-time limits, and bounded combined output. Other changed file
+types are counted but not exposed in the engineering preview.
+
+MATLAB files use a bounded unified diff against `HEAD`; untracked MATLAB files
+receive a bounded synthetic add preview. Simulink files are not passed through
+Git text or external diff drivers: the backend loads the `HEAD` blob and the
+working copy through the non-executing SLX parser and returns a bounded semantic
+block/line summary. This slice is intentionally read-only: stage, unstage,
+commit, checkout, reset, and repository configuration mutation are not exposed.
+
 ## Security invariants
 
 - `contextIsolation: true`, renderer sandboxing, no renderer Node integration.
