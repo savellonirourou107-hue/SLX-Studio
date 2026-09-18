@@ -142,6 +142,7 @@ try {
   await page.keyboard.press('Escape');
   await replaceText('gain = 1;\n');
   await page.keyboard.press('Control+s');
+  await waitFor(async () => !(await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'language-assistance fixture saved before subsequent undo checks');
   console.log('PASS: completion, cached local symbols, toolbox hover and live signature popup.');
   await page.getByRole('treeitem', { name: 'model.slx', exact: true }).click();
   await waitFor(async () => (await page.getByRole('log').textContent()).includes('static model view'), 'SLX static model view is exposed through the custom editor contribution');
@@ -223,6 +224,7 @@ try {
   await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
   await replaceText('gain = 3;\n');
   await page.keyboard.press('Control+z');
+  await waitFor(async () => !(await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'undo returns to the saved version before any further save');
   await page.keyboard.press('Control+s');
   assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n', 'undo restores the original model');
   await page.keyboard.press('Control+y');
@@ -304,6 +306,26 @@ try {
   await command('File: Save');
   await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'draft = 8;\n', 'draft recovery saves through the normal service');
   console.log('PASS: persistent draft recovery after an application restart.');
+  console.log('STEP Save All');
+  await replaceText('saved_all = 10;\n');
+  await page.getByRole('treeitem', { name: '控制.m', exact: true }).click();
+  await replaceText('%% 控制\nKp = 10;');
+  await command('File: Save All');
+  await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'saved_all = 10;\n', 'Save All saves inactive text documents');
+  await waitFor(async () => await fs.readFile(path.join(workspace, '控制.m'), 'utf8') === '\ufeff%% 控制\r\nKp = 10;', 'Save All preserves BOM, Unicode and CRLF');
+  await waitFor(async () => !(await page.getByRole('tablist', { name: 'Open editors' }).textContent()).includes('●'), 'all saved tabs become clean');
+  await replaceText('%% 控制\nKp = 11;');
+  await application.evaluate(({ Menu, BrowserWindow }) => {
+    const file = Menu.getApplicationMenu()?.items.find(item => item.label === 'File');
+    const saveAll = file?.submenu?.items.find(item => item.label === 'Save All');
+    if (!saveAll) throw new Error('Save All menu entry is missing');
+    saveAll.click(saveAll, BrowserWindow.getFocusedWindow(), {});
+  });
+  await waitFor(async () => await fs.readFile(path.join(workspace, '控制.m'), 'utf8') === '\ufeff%% 控制\r\nKp = 11;', 'native Save All menu invokes the shared command');
+  await waitFor(async () => !(await page.getByRole('tab', { name: '控制.m', exact: true }).textContent()).includes('●'), 'Save All finishes before closing the tab');
+  await page.getByRole('button', { name: 'Close 控制.m', exact: true }).click();
+  await page.screenshot({ path: path.join(artifactRoot, 'desktop-save-all.png') });
+  console.log('PASS: palette and native Save All persist real files without changing encoding.');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   await replaceText('window = 9;\n');
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
@@ -323,6 +345,7 @@ try {
   const retainedSymbolCaches = await page.evaluate(async asset => (await import(new URL(`./${asset}`, location.href))).matlabIntelligence.cachedModels, monacoAsset);
   assert.equal(retainedSymbolCaches, 0, '100 open/close cycles dispose MATLAB symbol caches and listeners');
   console.log('PASS: 100 editor open/close cycles leave no retained Monaco models.');
+  assert.deepEqual(errors, [], 'new save/recovery/lifecycle scenarios produce no renderer errors');
 } catch (error) {
   if (page && !page.isClosed()) {
     console.error(await page.locator('body').ariaSnapshot());
