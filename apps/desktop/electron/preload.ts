@@ -12,6 +12,8 @@ const api: DesktopAPI = {
   listDirectory: (path, cursor) => ipcRenderer.invoke('slx:list', { path, cursor }),
   searchWorkspace: (query, options = {}) => ipcRenderer.invoke('slx:search', { query, ...options }),
   refreshWorkspaceIndex: () => ipcRenderer.invoke('slx:refreshIndex'),
+  gitStatus: () => ipcRenderer.invoke('slx:gitStatus'),
+  gitDiff: path => ipcRenderer.invoke('slx:gitDiff', { path }),
   readDocument: path => ipcRenderer.invoke('slx:read', { path }),
   saveDocument: (path, content, hash, bom) => ipcRenderer.invoke('slx:save', { path, content, hash, bom }),
   inspectModel: (path, options = {}) => ipcRenderer.invoke('slx:inspect', { path, ...options }),
