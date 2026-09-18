@@ -133,11 +133,14 @@ def _repository_available(root: Path) -> tuple[bool, str]:
     return True, "Git repository detected"
 
 
-def _repo_path(root: Path, relative: str) -> str:
-    prefix = _git(root, "rev-parse", "--show-prefix", max_bytes=16 * 1024).decode(
+def _repo_prefix(root: Path) -> str:
+    return _git(root, "rev-parse", "--show-prefix", max_bytes=16 * 1024).decode(
         "utf-8", errors="strict"
     )
-    return f"{prefix}{relative}"
+
+
+def _repo_path(root: Path, relative: str) -> str:
+    return f"{_repo_prefix(root)}{relative}"
 
 
 def _head(root: Path) -> str | None:
@@ -156,7 +159,7 @@ def _branch(root: Path) -> str:
     return value
 
 
-def _parse_status(root: Path, raw: bytes) -> tuple[list[dict[str, Any]], int, bool]:
+def _parse_status(root: Path, raw: bytes, repo_prefix: str) -> tuple[list[dict[str, Any]], int, bool]:
     fields = raw.split(b"\0")
     if fields and fields[-1] == b"":
         fields.pop()
@@ -185,6 +188,14 @@ def _parse_status(root: Path, raw: bytes) -> tuple[list[dict[str, Any]], int, bo
                 old_path = None
             index += 1
         try:
+            if repo_prefix:
+                if not path.startswith(repo_prefix):
+                    raise GitWorkspaceError("git status path is outside the selected workspace")
+                path = path[len(repo_prefix) :]
+                if old_path:
+                    if not old_path.startswith(repo_prefix):
+                        raise GitWorkspaceError("git rename source is outside the selected workspace")
+                    old_path = old_path[len(repo_prefix) :]
             path = _relative(root, path)
             old_path = _relative(root, old_path) if old_path else None
         except GitWorkspaceError:
@@ -234,7 +245,7 @@ def git_status(root: str | Path) -> dict[str, Any]:
         "--",
         ".",
     )
-    entries, ignored_other, truncated = _parse_status(workspace, raw)
+    entries, ignored_other, truncated = _parse_status(workspace, raw, _repo_prefix(workspace))
     return {
         "available": True,
         "detail": detail,
