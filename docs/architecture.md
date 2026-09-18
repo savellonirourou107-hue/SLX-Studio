@@ -38,6 +38,9 @@ Text documents are opened through root-scoped backend services and represented
 by managed Monaco models. Save uses conflict detection and atomic replacement.
 Dirty state, draft recovery, Undo/Redo, tab lifetime, and external-change
 handling are owned by the desktop editor layer rather than ad hoc DOM state.
+Dirty checks use Monaco alternative-version IDs instead of serializing whole
+buffers during cursor/tab renders; an asynchronous save records the exact editor
+version it wrote so typing that continues during the save remains dirty.
 
 Workspace settings follow `default < user < workspace` precedence. Sensitive
 runtime configuration is not workspace-writable. Directory listing, document
