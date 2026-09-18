@@ -24,11 +24,7 @@ def run_git(cwd: Path, *args: str) -> None:
 
 
 def write_slx(path: Path, gain: str) -> None:
-    xml = (
-        '<System><Block BlockType="Gain" Name="Gain" SID="1">'
-        f'<P Name="Gain">{gain}</P>'
-        "</Block></System>"
-    )
+    xml = f'<System><Block BlockType="Gain" Name="Gain" SID="1"><P Name="Gain">{gain}</P></Block></System>'
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("simulink/systems/system_root.xml", xml)
 
