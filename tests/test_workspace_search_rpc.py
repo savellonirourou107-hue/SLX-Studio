@@ -8,9 +8,7 @@ from slxdiff.rpc import Backend
 
 
 def request(backend: Backend, method: str, params: dict | None = None, identifier: int = 1) -> dict:
-    reply = backend.dispatch(
-        {"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}}
-    )
+    reply = backend.dispatch({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
     assert isinstance(reply, dict)
     return reply
 
@@ -38,9 +36,7 @@ def test_rpc_workspace_search_is_bounded_and_refreshable(tmp_path):
         assert invalid["error"]["data"]["kind"] == "invalid_params"
         assert "1-200" in invalid["error"]["message"]
 
-        invalid_limit = request(
-            backend, "workspace/search", {"query": "gain", "max_results": 0}
-        )
+        invalid_limit = request(backend, "workspace/search", {"query": "gain", "max_results": 0})
         assert invalid_limit["error"]["data"]["kind"] == "invalid_params"
 
         (tmp_path / "fresh.m").write_text("fresh_signal = 1;\n", encoding="utf-8")
