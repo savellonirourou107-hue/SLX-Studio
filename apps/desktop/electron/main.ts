@@ -146,6 +146,18 @@ async function start(): Promise<void> {
     if (!Number.isSafeInteger(args.cursor) || (args.cursor as number) < 0) throw new Error('Invalid cursor');
     return backendRequired().request('workspace/listDirectory', { relative: text(args.path), cursor: args.cursor });
   });
+  handle('slx:search', async payload => {
+    const args = object(payload);
+    const query = text(args.query, 200).trim();
+    if (!query) throw new Error('Search query is required');
+    const maxResults = integer(args.maxResults, 'search result limit', 100, 200);
+    const maxFileBytes = integer(args.maxFileBytes, 'search file byte limit', 1024 * 1024, 4 * 1024 * 1024);
+    if (maxResults < 1 || maxFileBytes < 1) throw new Error('Invalid search limits');
+    return backendRequired().request('workspace/search', {
+      query, max_results: maxResults, max_file_bytes: maxFileBytes,
+    });
+  });
+  handle('slx:refreshIndex', async () => backendRequired().request('workspace/index/refresh'));
   handle('slx:read', async payload => backendRequired().request('document/read', { relative: text(object(payload).path) }));
   handle('slx:inspect', async payload => {
     const args = object(payload);
