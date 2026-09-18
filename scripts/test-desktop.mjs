@@ -11,6 +11,8 @@ import { _electron as electron } from 'playwright';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const artifactRoot = path.join(root, 'output/playwright');
+const monacoAsset = (await fs.readdir(path.join(root, 'dist/desktop/renderer'))).find(name => /^monaco-.*\.js$/.test(name));
+assert.ok(monacoAsset);
 await fs.mkdir(artifactRoot, { recursive: true });
 const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'slx-desktop-e2e-'));
 const workspace = path.join(testRoot, '工程');
@@ -54,6 +56,14 @@ async function waitFor(check, label) {
     await new Promise(resolve => setTimeout(resolve, 50));
   } while (Date.now() < end);
   throw new Error(`Timed out: ${label}`);
+}
+async function editorText(file) {
+  return page.evaluate(async ({ asset, file }) => {
+    const { monaco } = await import(new URL(`./${asset}`, location.href));
+    const model = monaco.editor.getModels().find(model => model.uri.path === `/${file}`);
+    if (!model) throw new Error(`Missing editor model: ${file}`);
+    return model.getValue();
+  }, { asset: monacoAsset, file });
 }
 async function replaceText(content) {
   await page.getByRole('tab', { selected: true }).click();
@@ -222,11 +232,21 @@ try {
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   console.log('STEP first edit');
   await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
-  await replaceText('gain = 3;\n');
+  // Change one selected character, not a multi-line insertText fixture: Monaco
+  // can split the latter at newlines, so one undo need not revert that whole paste.
+  assert.equal(await editorText('control.m'), 'gain = 1;\n');
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.type('3');
+  await waitFor(async () => await editorText('control.m') === 'gain = 3;\n', 'single-character edit reaches the real model');
+  await waitFor(async () => (await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'single-character edit is dirty');
   await page.keyboard.press('Control+z');
+  await waitFor(async () => await editorText('control.m') === 'gain = 1;\n', 'undo restores the actual saved buffer');
   await waitFor(async () => !(await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'undo returns to the saved version before any further save');
   await page.keyboard.press('Control+s');
-  assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n', 'undo restores the original model');
+  assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n', 'undo leaves saved disk contents unchanged');
   await page.keyboard.press('Control+y');
   await page.keyboard.press('Control+s');
   await waitFor(async () => await fs.readFile(path.join(workspace, 'control.m'), 'utf8') === 'gain = 3;\n', 'shortcut saves real file after undo/redo');
@@ -338,8 +358,6 @@ try {
     await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Close control.m', exact: true }).click();
   }
-  const monacoAsset = (await fs.readdir(path.join(root, 'dist/desktop/renderer'))).find(name => /^monaco-.*\.js$/.test(name));
-  assert.ok(monacoAsset);
   const remainingModels = await page.evaluate(async asset => (await import(new URL(`./${asset}`, location.href))).monaco.editor.getModels().length, monacoAsset);
   assert.equal(remainingModels, 0, '100 open/close cycles dispose Monaco models');
   const retainedSymbolCaches = await page.evaluate(async asset => (await import(new URL(`./${asset}`, location.href))).matlabIntelligence.cachedModels, monacoAsset);
