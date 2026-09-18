@@ -64,6 +64,16 @@ jobs:
           fi
       - name: Test real Electron workbench
         run: xvfb-run -a npm run test:desktop
+      - name: Test real extension lifecycle
+        run: xvfb-run -a npm run test:extensions
+      - name: Retain desktop acceptance screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-evidence-${{ github.sha }}
+          path: output/playwright/
+          if-no-files-found: warn
+          retention-days: 14
 
   windows-session:
     runs-on: windows-latest
