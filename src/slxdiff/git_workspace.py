@@ -65,7 +65,7 @@ def _git(root: Path, *args: str, max_bytes: int = _MAX_GIT_OUTPUT) -> bytes:
 
     output = bytearray()
     overflow = False
-    reader_error: BaseException | None = None
+    reader_error: Exception | None = None
 
     def drain() -> None:
         nonlocal overflow, reader_error
@@ -80,7 +80,7 @@ def _git(root: Path, *args: str, max_bytes: int = _MAX_GIT_OUTPUT) -> bytes:
                     process.kill()
                     return
                 output.extend(chunk)
-        except BaseException as exc:  # pragma: no cover - defensive pipe failure
+        except Exception as exc:  # pragma: no cover - defensive pipe failure
             reader_error = exc
             process.kill()
 
