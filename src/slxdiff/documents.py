@@ -132,7 +132,6 @@ def save_document(root: Path, relative: str, content: str, expected_sha256: str,
     return _snapshot(relative, raw)
 
 
-
 def _creation_target(root: Path, relative: str) -> Path:
     """Resolve an absent .m leaf in an existing visible directory, never mkdir."""
     if not isinstance(relative, str) or not relative or len(relative) > 4096:
@@ -199,7 +198,9 @@ def create_document(root: Path, relative: str, content: str = "", bom: bool = Fa
         except FileExistsError as exc:
             raise DocumentConflict("destination appeared during creation; nothing was overwritten") from exc
         except OSError as exc:
-            raise OSError("could not publish the new file safely; check permissions and hard-link support") from exc
+            raise OSError(
+                "could not publish the new file safely; check permissions and hard-link support"
+            ) from exc
         published = True
     finally:
         try:
@@ -210,6 +211,7 @@ def create_document(root: Path, relative: str, content: str = "", bom: bool = Fa
             # Publication succeeded. Do not report a failed write or retry it.
             warnings.append("File created, but temporary-file cleanup failed in its destination directory.")
     return {**snapshot, "warnings": warnings}
+
 
 def list_directory(root: Path, relative: str = "", cursor: int = 0) -> dict[str, Any]:
     if isinstance(cursor, bool) or not isinstance(cursor, int) or not 0 <= cursor <= 100_000:

@@ -2,8 +2,8 @@
 
 import hashlib
 import os
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -56,13 +56,46 @@ def test_create_never_overwrites_any_existing_entry(tmp_path, kind):
 @pytest.mark.parametrize(
     "relative",
     [
-        "", "../outside.m", "/absolute.m", "C:/absolute.m", "\\\\server\\share\\a.m",
-        "./a.m", "a//b.m", "folder/../a.m", " a.m", "a.m ", "a.m:stream", "a.m\0",
-        "x\n.m", "x?.m", "x*.m", "x|.m", "x<.m", "x>.m", 'x".m', "x\x7f.m",
-        ".git/hook.m", ".slx-studio/settings.m", "node_modules/a.m", ".hidden.m",
-        "CON.m", "nul.m", "AUX.txt.m", "com1.m", "LPT9.m", "COM¹.m", "LPT².m",
-        "CONIN$.m", "CONOUT$.m", "folder./a.m", "nul/a.m", "model.slx", "text.txt",
-        "a" * 4097 + ".m", 3, None,
+        "",
+        "../outside.m",
+        "/absolute.m",
+        "C:/absolute.m",
+        "\\\\server\\share\\a.m",
+        "./a.m",
+        "a//b.m",
+        "folder/../a.m",
+        " a.m",
+        "a.m ",
+        "a.m:stream",
+        "a.m\0",
+        "x\n.m",
+        "x?.m",
+        "x*.m",
+        "x|.m",
+        "x<.m",
+        "x>.m",
+        'x".m',
+        "x\x7f.m",
+        ".git/hook.m",
+        ".slx-studio/settings.m",
+        "node_modules/a.m",
+        ".hidden.m",
+        "CON.m",
+        "nul.m",
+        "AUX.txt.m",
+        "com1.m",
+        "LPT9.m",
+        "COM¹.m",
+        "LPT².m",
+        "CONIN$.m",
+        "CONOUT$.m",
+        "folder./a.m",
+        "nul/a.m",
+        "model.slx",
+        "text.txt",
+        "a" * 4097 + ".m",
+        3,
+        None,
     ],
 )
 def test_create_rejects_unsafe_or_invisible_paths(tmp_path, relative):
@@ -76,7 +109,8 @@ def test_create_requires_an_existing_parent(tmp_path):
         documents.create_document(tmp_path, "missing/file.m", "x=1;")
     assert not (tmp_path / "missing").exists()
     (tmp_path / "parent.m").write_bytes(b"keep")
-    with pytest.raises((NotADirectoryError, ValueError)):
+    # Windows strict path resolution reports WinError 3 (not ENOTDIR) for a file parent.
+    with pytest.raises((NotADirectoryError, FileNotFoundError, ValueError)):
         documents.create_document(tmp_path, "parent.m/file.m", "x=1;")
     assert (tmp_path / "parent.m").read_bytes() == b"keep"
 
@@ -90,10 +124,17 @@ def test_create_rejects_parent_link_or_junction(tmp_path):
     linked = root / "linked"
     if os.name == "nt":
         subprocess.run(
-            ["pwsh", "-NoProfile", "-Command",
-             "New-Item -ItemType Junction -Path $env:SLX_TEST_LINK -Target $env:SLX_TEST_TARGET -ErrorAction Stop | Out-Null"],
+            [
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                "New-Item -ItemType Junction -Path $env:SLX_TEST_LINK -Target $env:SLX_TEST_TARGET "
+                "-ErrorAction Stop | Out-Null",
+            ],
             env={**os.environ, "SLX_TEST_LINK": str(linked), "SLX_TEST_TARGET": str(outside)},
-            check=True, capture_output=True, timeout=10,
+            check=True,
+            capture_output=True,
+            timeout=10,
         )
     else:
         linked.symlink_to(outside, target_is_directory=True)
@@ -191,14 +232,25 @@ def test_rpc_create_is_allowlisted_updates_index_and_keeps_runtime_stopped(tmp_p
     monkeypatch.setattr(backend._index, "invalidate", lambda: invalidations.append(True))
     try:
         assert "document.create" in backend.initialize()["capabilities"]
-        reply = backend.dispatch({"jsonrpc": "2.0", "id": 1, "method": "document/create", "params": {"relative": "new.m", "content": "gain=2;"}})
+        reply = backend.dispatch(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "document/create",
+                "params": {"relative": "new.m", "content": "gain=2;"},
+            }
+        )
         assert reply["result"]["path"] == "new.m"
         assert invalidations == [True]
         assert backend._matlab.status()["state"] == "stopped"
-        duplicate = backend.dispatch({"jsonrpc": "2.0", "id": 2, "method": "document/create", "params": {"relative": "new.m"}})
+        duplicate = backend.dispatch(
+            {"jsonrpc": "2.0", "id": 2, "method": "document/create", "params": {"relative": "new.m"}}
+        )
         assert duplicate["error"]["data"]["kind"] == "conflict"
         assert invalidations == [True]
-        bad = backend.dispatch({"jsonrpc": "2.0", "id": 3, "method": "document/create", "params": {"relative": "../outside.m"}})
+        bad = backend.dispatch(
+            {"jsonrpc": "2.0", "id": 3, "method": "document/create", "params": {"relative": "../outside.m"}}
+        )
         assert bad["error"]["code"] == -32602
     finally:
         backend.close()

@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .diff import compare_models
-from .documents import DocumentConflict, create_document, document_path, list_directory, read_document, save_document
+from .documents import (
+    DocumentConflict,
+    create_document,
+    document_path,
+    list_directory,
+    read_document,
+    save_document,
+)
 from .matlab_bridge import apply_model_edit_with_matlab
 from .matlab_runtime import MatlabRuntime
 from .model_runtime import ModelRuntime
