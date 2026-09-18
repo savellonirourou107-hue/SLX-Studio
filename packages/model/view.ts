@@ -113,6 +113,20 @@ export class ModelView {
   }
   snapshot(): ModelViewport | undefined { return this.data; }
   selectedBlock(): ModelBlock | undefined { return this.data?.blocks.find(block => block.path === this.selected); }
+  async revealBlock(blockPath: string, systemId?: string): Promise<boolean> {
+    clearTimeout(this.timer);
+    if (systemId) this.systemId = systemId;
+    this.search.value = blockPath;
+    this.resetPage();
+    await this.load();
+    const block = this.data?.blocks.find(item => item.path === blockPath);
+    const node = block && this.geometry?.nodes.find(item => item.block.path === blockPath);
+    if (!block || !node) return false;
+    this.select(block);
+    this.focusBlock(node.box);
+    this.element.querySelector<HTMLElement>(`[data-block="${CSS.escape(blockPath)}"]`)?.focus();
+    return true;
+  }
   setBusy(busy: boolean): void { for (const button of this.element.querySelectorAll<HTMLButtonElement>('.model-action')) button.disabled = busy; }
   private resetPage(): void { this.cursor = 0; this.history = []; }
   async reload(): Promise<void> {
@@ -249,6 +263,12 @@ export class ModelEditors {
   async reload(path: string): Promise<void> {
     const view = this.documents.get(path);
     if (view) await view.reload();
+  }
+  async reveal(path: string, blockPath: string, systemId?: string): Promise<boolean> {
+    const view = this.documents.get(path);
+    if (!view) return false;
+    this.select(path);
+    return view.revealBlock(blockPath, systemId);
   }
   close(path: string): void {
     const view = this.documents.get(path); if (!view) return;
