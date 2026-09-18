@@ -158,6 +158,11 @@ async function start(): Promise<void> {
     });
   });
   handle('slx:refreshIndex', async () => backendRequired().request('workspace/index/refresh'));
+  handle('slx:gitStatus', async () => backendRequired().request('workspace/git/status'));
+  handle('slx:gitDiff', async payload => {
+    const args = object(payload);
+    return backendRequired().request('workspace/git/diff', { relative: text(args.path) });
+  });
   handle('slx:read', async payload => backendRequired().request('document/read', { relative: text(object(payload).path) }));
   handle('slx:inspect', async payload => {
     const args = object(payload);
