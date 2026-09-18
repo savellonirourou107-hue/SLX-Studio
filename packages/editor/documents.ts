@@ -6,7 +6,7 @@ import { matlabSection } from './sections';
 export interface OpenDocument {
   path: string;
   base: DocumentSnapshot;
-  cleanValue: string;
+  cleanAlternativeVersionId: number;
   model: Monaco.editor.ITextModel;
   view: Monaco.editor.ICodeEditorViewState | null;
   listener: Monaco.IDisposable;
@@ -59,7 +59,7 @@ export class DocumentEditors {
     })();
     await this.loading;
   }
-  dirty(document: OpenDocument): boolean { return document.model.getValue() !== document.cleanValue; }
+  dirty(document: OpenDocument): boolean { return document.model.getAlternativeVersionId() !== document.cleanAlternativeVersionId; }
   async open(path: string): Promise<void> {
     if (this.documents.has(path)) { this.select(path); return; }
     if (this.opening.has(path)) return this.opening.get(path)!;
@@ -74,7 +74,7 @@ export class DocumentEditors {
     if (base.eol === 'CRLF') model.setEOL(this.monaco!.editor.EndOfLineSequence.CRLF);
     // Mixed newline files are read-only until a deliberate normalization design exists.
     if (base.mixed_eol) this.log(`${path}: mixed line endings; opened read-only to avoid silent conversion.`);
-    const document: OpenDocument = { path, base, cleanValue: model.getValue(), model, view: null, listener: { dispose() {} }, draftQueue: Promise.resolve() };
+    const document: OpenDocument = { path, base, cleanAlternativeVersionId: model.getAlternativeVersionId(), model, view: null, listener: { dispose() {} }, draftQueue: Promise.resolve() };
     this.documents.set(path, document);
     document.listener = model.onDidChangeContent(() => {
       this.changed();
@@ -88,8 +88,10 @@ export class DocumentEditors {
         const answer = await this.choose('Recovery draft available', `${path}\n${draft.base.sha256 === base.sha256 ? 'An unsaved draft is available.' : 'The disk file changed since this draft. Restoring will not overwrite the disk; saving will require resolving the conflict.'}`, ['Keep disk', 'Restore draft']);
         if (answer === 'Restore draft') {
           document.base = draft.base;
+          const cleanContent = draft.base.content.replace(/\r\n|\r|\n/g, draft.base.eol === 'CRLF' ? '\r\n' : '\n');
+          model.setValue(cleanContent);
           model.setEOL(draft.base.eol === 'CRLF' ? this.monaco!.editor.EndOfLineSequence.CRLF : this.monaco!.editor.EndOfLineSequence.LF);
-          document.cleanValue = draft.base.content.replace(/\r\n|\r|\n/g, draft.base.eol === 'CRLF' ? '\r\n' : '\n');
+          document.cleanAlternativeVersionId = model.getAlternativeVersionId();
           model.setValue(draft.content);
         } else if (answer === 'Keep disk') await this.files.clearDraft(path);
       }
@@ -125,11 +127,15 @@ export class DocumentEditors {
     if (document.base.mixed_eol) throw new Error('Mixed line endings: save is disabled to preserve the original bytes.');
     if (document.saving) { await document.saving; return this.save(document); }
     const content = document.model.getValue();
+    const savedAlternativeVersionId = document.model.getAlternativeVersionId();
     const job = (async () => {
       try {
         const saved = await this.files.save(document.base, content);
         document.base = saved;
-        document.cleanValue = saved.content;
+        // Capture the version that was actually written. If the user keeps
+        // typing while the asynchronous save is in flight, the newer editor
+        // version remains dirty instead of being accidentally marked clean.
+        document.cleanAlternativeVersionId = savedAlternativeVersionId;
         this.log(`Saved ${document.path}`);
         await this.persistDraft(document);
       } catch (error) {
@@ -174,7 +180,7 @@ export class DocumentEditors {
     document.base = fresh;
     document.model.setValue(fresh.content);
     document.model.setEOL(fresh.eol === 'CRLF' ? this.monaco!.editor.EndOfLineSequence.CRLF : this.monaco!.editor.EndOfLineSequence.LF);
-    document.cleanValue = document.model.getValue();
+    document.cleanAlternativeVersionId = document.model.getAlternativeVersionId();
     await this.persistDraft(document, true);
     this.editor?.updateOptions({ readOnly: fresh.mixed_eol });
     this.changed();
