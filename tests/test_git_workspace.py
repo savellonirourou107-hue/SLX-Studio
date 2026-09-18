@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import zipfile
@@ -8,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from slxdiff.git_workspace import GitWorkspaceError, git_diff, git_status
-
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git executable is required")
 
@@ -19,7 +19,7 @@ def run_git(cwd: Path, *args: str) -> None:
         cwd=cwd,
         check=True,
         capture_output=True,
-        env={**__import__("os").environ, "GIT_TERMINAL_PROMPT": "0"},
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
 
 
