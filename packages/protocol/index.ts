@@ -52,6 +52,7 @@ export interface ModelDiff { schema_version: string; old_name: string; new_name:
 export type ConfigurationValue = boolean | number | string | null | readonly ConfigurationValue[] | { readonly [key: string]: ConfigurationValue };
 export interface ConfigurationFile { scope: 'user' | 'workspace'; exists: boolean; sha256: string | null; values: Readonly<Record<string, ConfigurationValue>>; issues: readonly string[]; }
 export interface ConfigurationState { effective: Readonly<Record<string, ConfigurationValue>>; user: ConfigurationFile; workspace: ConfigurationFile; }
+export interface CreatedDocument extends DocumentSnapshot { warnings: readonly string[]; }
 export interface Draft {
   path: string;
   content: string;
@@ -109,6 +110,7 @@ export interface DesktopAPI {
   searchWorkspace(query: string, options?: { maxResults?: number; maxFileBytes?: number }): Promise<Result<WorkspaceSearchResponse>>;
   refreshWorkspaceIndex(): Promise<Result<{ indexing: boolean }>>;
   readDocument(path: string): Promise<Result<DocumentSnapshot>>;
+  createDocument(workspaceRoot: string, path: string, content: string, bom: boolean): Promise<Result<CreatedDocument>>;
   saveDocument(path: string, content: string, hash: string, bom: boolean): Promise<Result<DocumentSnapshot>>;
   inspectModel(path: string, options?: ModelInspectOptions): Promise<Result<ModelSnapshot>>;
   modelViewport(path: string, options?: ModelViewportOptions): Promise<Result<ModelViewport>>;

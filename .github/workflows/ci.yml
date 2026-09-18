@@ -35,7 +35,7 @@ jobs:
       - name: Lint
         run: |
           ruff check .
-          ruff format --check .
+          ruff format --check --diff .
 
   desktop-platform:
     runs-on: ubuntu-latest
@@ -64,6 +64,8 @@ jobs:
           fi
       - name: Test real Electron workbench
         run: xvfb-run -a npm run test:desktop
+      - name: Test real file creation and copy workflows
+        run: xvfb-run -a npm run test:files
       - name: Test real extension lifecycle
         run: xvfb-run -a npm run test:extensions
       - name: Retain desktop acceptance screenshots
@@ -89,3 +91,5 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Worker protocol and Windows process-tree regression
         run: python -m pytest tests/test_persistent_session.py tests/test_worker_process.py -ra
+      - name: Windows create-only file and workspace regressions
+        run: python -m pytest tests/test_document_creation.py -ra

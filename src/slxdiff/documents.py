@@ -132,6 +132,87 @@ def save_document(root: Path, relative: str, content: str, expected_sha256: str,
     return _snapshot(relative, raw)
 
 
+def _creation_target(root: Path, relative: str) -> Path:
+    """Resolve an absent .m leaf in an existing visible directory, never mkdir."""
+    if not isinstance(relative, str) or not relative or len(relative) > 4096:
+        raise ValueError("path must be a bounded workspace-relative string")
+    parts = relative.replace("\\", "/").split("/")
+    reserved = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+    reserved.update(f"{prefix}{number}" for prefix in ("COM", "LPT") for number in "123456789¹²³")
+    for part in parts:
+        if (
+            not part
+            or part.startswith(".")
+            or part != part.strip()
+            or part.endswith(".")
+            or any(ord(char) < 32 or ord(char) == 127 or char in '<>:"|?*' for char in part)
+            or part.split(".")[0].rstrip().upper() in reserved
+        ):
+            raise ValueError("use a visible, portable workspace-relative path without reserved names")
+    if Path(parts[-1]).suffix.lower() != ".m":
+        raise ValueError("only .m text documents can be created")
+    if any(part.casefold() in {name.casefold() for name in _IGNORED_DIRS} for part in parts[:-1]):
+        raise ValueError("cannot create documents in an ignored workspace directory")
+    parent = document_path(root, "/".join(parts[:-1]), allow_root=True)
+    if not parent.is_dir():
+        raise NotADirectoryError("the destination parent must be an existing directory")
+    target = parent / parts[-1]
+    # lstat, not exists: a dangling symlink must also count as a conflict.
+    try:
+        target.lstat()
+    except FileNotFoundError:
+        return target
+    raise DocumentConflict("destination already exists; choose another name (nothing was overwritten)")
+
+
+def create_document(root: Path, relative: str, content: str = "", bom: bool = False) -> dict:
+    """Publish complete bytes under a NEW name; never replace an existing entry.
+
+    Same-directory hard-link publication is atomic/no-clobber on supported local
+    filesystems. Unsupported filesystems fail closed; do not fall back to rename
+    or truncating writes. Like save_document, this is not an OS-user sandbox
+    against a hostile process swapping parent directories during an operation.
+    """
+    if not isinstance(content, str) or not isinstance(bom, bool):
+        raise TypeError("content must be text and bom must be boolean")
+    if "\x00" in content:
+        raise ValueError("text documents must not contain null bytes")
+    raw = (b"\xef\xbb\xbf" if bom else b"") + content.encode("utf-8")
+    if len(raw) > _MAX_TEXT_BYTES:
+        raise ValueError("document exceeds the text size limit")
+    target = _creation_target(root, relative)
+    # Validate UTF-8/snapshot before performing any mutation.
+    snapshot = _snapshot(relative, raw)
+    fd, temporary = tempfile.mkstemp(prefix=".slx-create-", suffix=".tmp", dir=target.parent)
+    published = False
+    warnings = []
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if _creation_target(root, relative) != target:
+            raise DocumentConflict("destination changed while preparing the new file")
+        try:
+            os.link(temporary, target)
+        except FileExistsError as exc:
+            raise DocumentConflict("destination appeared during creation; nothing was overwritten") from exc
+        except OSError as exc:
+            raise OSError(
+                "could not publish the new file safely; check permissions and hard-link support"
+            ) from exc
+        published = True
+    finally:
+        try:
+            Path(temporary).unlink(missing_ok=True)
+        except OSError:
+            if not published:
+                raise
+            # Publication succeeded. Do not report a failed write or retry it.
+            warnings.append("File created, but temporary-file cleanup failed in its destination directory.")
+    return {**snapshot, "warnings": warnings}
+
+
 def list_directory(root: Path, relative: str = "", cursor: int = 0) -> dict[str, Any]:
     if isinstance(cursor, bool) or not isinstance(cursor, int) or not 0 <= cursor <= 100_000:
         raise ValueError("invalid directory cursor")

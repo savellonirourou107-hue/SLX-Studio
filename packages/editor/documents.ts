@@ -157,6 +157,12 @@ export class DocumentEditors {
     if (!document) return;
     await this.enqueue(document, () => this.saveDocument(document));
   }
+  copySnapshot(): { path: string; content: string; bom: boolean } {
+    const document = this.active;
+    if (!document || !this.isOpen(document) || document.closing || this.closingAll) throw new Error('Open a MATLAB document first');
+    if (document.base.mixed_eol) throw new Error('Mixed line endings: copying the normalized editor buffer is disabled to protect the original bytes.');
+    return { path: document.path, content: document.model.getValue(), bom: document.base.bom };
+  }
   async saveAll(): Promise<void> {
     // One pass: never chase a user who keeps typing, and stop at the first
     // failure rather than silently claiming that the entire workspace saved.

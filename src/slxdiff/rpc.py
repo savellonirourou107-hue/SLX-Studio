@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .diff import compare_models
-from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
+from .documents import (
+    DocumentConflict,
+    create_document,
+    document_path,
+    list_directory,
+    read_document,
+    save_document,
+)
 from .matlab_bridge import apply_model_edit_with_matlab
 from .matlab_runtime import MatlabRuntime
 from .model_runtime import ModelRuntime
@@ -256,6 +263,11 @@ class Backend:
             raise ValueError("max_file_bytes must be an integer from 1 to 4194304")
         return self._index.search(query, max_results=max_results, max_file_bytes=max_file_bytes)
 
+    def create_document(self, relative: str, content: str = "", bom: bool = False) -> dict:
+        result = create_document(self.root, relative, content, bom)
+        self._index.invalidate()
+        return result
+
     def refresh_workspace_index(self) -> dict[str, bool]:
         self._index.invalidate()
         return {"indexing": True}
@@ -293,6 +305,7 @@ class Backend:
             "workspace/index/refresh": lambda **params: self.refresh_workspace_index(),
             "document/read": lambda **params: read_document(self.root, **params),
             "document/save": lambda **params: save_document(self.root, **params),
+            "document/create": self.create_document,
             "model/inspect": lambda **params: inspect_model(self.root, **params),
             "model/viewport": lambda **params: model_viewport(self.root, **params),
             "model/diff": lambda **params: diff_models(self.root, **params),
@@ -361,6 +374,7 @@ class Backend:
                 "workspace.index.refresh",
                 "document.read",
                 "document.save",
+                "document.create",
                 "model/inspect",
                 "model/viewport",
                 "model/diff",

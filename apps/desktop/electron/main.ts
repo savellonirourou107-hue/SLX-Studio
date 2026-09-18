@@ -21,6 +21,7 @@ let window: BrowserWindow;
 let backend: PythonBackend | null = null;
 let startingBackend: PythonBackend | null = null;
 let changingBackend = false;
+let creatingDocument = false;
 let workspace: WorkspaceInfo | null = null;
 let closing = false;
 const draftQueues = new Map<string, Promise<unknown>>();
@@ -64,7 +65,7 @@ function handle<T>(channel: string, callback: (payload: unknown) => Promise<T>):
   });
 }
 async function openWorkspace(folder: string): Promise<WorkspaceInfo> {
-  if (changingBackend || closing) throw new Error('A backend transition or desktop close is already in progress');
+  if (changingBackend || closing || creatingDocument) throw new Error('A backend transition, document creation or desktop close is already in progress');
   changingBackend = true;
   let candidate: PythonBackend | null = null;
   try {
@@ -129,6 +130,8 @@ async function start(): Promise<void> {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'File', submenu: [
       { label: 'Open Folder…', click: sendCommand('workspace.open') },
+      { label: 'New MATLAB File…', click: sendCommand('file.new') },
+      { label: 'Save Copy As…', click: sendCommand('file.saveCopy') },
       { label: 'Save', click: sendCommand('file.save') },
       { label: 'Save All', click: sendCommand('file.saveAll') },
       { label: 'Close Editor', click: sendCommand('file.close') },
@@ -270,6 +273,17 @@ async function start(): Promise<void> {
     if (!workspace || !backend) throw new Error('Open a workspace first');
     return openWorkspace(workspace.root);
   });
+  handle('slx:create', async payload => {
+    const args = object(payload);
+    if (!workspace || text(args.workspaceRoot) !== workspace.root) throw new Error('Workspace changed; reopen the file creation dialog');
+    if (changingBackend || closing || creatingDocument) throw new Error('Another document creation or workspace transition is in progress');
+    if (typeof args.bom !== 'boolean') throw new Error('Invalid BOM flag');
+    const params = { relative: text(args.path), content: text(args.content, 4 * 1024 * 1024), bom: args.bom };
+    const current = backendRequired();
+    creatingDocument = true;
+    try { return await current.request('document/create', params); }
+    finally { creatingDocument = false; }
+  });
   handle('slx:save', async payload => {
     const args = object(payload);
     if (typeof args.bom !== 'boolean' || !/^[a-f0-9]{64}$/.test(text(args.hash, 64))) throw new Error('Invalid save version');
@@ -309,7 +323,7 @@ async function start(): Promise<void> {
     return null;
   });
   ipcMain.on('slx:closeConfirmed', event => {
-    try { validate(event as IpcMainInvokeEvent); closing = true; window.close(); } catch { /* Reject foreign frames. */ }
+    try { validate(event as IpcMainInvokeEvent); if (creatingDocument) return; closing = true; window.close(); } catch { /* Reject foreign frames. */ }
   });
   if (process.env.SLX_DESKTOP_WORKSPACE) await openWorkspace(process.env.SLX_DESKTOP_WORKSPACE);
   await window.loadURL(`${origin}/index.html`);

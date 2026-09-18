@@ -1,0 +1,5 @@
+/* Create-only text workflows keep long paths/messages within the dialog. */
+#file-creation { width: min(540px, calc(100vw - 64px)); }
+#file-creation-path { display: block; width: 100%; box-sizing: border-box; margin: 8px 0; padding: 8px; }
+#file-creation-help, #file-creation-status { overflow-wrap: anywhere; }
+#file-creation-status { min-height: 1.4em; }

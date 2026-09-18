@@ -60,6 +60,10 @@ byte reproducible builds on all operating systems.
 
 ### Gate A: predictable daily workspace use
 
+The [create-only file workflow slice](file-creation.md) implements new MATLAB files
+and Save Copy As. Source-renaming Save As and the remaining items below are still
+separate acceptance work; Save Copy As does not mark its source buffer saved.
+
 Deliver recent workspaces, reopen-session state, explicit recovery management,
 Save As, and safe file create/rename/delete. Existing folders must open without
 conversion. An optional project manifest may describe entry scripts, models and
