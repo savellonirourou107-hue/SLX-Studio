@@ -43,6 +43,14 @@ Workspace settings follow `default < user < workspace` precedence. Sensitive
 runtime configuration is not workspace-writable. Directory listing, document
 reads, model inspection, and writes are constrained to the selected workspace.
 
+Ctrl+P workspace search is backed by the Python session-scoped `WorkspaceIndex`.
+The index contains only visible MATLAB/Simulink files, ignores links and generated
+directories, bounds depth/file counts and lazily caches searchable document/model
+content. Search never starts MATLAB. Text hits navigate to a line in Monaco;
+static Simulink block hits reopen the bounded viewport at the indexed subsystem
+and exact block. Explorer Refresh explicitly invalidates the search index so
+new/deleted files are discovered without a persistent database or disk-wide scan.
+
 ## SLX static read path
 
 1. Open `.slx` as a ZIP package.
