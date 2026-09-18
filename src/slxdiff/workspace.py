@@ -235,6 +235,7 @@ class WorkspaceIndex:
                             "haystack": haystack,
                             "preview": f"{block.path or block.name} · {block.block_type}"[:240],
                             "block_path": block.path,
+                            "system_id": block.system_id,
                         }
                     )
                 signals = [
@@ -309,6 +310,7 @@ class WorkspaceIndex:
                             "line": 0,
                             "preview": block["preview"],
                             "block_path": block["block_path"],
+                            "system_id": block["system_id"],
                         }
                     )
                 if len(results) >= max_results:
@@ -497,6 +499,7 @@ def search_workspace(
                             "line": 0,
                             "preview": f"{block.path or block.name} · {block.block_type}"[:240],
                             "block_path": block.path,
+                            "system_id": block.system_id,
                         }
                     )
                     if len(results) >= max_results:

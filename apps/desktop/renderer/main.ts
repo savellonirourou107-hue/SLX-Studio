@@ -13,6 +13,7 @@ import type { Problem } from '../../../packages/workbench';
 import { unwrap } from '../../../packages/protocol';
 import type { ExtensionRecord, MatlabJobStatus, MatlabRuntimeStatus, ModelJobStatus, ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
+import { WorkspaceSearchController } from './search';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const files = new DesktopServices(window.slx);
@@ -293,6 +294,24 @@ const matlabResults = new MatlabResultsPanel(element('matlab-results'), window.s
 }, navigateProblem, report);
 function resetMatlabView(): void { ++matlabEpoch; matlabJob = null; startingMatlab = false; matlabResults.clear(); modelJob = null; startingModel = false; modelResults.replaceChildren(); }
 const modelEditors = new ModelEditors(element('model-stage'), files, renderEditors, inspectedModel, (action, view, parameter) => { void modelAction(action, view, parameter).catch(report); });
+const workspaceSearch = new WorkspaceSearchController(
+  element<HTMLDialogElement>('workspace-search'),
+  element<HTMLInputElement>('workspace-search-input'),
+  element('workspace-search-results'),
+  element('workspace-search-status'),
+  files,
+  async result => {
+    const editor = editorRegistry.resolve(result.path);
+    if (!editor) throw new Error(`${result.path}: no registered editor for this search result`);
+    await editor.open(result.path);
+    if (result.path.toLowerCase().endsWith('.m') && result.line > 0) editors.reveal(result.path, result.line, 1);
+    if (result.path.toLowerCase().endsWith('.slx') && result.block_path) {
+      const revealed = await modelEditors.reveal(result.path, result.block_path, result.system_id);
+      if (!revealed) log(`${result.path}: opened model, but the indexed block is no longer visible; refresh workspace search.`);
+    }
+  },
+  report,
+);
 function modelBusy(): boolean { return !!matlabJob || startingMatlab || !!modelJob || startingModel; }
 async function startModelJob(start: () => Promise<ModelJobStatus>): Promise<void> {
   if (modelBusy()) throw new Error('Wait for or stop the active MATLAB/model job first');
@@ -447,9 +466,10 @@ async function directory(parent: HTMLElement, relative: string, cursor: number, 
   }
   if (page.truncated) log(`${relative || 'Root'} listing reached the safety limit; open a narrower workspace.`);
 }
-async function refresh(): Promise<void> {
+async function refresh(refreshSearchIndex = false): Promise<void> {
   const generation = ++explorerGeneration;
   element('tree').replaceChildren();
+  if (workspace && refreshSearchIndex) await files.refreshWorkspaceIndex();
   if (workspace) await directory(element('tree'), '', 0, generation);
 }
 async function setWorkspace(info: WorkspaceInfo): Promise<void> {
@@ -479,7 +499,8 @@ commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', ru
   const selected = await files.chooseWorkspace();
   if (selected) { modelEditors.closeAll(); modelProblems.clear(); problemsService.clear(); await setWorkspace(selected); }
 } });
-commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer', enabled: () => !!workspace, run: refresh });
+commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer and Search Index', enabled: () => !!workspace, run: () => refresh(true) });
+commands.register({ id: 'workspace.search', title: 'Workspace: Search Files and Models…', enabled: () => !!workspace, run: () => workspaceSearch.show() });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.save() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
@@ -577,7 +598,8 @@ window.slx.onClose(() => {
 });
 window.addEventListener('keydown', event => {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-  const id = event.key.toLowerCase() === 's' ? 'file.save' : event.key.toLowerCase() === 'w' ? 'file.close' : event.shiftKey && event.key.toLowerCase() === 'p' ? 'workbench.palette' : '';
+  const key = event.key.toLowerCase();
+  const id = key === 's' ? 'file.save' : key === 'w' ? 'file.close' : event.shiftKey && key === 'p' ? 'workbench.palette' : !event.shiftKey && key === 'p' ? 'workspace.search' : '';
   if (id && !document.querySelector('dialog[open]')) { event.preventDefault(); event.stopPropagation(); void commands.execute(id).catch(report); }
 }, true);
 element('clear-output').onclick = () => { outputService.clear(); output.textContent = ''; };

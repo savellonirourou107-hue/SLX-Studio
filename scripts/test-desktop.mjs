@@ -89,6 +89,24 @@ try {
   assert.equal(await page.evaluate(() => typeof window.process), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.slx.invoke), 'undefined');
+  console.log('STEP workspace search');
+  await page.keyboard.press('Control+P');
+  const search = page.getByRole('dialog', { name: 'Search workspace' });
+  await search.waitFor();
+  await page.getByRole('textbox', { name: 'Search workspace' }).fill('gain');
+  const sourceHit = page.locator('#workspace-search-results button').filter({ hasText: 'control.m:1' }).first();
+  await sourceHit.waitFor();
+  assert.match(await sourceHit.textContent(), /gain = 1/);
+  await sourceHit.click();
+  await page.getByRole('tab', { name: 'control.m', selected: true }).waitFor();
+
+  await page.keyboard.press('Control+P');
+  await page.getByRole('textbox', { name: 'Search workspace' }).fill('VariantControl');
+  const modelHit = page.locator('#workspace-search-results button').filter({ hasText: 'model.slx' }).first();
+  await modelHit.waitFor();
+  await modelHit.click();
+  await page.locator('.model-block.selected[data-block="Gain"]').waitFor();
+  console.log('PASS: Ctrl+P searches MATLAB text and static Simulink metadata, then navigates to exact hits.');
   await page.getByRole('treeitem', { name: 'control.m', exact: true }).click();
   console.log('STEP MATLAB lightweight intelligence');
   await replaceText('local_gain = 2;\nplo');

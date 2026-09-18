@@ -71,6 +71,7 @@ post-2.0 capabilities and must keep explicit capability boundaries.
 
 ## 2.x engineering priorities
 
+- [x] Electron Ctrl+P workspace search/quick-open over the bounded session index
 - [ ] Expand the compatibility matrix across supported MATLAB/Simulink releases
 - [ ] Broaden verified Simulink libraries and multi-port semantics
 - [x] Plain Subsystem navigation and validated edit transactions
