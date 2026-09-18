@@ -21,6 +21,19 @@ export interface WorkspaceInfo {
   capabilities: string[];
   matlab_started: boolean;
 }
+export interface WorkspaceSearchResult {
+  type: 'file' | 'match' | 'block' | 'signal';
+  path: string;
+  line: number;
+  preview: string;
+  block_path?: string;
+  system_id?: string;
+}
+export interface WorkspaceSearchResponse {
+  query: string;
+  results: readonly WorkspaceSearchResult[];
+  indexing: boolean;
+}
 export interface ModelBlock { system_id: string; sid: string; name: string; block_type: string; path: string; parameters: Readonly<Record<string, string>>; }
 export interface ModelLine { system_id: string; src: string; dst: string; name: string; }
 export interface ModelInspectOptions { blockCursor?: number; lineCursor?: number; pageSize?: number; }
@@ -93,6 +106,8 @@ export interface DesktopAPI {
   workspace(): Promise<Result<WorkspaceInfo | null>>;
   chooseWorkspace(): Promise<Result<WorkspaceInfo | null>>;
   listDirectory(path: string, cursor: number): Promise<Result<DirectoryPage>>;
+  searchWorkspace(query: string, options?: { maxResults?: number; maxFileBytes?: number }): Promise<Result<WorkspaceSearchResponse>>;
+  refreshWorkspaceIndex(): Promise<Result<{ indexing: boolean }>>;
   readDocument(path: string): Promise<Result<DocumentSnapshot>>;
   saveDocument(path: string, content: string, hash: string, bom: boolean): Promise<Result<DocumentSnapshot>>;
   inspectModel(path: string, options?: ModelInspectOptions): Promise<Result<ModelSnapshot>>;
