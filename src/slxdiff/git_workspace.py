@@ -134,11 +134,7 @@ def _repository_available(root: Path) -> tuple[bool, str]:
 
 
 def _repo_prefix(root: Path) -> str:
-    return (
-        _git(root, "rev-parse", "--show-prefix", max_bytes=16 * 1024)
-        .decode("utf-8", errors="strict")
-        .strip()
-    )
+    return _git(root, "rev-parse", "--show-prefix", max_bytes=16 * 1024).decode("utf-8", errors="strict").strip()
 
 
 def _repo_path(root: Path, relative: str) -> str:
