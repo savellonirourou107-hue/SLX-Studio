@@ -32,6 +32,16 @@
     <p id="settings-message" role="status"></p>
     <div class="settings-actions"><button id="settings-reload">Reload settings</button><button id="settings-close">Cancel</button><button id="settings-save">Apply settings</button></div>
   </dialog>
+  <dialog id="file-creation" aria-labelledby="file-creation-title">
+    <form id="file-creation-form">
+      <h2 id="file-creation-title">New MATLAB File</h2>
+      <p id="file-creation-help" class="dialog-help"></p>
+      <label for="file-creation-path">Workspace-relative .m path</label>
+      <input id="file-creation-path" type="text" maxlength="4096" autocomplete="off" spellcheck="false" aria-describedby="file-creation-help file-creation-status">
+      <p id="file-creation-status" role="alert"></p>
+      <div class="settings-actions"><button id="file-creation-cancel" type="button">Cancel</button><button id="file-creation-submit" type="submit">Create file</button></div>
+    </form>
+  </dialog>
   <dialog id="matlab-command" aria-labelledby="matlab-command-title">
     <h2 id="matlab-command-title">MATLAB Command Window</h2>
     <p class="dialog-help">Runs explicitly in the project-scoped persistent session. Static model inspection never starts MATLAB.</p>

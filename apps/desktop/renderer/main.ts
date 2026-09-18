@@ -1,4 +1,5 @@
 import './style.css';
+import './file-creation.css';
 import { CommandRegistry } from '../../../packages/commands';
 import { ConfigurationStore, DESKTOP_SCHEMAS } from '../../../packages/configuration';
 import { DesktopServices } from '../../../packages/core/services';
@@ -14,6 +15,7 @@ import { unwrap } from '../../../packages/protocol';
 import type { ExtensionRecord, MatlabJobStatus, MatlabRuntimeStatus, ModelJobStatus, ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
 import { WorkspaceSearchController } from './search';
+import { FileCreationController } from './file-creation';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const files = new DesktopServices(window.slx);
@@ -288,6 +290,15 @@ function decide(title: string, detail: string, options: string[]): Promise<strin
   return job;
 }
 const editors = new DocumentEditors(element('monaco'), files, decide, renderEditors, log);
+const fileCreation = new FileCreationController({
+  dialog: element('file-creation'), form: element('file-creation-form'), input: element('file-creation-path'),
+  title: element('file-creation-title'), help: element('file-creation-help'), status: element('file-creation-status'),
+  submit: element('file-creation-submit'), cancel: element('file-creation-cancel'),
+}, files, () => editors.copySnapshot(),
+  target => [...editors.documents.keys()].some(path => path.toLowerCase() === target.toLowerCase()),
+  async path => { activeKind = 'text'; renderEditors(); await editors.open(path); },
+  () => refresh(), log);
+
 const matlabResults = new MatlabResultsPanel(element('matlab-results'), window.slx, async (name, preview) => {
   const expression = await requestMatlabCommand({ title: `Edit MATLAB variable: ${name}`, label: 'Variable expression', value: preview, action: 'Apply variable' });
   if (expression !== null) await beginMatlabJob('command', async () => unwrap(await window.slx.matlabSetVariable(name, expression)), `set variable ${name}`);
@@ -476,6 +487,7 @@ async function setWorkspace(info: WorkspaceInfo): Promise<void> {
   resetMatlabView();
   await builtInActivation;
   workspace = info;
+  fileCreation.setWorkspace(info.root);
   element('workspace-name').textContent = info.root.split(/[\\/]/).pop()?.toUpperCase() || info.root;
   element('workspace-name').title = info.root;
   element('workspace-status').textContent = info.root;
@@ -495,12 +507,15 @@ function commandResults(): void {
   }));
 }
 commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', run: async () => {
+  if (fileCreation.active) throw new Error('Finish or cancel file creation before changing workspaces');
   if (!await editors.closeAll()) return;
   const selected = await files.chooseWorkspace();
   if (selected) { modelEditors.closeAll(); modelProblems.clear(); problemsService.clear(); await setWorkspace(selected); }
 } });
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer and Search Index', enabled: () => !!workspace, run: () => refresh(true) });
 commands.register({ id: 'workspace.search', title: 'Workspace: Search Files and Models…', enabled: () => !!workspace, run: () => workspaceSearch.show() });
+commands.register({ id: 'file.new', title: 'File: New MATLAB File…', enabled: () => !!workspace && !closing && !fileCreation.active, run: () => fileCreation.show('new') });
+commands.register({ id: 'file.saveCopy', title: 'File: Save Copy As…', enabled: () => !!workspace && activeKind === 'text' && !!editors.active && !closing && !fileCreation.active, run: () => fileCreation.show('copy') });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.save() });
 commands.register({ id: 'file.saveAll', title: 'File: Save All', enabled: () => [...editors.documents.values()].some(document => editors.dirty(document)), run: () => editors.saveAll() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
@@ -566,7 +581,7 @@ commands.register({ id: 'workbench.reloadContributions', title: 'Workbench: Relo
   await contributions.activate('builtin.core');
   log('Workbench contributions reloaded; registrations were disposed and recreated.');
 } });
-commands.register({ id: 'backend.restart', title: 'Backend: Restart Python Service', enabled: () => !!workspace, run: async () => {
+commands.register({ id: 'backend.restart', title: 'Backend: Restart Python Service', enabled: () => !!workspace && !fileCreation.active, run: async () => {
   const info = await files.restartBackend();
   resetMatlabView();
   workspace = info;
@@ -590,6 +605,8 @@ window.slx.onExtensionState(state => {
 });
 window.slx.onClose(() => {
   if (closing) return;
+  if (fileCreation.busy) { log('File creation is in progress; the window was kept open.'); return; }
+  fileCreation.cancel();
   closing = true;
   void (async () => {
     if ((modelBusy() || element('matlab-results').dataset.sessionId) &&

@@ -449,3 +449,32 @@ test('choosing Keep disk explicitly clears a recovery draft', async t => {
   assert.equal(f.drafts.has(draft.path), false);
   assert.equal(f.editors.active.recoveryPending, false);
 });
+
+test('copy snapshot preserves unsaved source, BOM, base, undo and draft state', async t => {
+  const f = fixture(t, { read: async file => snapshot(file, 'gain=1;\r\n', { bom: true, eol: 'CRLF' }) });
+  const doc = await dirtyFile(f, 'control.m', 'gain=2;\r\n');
+  const base = doc.base, clean = doc.cleanAlternativeVersionId, version = doc.model.getVersionId();
+  f.drafts.set('control.m', { content: 'existing recovery' });
+  const copy = f.editors.copySnapshot();
+  doc.model.setValue('later=3;\r\n');
+  assert.deepEqual(copy, { path: 'control.m', content: 'gain=2;\r\n', bom: true });
+  assert.equal(doc.base, base); assert.equal(doc.cleanAlternativeVersionId, clean);
+  assert.equal(f.editors.dirty(doc), true); assert.ok(doc.model.getVersionId() > version);
+  assert.equal(doc.model.stops, 0); assert.deepEqual(f.writes, []);
+  assert.equal(f.drafts.get('control.m').content, 'existing recovery');
+});
+
+test('copy snapshot works without re-reading a deleted source', async t => {
+  const f = fixture(t); await dirtyFile(f);
+  f.files.read = async () => { throw new Error('source deleted'); };
+  assert.equal(f.editors.copySnapshot().content, 'gain = 2;\n');
+});
+
+test('copy snapshot rejects unavailable, closing or mixed-newline models', async t => {
+  const f = fixture(t);
+  assert.throws(() => f.editors.copySnapshot(), /Open a MATLAB/);
+  const doc = await dirtyFile(f); doc.base.mixed_eol = true;
+  assert.throws(() => f.editors.copySnapshot(), /Mixed line endings/);
+  doc.base.mixed_eol = false; doc.closing = Promise.resolve(false);
+  assert.throws(() => f.editors.copySnapshot(), /Open a MATLAB/);
+});

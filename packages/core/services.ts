@@ -1,4 +1,4 @@
-import type { ConfigurationState, ConfigurationValue, DesktopAPI, DirectoryPage, DocumentSnapshot, Draft, ModelDiff, ModelDiffOptions, ModelInspectOptions, ModelSnapshot, ModelViewport, ModelViewportOptions, WorkspaceInfo, WorkspaceSearchResponse } from '../protocol';
+import type { CreatedDocument, ConfigurationState, ConfigurationValue, DesktopAPI, DirectoryPage, DocumentSnapshot, Draft, ModelDiff, ModelDiffOptions, ModelInspectOptions, ModelSnapshot, ModelViewport, ModelViewportOptions, WorkspaceInfo, WorkspaceSearchResponse } from '../protocol';
 import { unwrap } from '../protocol';
 
 export interface FileService {
@@ -14,6 +14,7 @@ export class DesktopServices implements FileService {
   async searchWorkspace(query: string, options?: { maxResults?: number; maxFileBytes?: number }): Promise<WorkspaceSearchResponse> { return unwrap(await this.api.searchWorkspace(query, options)); }
   async refreshWorkspaceIndex(): Promise<void> { unwrap(await this.api.refreshWorkspaceIndex()); }
   async read(path: string): Promise<DocumentSnapshot> { return unwrap(await this.api.readDocument(path)); }
+  async create(workspaceRoot: string, path: string, content: string, bom: boolean): Promise<CreatedDocument> { return unwrap(await this.api.createDocument(workspaceRoot, path, content, bom)); }
   async save(base: DocumentSnapshot, content: string): Promise<DocumentSnapshot> { return unwrap(await this.api.saveDocument(base.path, content, base.sha256, base.bom)); }
   async inspect(path: string, options?: ModelInspectOptions): Promise<ModelSnapshot> { return unwrap(await this.api.inspectModel(path, options)); }
   async viewport(path: string, options?: ModelViewportOptions): Promise<ModelViewport> { return unwrap(await this.api.modelViewport(path, options)); }
