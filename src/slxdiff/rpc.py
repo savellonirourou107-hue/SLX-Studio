@@ -246,11 +246,7 @@ class Backend:
     ) -> dict[str, Any]:
         if not isinstance(query, str) or not query.strip() or len(query) > 200:
             raise ValueError("search query must be 1-200 characters")
-        if (
-            isinstance(max_results, bool)
-            or not isinstance(max_results, int)
-            or not 1 <= max_results <= 200
-        ):
+        if isinstance(max_results, bool) or not isinstance(max_results, int) or not 1 <= max_results <= 200:
             raise ValueError("max_results must be an integer from 1 to 200")
         if (
             isinstance(max_file_bytes, bool)
@@ -258,9 +254,7 @@ class Backend:
             or not 1 <= max_file_bytes <= 4 * 1024 * 1024
         ):
             raise ValueError("max_file_bytes must be an integer from 1 to 4194304")
-        return self._index.search(
-            query, max_results=max_results, max_file_bytes=max_file_bytes
-        )
+        return self._index.search(query, max_results=max_results, max_file_bytes=max_file_bytes)
 
     def refresh_workspace_index(self) -> dict[str, bool]:
         self._index.invalidate()
