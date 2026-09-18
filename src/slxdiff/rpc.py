@@ -11,6 +11,7 @@ from typing import Any, BinaryIO
 
 from .diff import compare_models
 from .documents import DocumentConflict, document_path, list_directory, read_document, save_document
+from .git_workspace import git_diff, git_status
 from .matlab_bridge import apply_model_edit_with_matlab
 from .matlab_runtime import MatlabRuntime
 from .model_runtime import ModelRuntime
@@ -291,6 +292,8 @@ class Backend:
             "workspace/listDirectory": lambda **params: list_directory(self.root, **params),
             "workspace/search": lambda **params: self.search_workspace(**params),
             "workspace/index/refresh": lambda **params: self.refresh_workspace_index(),
+            "workspace/git/status": lambda **params: git_status(self.root),
+            "workspace/git/diff": lambda **params: git_diff(self.root, **params),
             "document/read": lambda **params: read_document(self.root, **params),
             "document/save": lambda **params: save_document(self.root, **params),
             "model/inspect": lambda **params: inspect_model(self.root, **params),
@@ -359,6 +362,8 @@ class Backend:
                 "workspace.listDirectory",
                 "workspace.search",
                 "workspace.index.refresh",
+                "workspace.git.status",
+                "workspace.git.diff",
                 "document.read",
                 "document.save",
                 "model/inspect",

@@ -14,6 +14,7 @@ import { unwrap } from '../../../packages/protocol';
 import type { ExtensionRecord, MatlabJobStatus, MatlabRuntimeStatus, ModelJobStatus, ModelViewport, WorkspaceInfo } from '../../../packages/protocol';
 import { SettingsController } from './settings';
 import { WorkspaceSearchController } from './search';
+import { SourceControlController } from './source-control';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const files = new DesktopServices(window.slx);
@@ -312,6 +313,21 @@ const workspaceSearch = new WorkspaceSearchController(
   },
   report,
 );
+const sourceControl = new SourceControlController(
+  element<HTMLDialogElement>('source-control'),
+  element('source-control-summary'),
+  element('source-control-changes'),
+  element('source-control-preview'),
+  element<HTMLButtonElement>('source-control-refresh'),
+  element<HTMLButtonElement>('source-control-open'),
+  files,
+  async path => {
+    const editor = editorRegistry.resolve(path);
+    if (!editor) throw new Error(`${path}: no registered editor in this desktop`);
+    await editor.open(path);
+  },
+  report,
+);
 function modelBusy(): boolean { return !!matlabJob || startingMatlab || !!modelJob || startingModel; }
 async function startModelJob(start: () => Promise<ModelJobStatus>): Promise<void> {
   if (modelBusy()) throw new Error('Wait for or stop the active MATLAB/model job first');
@@ -501,6 +517,7 @@ commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', ru
 } });
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer and Search Index', enabled: () => !!workspace, run: () => refresh(true) });
 commands.register({ id: 'workspace.search', title: 'Workspace: Search Files and Models…', enabled: () => !!workspace, run: () => workspaceSearch.show() });
+commands.register({ id: 'git.show', title: 'Source Control: Show MATLAB/Simulink Changes', enabled: () => !!workspace, run: () => sourceControl.show() });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.save() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });

@@ -38,6 +38,13 @@ execFileSync(process.env.SLX_STUDIO_PYTHON || 'python', [
   path.join(workspace, 'large.slx'), largeXmlPath,
 ], { windowsHide: true });
 await fs.writeFile(path.join(workspace, 'mixed.m'), 'a = 1;\r\nb = 2;\n');
+await fs.writeFile(path.join(workspace, 'versioned.m'), 'tracked_gain = 1;\n');
+execFileSync('git', ['init'], { cwd: workspace, windowsHide: true });
+execFileSync('git', ['config', 'user.email', 'desktop-tests@example.invalid'], { cwd: workspace, windowsHide: true });
+execFileSync('git', ['config', 'user.name', 'SLX Studio Desktop Tests'], { cwd: workspace, windowsHide: true });
+execFileSync('git', ['add', '.'], { cwd: workspace, windowsHide: true });
+execFileSync('git', ['commit', '-m', 'desktop fixture baseline'], { cwd: workspace, windowsHide: true });
+await fs.writeFile(path.join(workspace, 'versioned.m'), 'tracked_gain = 2;\n');
 // Keep this baseline workflow focused on the sample extension. First-party
 // MATLAB/Simulink activation is exercised by the real R2026a desktop test.
 const extensionRoot = path.join(testRoot, 'extensions');
@@ -89,6 +96,20 @@ try {
   assert.equal(await page.evaluate(() => typeof window.process), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.slx.invoke), 'undefined');
+  console.log('STEP source control');
+  await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+  const sourceControl = page.getByRole('dialog', { name: 'Source Control' });
+  await sourceControl.waitFor();
+  const versionedChange = page.locator('#source-control-changes button').filter({ hasText: 'versioned.m' }).first();
+  await versionedChange.waitFor();
+  await versionedChange.click();
+  await page.locator('.source-control-diff').waitFor();
+  assert.match(await page.locator('.source-control-diff').textContent(), /-tracked_gain = 1;/);
+  assert.match(await page.locator('.source-control-diff').textContent(), /\+tracked_gain = 2;/);
+  await page.getByRole('button', { name: 'Open file', exact: true }).click();
+  await page.getByRole('tab', { name: 'versioned.m', selected: true }).waitFor();
+  console.log('PASS: read-only Git status and bounded text diff open the changed MATLAB file.');
+
   console.log('STEP workspace search');
   await page.keyboard.press('Control+P');
   const search = page.getByRole('dialog', { name: 'Search workspace' });
@@ -223,6 +244,7 @@ try {
   await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
   await replaceText('gain = 3;\n');
   await page.keyboard.press('Control+z');
+  await waitFor(async () => !(await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'undo returns control.m to its saved version before saving');
   await page.keyboard.press('Control+s');
   assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n', 'undo restores the original model');
   await page.keyboard.press('Control+y');
