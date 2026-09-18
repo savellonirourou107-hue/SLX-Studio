@@ -10,7 +10,7 @@
 <body>
   <main id="workbench">
     <header class="titlebar"><strong class="brand"><span class="logo">S</span> SLX STUDIO <small>2.0 DEV</small></strong><button data-command="workbench.palette" class="command-box">Search commands <kbd>Ctrl Shift P</kbd></button><span class="session-state">Static editing · MATLAB not started</span></header>
-    <nav class="activity" aria-label="Activity"><button class="active" title="Explorer" aria-label="Explorer">▱</button><button data-command="workspace.search" title="Search workspace" aria-label="Search">⌕</button><button data-command="workbench.palette" title="Commands" aria-label="Commands">⌘</button><span class="activity-bottom">2.0</span></nav>
+    <nav class="activity" aria-label="Activity"><button class="active" title="Explorer" aria-label="Explorer">▱</button><button data-command="workspace.search" title="Search workspace" aria-label="Search">⌕</button><button data-command="git.show" title="Source Control" aria-label="Source Control">⑂</button><button data-command="workbench.palette" title="Commands" aria-label="Commands">⌘</button><span class="activity-bottom">2.0</span></nav>
     <aside class="sidebar"><div class="pane-heading"><span>EXPLORER</span><button data-command="workspace.refresh" aria-label="Refresh explorer" title="Refresh explorer">↻</button></div><div class="workspace-name" id="workspace-name">NO FOLDER OPEN</div><div id="tree" role="tree" aria-label="Workspace files"></div><button data-command="workspace.open" class="open-folder">Open folder…</button><div id="extension-views" aria-label="Extension views"></div></aside>
     <section class="editor-area" aria-label="Editor area"><div id="tabs" role="tablist" aria-label="Open editors"></div><div class="breadcrumbs" id="breadcrumbs">Workspace</div><div id="editor-stage"><div id="welcome"><div class="welcome-mark">S</div><h1>Code. Model. Simulate.</h1><p>A focused workspace for engineering.</p><button data-command="workspace.open">Open a workspace</button><p class="welcome-note">Electron + Monaco preview<br>Real text editing and bounded static model viewing.<br>MATLAB execution remains explicit and opt-in.</p></div><div id="monaco" hidden></div><div id="model-stage" hidden aria-label="Static model editor"></div></div></section>
     <section class="panel" aria-label="Output panel"><div class="panel-heading"><div class="panel-tabs"><button id="output-tab" class="selected">OUTPUT</button><button id="problems-tab">PROBLEMS <span id="problem-count"></span></button><button id="matlab-tab">MATLAB</button></div><span>Desktop</span><button id="clear-output">Clear</button></div><div id="output-view"><pre id="output" role="log" aria-live="polite">SLX Studio 2.0 development workspace. No code executes on open.</pre></div><div id="problems-view" hidden><div id="problems" role="list" aria-label="Problems"></div></div><div id="matlab-view" hidden><div id="matlab-results" aria-label="MATLAB results"></div></div></section>
@@ -22,6 +22,16 @@
     <input id="workspace-search-input" placeholder="Search files, MATLAB text, blocks and signals…" aria-label="Search workspace">
     <p id="workspace-search-status" role="status">Type a search term.</p>
     <div id="workspace-search-results" role="listbox" aria-label="Workspace search results"></div>
+  </dialog>
+  <dialog id="source-control" aria-labelledby="source-control-title">
+    <div class="source-control-header">
+      <div><h2 id="source-control-title">Source Control</h2><p id="source-control-summary" role="status">Read-only Git status.</p></div>
+      <div class="source-control-actions"><button id="source-control-refresh">Refresh</button><button id="source-control-open" disabled>Open file</button></div>
+    </div>
+    <div class="source-control-body">
+      <aside id="source-control-changes" aria-label="Changed MATLAB and Simulink files"></aside>
+      <section id="source-control-preview" aria-label="Git diff preview"></section>
+    </div>
   </dialog>
   <dialog id="decision" aria-labelledby="decision-title"><h2 id="decision-title"></h2><p id="decision-text"></p><div id="decision-actions"></div></dialog>
   <dialog id="settings" aria-labelledby="settings-title">
