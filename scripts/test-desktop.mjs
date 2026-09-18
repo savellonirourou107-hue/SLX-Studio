@@ -244,6 +244,7 @@ try {
   await page.getByRole('tab', { name: 'control.m', exact: true }).waitFor();
   await replaceText('gain = 3;\n');
   await page.keyboard.press('Control+z');
+  await waitFor(async () => !(await page.getByRole('tab', { name: 'control.m', exact: true }).textContent()).includes('●'), 'undo returns control.m to its saved version before saving');
   await page.keyboard.press('Control+s');
   assert.equal(await fs.readFile(path.join(workspace, 'control.m'), 'utf8'), 'gain = 1;\n', 'undo restores the original model');
   await page.keyboard.press('Control+y');
