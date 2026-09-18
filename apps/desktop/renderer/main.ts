@@ -502,6 +502,7 @@ commands.register({ id: 'workspace.open', title: 'Workspace: Open Folder…', ru
 commands.register({ id: 'workspace.refresh', title: 'Workspace: Refresh Explorer and Search Index', enabled: () => !!workspace, run: () => refresh(true) });
 commands.register({ id: 'workspace.search', title: 'Workspace: Search Files and Models…', enabled: () => !!workspace, run: () => workspaceSearch.show() });
 commands.register({ id: 'file.save', title: 'File: Save', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.save() });
+commands.register({ id: 'file.saveAll', title: 'File: Save All', enabled: () => [...editors.documents.values()].some(document => editors.dirty(document)), run: () => editors.saveAll() });
 commands.register({ id: 'file.reload', title: 'File: Reload from Disk', enabled: () => activeKind === 'text' && !!editors.active, run: () => editors.reload() });
 commands.register({ id: 'settings.show', title: 'Settings: Show Effective Configuration', run: async () => { await settings.reload(); log(JSON.stringify(configuration.effective(), null, 2)); } });
 commands.register({ id: 'settings.edit', title: 'Settings: Edit Configuration', run: () => settings.show() });

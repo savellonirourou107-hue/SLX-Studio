@@ -130,6 +130,7 @@ async function start(): Promise<void> {
     { label: 'File', submenu: [
       { label: 'Open Folder…', click: sendCommand('workspace.open') },
       { label: 'Save', click: sendCommand('file.save') },
+      { label: 'Save All', click: sendCommand('file.saveAll') },
       { label: 'Close Editor', click: sendCommand('file.close') },
       { type: 'separator' }, { label: 'Exit', click: () => window.close() },
     ] },
