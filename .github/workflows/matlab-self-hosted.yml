@@ -12,7 +12,7 @@ jobs:
   matlab-r2026a:
     runs-on: [self-hosted, windows, matlab-r2026a]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run optional MATLAB integration suite
         shell: pwsh
         env:

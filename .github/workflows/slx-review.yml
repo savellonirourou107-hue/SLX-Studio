@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Needed only because this workflow tests the local action from this repository.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Review Simulink model changes
         uses: ./
         # After publishing, consumers use: YOUR_GITHUB_USERNAME/slx-studio@v0.8.0
