@@ -21,7 +21,7 @@
     "test:installer": "pwsh -NoProfile -File scripts/test-installer.ps1"
   },
   "dependencies": {
-    "monaco-editor": "0.56.0"
+    "monaco-editor": "0.57.0"
   },
   "overrides": {
     "dompurify": "3.4.15"
