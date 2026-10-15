@@ -27,10 +27,10 @@
     "dompurify": "3.4.15"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
-    "electron": "44.2.0",
+    "@types/node": "26.6.5",
+    "electron": "44.7.0",
     "esbuild": "0.28.2",
-    "playwright": "1.63.0",
+    "playwright": "1.64.0",
     "typescript": "7.0.2"
   }
 }
